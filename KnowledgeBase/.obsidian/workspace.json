@@ -1,0 +1,205 @@
+{
+  "main": {
+    "id": "4db1b2bde825fb61",
+    "type": "split",
+    "children": [
+      {
+        "id": "76191fc62e25d8e0",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "603cca8987f1d6d7",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "project_scaffold/ai_models/intent_parsing_classification_notebook.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "intent_parsing_classification_notebook"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "vertical"
+  },
+  "left": {
+    "id": "18690b50cbc9df15",
+    "type": "split",
+    "children": [
+      {
+        "id": "0aa410e78abbb88f",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "3561c467fd3c4504",
+            "type": "leaf",
+            "state": {
+              "type": "file-explorer",
+              "state": {
+                "sortOrder": "alphabetical",
+                "autoReveal": false
+              },
+              "icon": "lucide-folder-closed",
+              "title": "Files"
+            }
+          },
+          {
+            "id": "e2454920f67dbb74",
+            "type": "leaf",
+            "state": {
+              "type": "search",
+              "state": {
+                "query": "",
+                "matchingCase": false,
+                "explainSearch": false,
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical"
+              },
+              "icon": "lucide-search",
+              "title": "Search"
+            }
+          },
+          {
+            "id": "c430bc8a9f58560f",
+            "type": "leaf",
+            "state": {
+              "type": "bookmarks",
+              "state": {},
+              "icon": "lucide-bookmark",
+              "title": "Bookmarks"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300
+  },
+  "right": {
+    "id": "1f15e5da702d1968",
+    "type": "split",
+    "children": [
+      {
+        "id": "c549860e3ea9da23",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "253e13a3900a291f",
+            "type": "leaf",
+            "state": {
+              "type": "backlink",
+              "state": {
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical",
+                "showSearch": false,
+                "searchQuery": "",
+                "backlinkCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-coming-in",
+              "title": "Backlinks"
+            }
+          },
+          {
+            "id": "1c1b23ea6552d1a5",
+            "type": "leaf",
+            "state": {
+              "type": "outgoing-link",
+              "state": {
+                "linksCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-going-out",
+              "title": "Outgoing links"
+            }
+          },
+          {
+            "id": "9fc3ac4ce97284ef",
+            "type": "leaf",
+            "state": {
+              "type": "tag",
+              "state": {
+                "sortOrder": "frequency",
+                "useHierarchy": true,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-tags",
+              "title": "Tags"
+            }
+          },
+          {
+            "id": "c60b3d842990fdec",
+            "type": "leaf",
+            "state": {
+              "type": "all-properties",
+              "state": {
+                "sortOrder": "frequency",
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-archive",
+              "title": "All properties"
+            }
+          },
+          {
+            "id": "1f8b6eeb54fc8f3a",
+            "type": "leaf",
+            "state": {
+              "type": "outline",
+              "state": {
+                "followCursor": false,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-list",
+              "title": "Outline"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300,
+    "collapsed": true
+  },
+  "left-ribbon": {
+    "hiddenItems": {
+      "switcher:Open quick switcher": false,
+      "graph:Open graph view": false,
+      "canvas:Create new canvas": false,
+      "daily-notes:Open today's daily note": false,
+      "templates:Insert template": false,
+      "command-palette:Open command palette": false,
+      "bases:Create new base": false
+    }
+  },
+  "active": "603cca8987f1d6d7",
+  "lastOpenFiles": [
+    "project_scaffold/components/nl_intent_parser.md",
+    "project_scaffold/ai_models/intent_parsing_classification_notebook.md",
+    "project_scaffold/ai_models/intent_parsing_classification_notebook.md.tmp.30174.1776065758483",
+    "project_scaffold/milestones/phase1_foundation_protocol_integration.md",
+    "project_scaffold/milestones/phase4_hardening_testing_production.md",
+    "project_scaffold/milestones/phase3_advanced_intelligence_enterprise_features.md",
+    "project_scaffold/milestones/phase2_core_intelligence_transaction_flow.md",
+    "project_scaffold/user_stories/story2_high_value_it_equipment.md",
+    "project_scaffold/ai_models/comparison_scoring_model.md",
+    "Procurement_Agent_Beckn_Protocol.md",
+    "project_scaffold/ai_models/negotiation_strategy_model.md.tmp.30174.1776064093750",
+    "project_scaffold/ai_models/comparison_scoring_model.md.tmp.30174.1776064076463",
+    "project_scaffold/ai_models/intent_parsing_model.md.tmp.30174.1776064058645",
+    "project_scaffold/integrations/communication_slack_teams.md.tmp.30174.1776064041108",
+    "project_scaffold/integrations/audit_splunk_servicenow.md.tmp.30174.1776064025338",
+    "project_scaffold/integrations/erp_sap_oracle.md.tmp.30174.1776064008847",
+    "project_scaffold/integrations/identity_access_keycloak.md.tmp.30174.1776063991750",
+    "project_scaffold/infrastructure/security_compliance.md.tmp.30174.1776063971314",
+    "project_scaffold/infrastructure/observability_monitoring.md.tmp.30174.1776063954746"
+  ]
+}
