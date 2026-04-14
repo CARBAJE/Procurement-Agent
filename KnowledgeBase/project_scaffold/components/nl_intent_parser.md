@@ -8,7 +8,7 @@ related: ["[[llm_providers]]", "[[beckn_bap_client]]", "[[agent_framework_langch
 # Component: Natural Language Intent Parser
 
 > [!architecture] Role in the System
-> The NL Intent Parser is the **entry gate** of the procurement pipeline. Every user request — typed into the [[frontend_react_nextjs|dashboard]] or sent via [[communication_slack_teams|Slack]] — passes through this component before anything else happens. It converts free-form natural language into a structured JSON object that maps directly to Beckn `/search` parameters. A bad parse here cascades into bad search results; hence it is the highest-priority component in [[phase1_foundation_protocol_integration|Phase 1]].
+> The NL Intent Parser is the **entry gate** of the procurement pipeline. Every user request — typed into the [[frontend_react_nextjs|dashboard]] or sent via [[communication_slack_teams|Slack]] — passes through this component before anything else happens. It converts free-form natural language into a structured JSON object that maps directly to Beckn v2 `discover` query parameters. A bad parse here cascades into bad search results; hence it is the highest-priority component in [[phase1_foundation_protocol_integration|Phase 1]].
 
 ## Example Transformation
 

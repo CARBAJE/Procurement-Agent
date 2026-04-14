@@ -237,7 +237,7 @@ User Query (str)
 ParsedIntent / BecknIntent (typed Python object)
       │
       ▼
-[[beckn_bap_client]] /search payload builder
+[[beckn_bap_client]] /discover query builder
 ```
 
 The schema-driven extraction layer is the **anti-corruption boundary** between the probabilistic world of the LLM and the deterministic world of the [[beckn_data_theory|Beckn Protocol]]. Everything downstream of `instructor` assumes it is operating on valid, typed data — no defensive null-checks, no format validation, no re-parsing.

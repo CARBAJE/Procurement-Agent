@@ -28,7 +28,7 @@ related: ["[[event_streaming_kafka]]", "[[vector_db_qdrant_pinecone]]", "[[audit
 ### Schema Covers
 
 - Procurement requests (intent, requester, timestamp, status)
-- Seller offers (normalized from Beckn `/on_search` callbacks)
+- Seller offers (normalized from Beckn v2 `discover` responses)
 - Orders (selected seller, confirmed terms, ERP sync status)
 - Audit events (every agent decision with reasoning payload — fed from [[event_streaming_kafka|Kafka]])
 - Approval workflow state (routing, approver, action, timestamp)
@@ -54,7 +54,7 @@ related: ["[[event_streaming_kafka]]", "[[vector_db_qdrant_pinecone]]", "[[audit
 
 ### Use Cases
 
-- **Beckn catalog caching** — `normalize(on_search_response)` cached with 15-min TTL. [[phase4_hardening_testing_production|Phase 4 target]]: reduces redundant Beckn network calls by ≥ 50%.
+- **Beckn catalog caching** — `normalize(discover_response)` cached with 15-min TTL. Phase 4 target: reduces redundant Discovery Service calls by ≥ 50%.
 - **Session state** — active procurement request context for the [[agent_framework_langchain_langgraph|agent]] across multi-step workflows.
 - **Rate-limiting counters** — shared across horizontally-scaled [[api_gateway|Kong Gateway]] pods.
 

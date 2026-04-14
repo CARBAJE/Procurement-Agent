@@ -33,7 +33,7 @@ related: ["[[frontend_react_nextjs]]", "[[analytics_dashboard]]", "[[phase3_adva
 
 ## CPO Benchmarking Report Feature ([[story4_strategic_sourcing_analysis|Story 4]])
 
-- Shadow `/search` queries across ONDC for each of 50 procurement categories.
+- Shadow `discover` queries across ONDC for each of 50 procurement categories.
 - Comparison: current contract terms vs. live market offers.
 - Flagged categories: where enterprise overpays by > 10%.
 - Visualized as: heatmap of overpayment % by category + bar chart of identified savings.
@@ -41,7 +41,7 @@ related: ["[[frontend_react_nextjs]]", "[[analytics_dashboard]]", "[[phase3_adva
 > [!milestone] Phase 3 Acceptance (Weeks 9–12)
 > From [[phase3_advanced_intelligence_enterprise_features|Phase 3 Analytics Dashboard milestone]]:
 > - Dashboard shows **6+ metrics** with drill-down capability.
-> - Benchmarking report generated from live shadow `/search` queries.
+> - Benchmarking report generated from live shadow `discover` queries.
 > - Each metric has drill-down (e.g., click on a category to see individual supplier breakdown).
 
 > [!insight] Business Impact of Visualization

@@ -28,8 +28,8 @@ PostgreSQL    Splunk / ServiceNow   LangSmith
 
 | Event | Detail Captured |
 |---|---|
-| `/search` broadcast | Intent parameters, timestamp, network targets |
-| `/on_search` responses | All seller responses, normalization result |
+| `discover` query | Intent parameters, timestamp, Discovery Service target |
+| `discover` response | All returned offerings, normalization result |
 | Comparison scoring | Per-seller scores across all dimensions + explanation text |
 | [[negotiation_engine\|Negotiation steps]] | Counter-offer sent, seller response, strategy applied |
 | [[approval_workflow\|Approval routing]] | Who notified, when, action taken |

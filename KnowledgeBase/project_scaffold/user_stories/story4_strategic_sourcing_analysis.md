@@ -22,7 +22,7 @@ Wants to benchmark current supplier contracts against open-market alternatives.
 
 **Action:** Vikram initiates a "sourcing benchmark" run from the [[analytics_dashboard]].
 
-1. Agent runs **shadow `/search` queries** across ONDC for each of 50 categories via [[beckn_bap_client]].
+1. Agent runs **shadow `discover` queries** across ONDC for each of 50 categories via [[beckn_bap_client]].
    - **Advisory mode only** — queries are for price discovery, no purchases executed.
 2. For each category: [[comparison_scoring_engine]] compares current contract terms against live market offers.
 3. Flags categories where the enterprise is **overpaying by more than 10%**.
@@ -33,7 +33,7 @@ Wants to benchmark current supplier contracts against open-market alternatives.
 6. Vikram uses the report in contract renewal discussions — with data-backed negotiation leverage.
 
 > [!architecture] Technical Workflow
-> `CPO Dashboard` → `Advisory /search (50 categories, parallel)` → `/on_search (market pricing)` → `[[comparison_scoring_engine|Comparison Engine]] (contract vs. market rate per category)` → `Savings Calculation` → `[[analytics_dashboard|Benchmarking Report Generation]]` ([[data_visualization|Recharts/D3]] visualizations) → `Export for negotiations`.
+> `CPO Dashboard` → `Advisory discover (50 categories, parallel sync queries to Discovery Service)` → `[[comparison_scoring_engine|Comparison Engine]] (contract vs. market rate per category)` → `Savings Calculation` → `[[analytics_dashboard|Benchmarking Report Generation]]` ([[data_visualization|Recharts/D3]] visualizations) → `Export for negotiations`.
 
 > [!insight] The Advisory Mode Advantage
 > This story showcases a use case that closed platforms (SAP Ariba, Coupa) **cannot offer at all** — real-time open-market price discovery across all 50 categories simultaneously. The entire ONDC seller network responds to shadow queries with live pricing, giving the CPO a complete market picture rather than the curated subset available on a closed marketplace. The ₹8–12 crore annually in identified savings is typically 10–20× the system's operating cost.

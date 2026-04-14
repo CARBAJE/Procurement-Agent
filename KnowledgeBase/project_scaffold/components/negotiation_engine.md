@@ -12,7 +12,7 @@ related: ["[[beckn_bap_client]]", "[[llm_providers]]", "[[approval_workflow]]", 
 
 ## Mechanism
 
-Beckn's `/select` flow supports term modification — the buyer proposes different prices, quantities, or delivery terms. The negotiation engine drives this via [[beckn_bap_client|BAP Client]].
+Beckn's `/select` flow supports term modification — the buyer proposes different prices, quantities, or delivery terms. The negotiation engine drives this by calling `POST /bap/caller/select` on the [[beckn_client|beckn-onix ONIX adapter]] via the [[beckn_bap_client|BAP Client]]. The ONIX adapter routes the signed request to `POST /bpp/receiver/select` on the seller's BPP.
 
 ## Strategy Types
 

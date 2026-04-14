@@ -22,7 +22,7 @@ related: ["[[comparison_scoring_engine]]", "[[beckn_bap_client]]", "[[approval_w
 | [[real_time_tracking\|Real-time Tracking]] | Order status updates via `/status` polling + webhooks | WebSockets, event handling | Dashboard reflects status within **30 seconds** of change |
 
 > [!architecture] Technical Focus Areas
-> - State management for multi-step Beckn transaction lifecycle (search → select → init → confirm → status).
+> - State management for multi-step Beckn v2 transaction lifecycle: `discover` → `select` → `init` → `confirm` → `status`.
 > - [[comparison_scoring_engine|Hybrid scoring]]: deterministic Python functions + [[llm_providers|GPT-4o]] ReAct reasoning.
 > - [[identity_access_keycloak|RBAC enforcement]] for [[approval_workflow|approval routing]].
 > - WebSocket integration for real-time status push to [[frontend_react_nextjs|frontend]].
@@ -32,7 +32,7 @@ related: ["[[comparison_scoring_engine]]", "[[beckn_bap_client]]", "[[approval_w
 > Phase 2 delivers the **minimum viable autonomous procurement system** — a user can go from natural language request to confirmed order without touching SAP Ariba. This is the first demonstrable proof point for enterprise pilots. The comparison engine's explainability is particularly important for user trust: without knowing *why* Seller A is recommended, users will override the agent reflexively rather than trusting it.
 
 > [!milestone] Deliverables Summary — End of Week 8
-> - Full `/search` → `/on_search` → `/select` → `/init` → `/confirm` → `/status` flow operational.
+> - Full ONIX-routed flow operational: `discover` (sync query to Discovery Service) → Catalog Normalization → `/bap/caller/select` → `/bap/caller/init` → `/bap/caller/confirm` → `/bap/caller/status`.
 > - [[beckn_bap_client|Catalog normalizer]] handles 5+ formats.
 > - [[comparison_scoring_engine]] produces ranked, explained results.
 > - [[approval_workflow|Approval routing]] enforced for all role combinations.

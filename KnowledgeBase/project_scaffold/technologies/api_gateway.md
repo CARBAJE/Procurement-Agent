@@ -25,7 +25,7 @@ related: ["[[identity_access_keycloak]]", "[[beckn_bap_client]]", "[[erp_integra
 
 - **Authentication enforcement** — validates JWT tokens issued by [[identity_access_keycloak|Keycloak]] (SAML 2.0 / OIDC) on every inbound request.
 - **RBAC at the API boundary** — roles (`requester`, `approver`, `admin`) are extracted from the JWT claim and forwarded to downstream services.
-- **Rate limiting** — throttles outbound Beckn `/search` calls to prevent network abuse.
+- **Rate limiting** — throttles outbound Beckn `discover` queries to prevent network abuse.
 - **Request routing** — directs requests to the correct microservice (agent, BAP client, ERP middleware, notification service).
 - **TLS termination** — terminates TLS 1.3; enforced as part of [[security_compliance|defense-in-depth]].
 

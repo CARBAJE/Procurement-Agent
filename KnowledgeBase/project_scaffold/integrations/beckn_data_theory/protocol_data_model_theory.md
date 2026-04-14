@@ -28,7 +28,7 @@ The solution is **canonical forms**: the protocol specifies exactly one acceptab
 ## 2. The Location Field — Why Free Text is Architecturally Incompatible
 
 > [!theory] Mechanics — The GPS Canonical Form
-> The Beckn Protocol's `/search` message specifies the `gps` field within the `Location` object as a string in `"lat,lon"` decimal format. This is not a convenience; it is an **unambiguous coordinate system** that:
+> The Beckn v2 Protocol's `discover` query specifies the `gps` field within the `Location` object as a string in `"lat,lon"` decimal format. This is not a convenience; it is an **unambiguous coordinate system** that:
 >
 > 1. Has a unique representation for every point on Earth's surface.
 > 2. Requires no additional resolvers at the BPP side.
@@ -51,8 +51,9 @@ dict lookup: "bangalore" → "12.9716,77.5946"
                 ▼ (field value finalized)
 BecknIntent: location_coordinates = "12.9716,77.5946"
                 │
-                ▼ (BAP client constructs /search payload)
-Beckn /search: { "location": { "gps": "12.9716,77.5946" } }
+                ▼ (BAP client constructs /discover query)
+ONIX call:     GET /discover → { "location": { "gps": "12.9716,77.5946" } }
+Discovery Svc: Returns matching offerings synchronously (no async callbacks)
 ```
 
 The `_CITY_COORDINATES` lookup table is the **authoritative mapping** for the supported geography. It is deterministic: the same city name always produces the same coordinates. The LLM is given the lookup table in its system prompt so it can attempt the resolution itself — but the `@field_validator` ensures the resolution happens deterministically regardless of whether the LLM produces a city name or attempts (potentially inaccurate) coordinates.
@@ -204,7 +205,7 @@ The Stage 1 filter `intent_result.intent not in _PROCUREMENT_INTENTS` is the **s
 >
 > - **With Beckn standardization:** Each participant implements the protocol once. Total integration effort: $O(B + P)$ — a star topology through the protocol layer.
 >
-> This is **Metcalfe's Law applied to commerce infrastructure**: the value of the network grows as $N^2$ (where $N = B + P$), but the implementation cost grows as $N$. The `BecknIntent` canonical form is what makes this possible — every BAP that correctly extracts a `BecknIntent` from natural language can transact with every BPP that correctly implements the `/search` handler.
+> This is **Metcalfe's Law applied to commerce infrastructure**: the value of the network grows as $N^2$ (where $N = B + P$), but the implementation cost grows as $N$. The `BecknIntent` canonical form is what makes this possible — every BAP that correctly extracts a `BecknIntent` from natural language can transact with every BPP that correctly implements the `publish` + `discover` handlers.
 
 The practical implication for this system: the quality of the `BecknIntent` extraction directly determines the quality of the search results. A malformed `location_coordinates` or a wrong `delivery_timeline` does not cause an error — it causes a search that returns irrelevant results. The error is **semantic, not syntactic**, and therefore harder to detect. The Pydantic validator layer is the last line of defense before semantically incorrect data enters the network.
 
@@ -216,12 +217,15 @@ The practical implication for this system: the quality of the `BecknIntent` extr
 [[nl_intent_parser]]              ← Component that operationalizes this theory
       │
       ▼ produces BecknIntent
-[[beckn_bap_client]]              ← Consumes BecknIntent for /search payload
+[[beckn_bap_client]]              ← Consumes BecknIntent for /discover query
       │
-      ▼ sends to Beckn network
-Beckn BPPs (multi-provider)       ← Each independently valid due to canonical form
+      ▼ sends GET /discover to Discovery Service (via ONIX adapter)
+beckn-onix (BAP adapter, port 8081) ← Signs request (ED25519), validates schema
+      │  queries Discovery Service
+      ▼
+Discovery Service                 ← Returns offerings from Catalog Service synchronously
       │
-      ▼ returns on_search results
+      ▼ synchronous discover response (no callbacks needed)
 [[comparison_scoring_engine]]     ← Compares offers using same canonical units
       │
       ▼ feeds

@@ -8,7 +8,7 @@ related: ["[[nl_intent_parser]]", "[[llm_providers]]", "[[beckn_bap_client]]", "
 # AI Model: Intent Parsing
 
 > [!architecture] Role in the AI Stack
-> The Intent Parsing Model is the **first AI call** in every procurement workflow. It sits inside the [[nl_intent_parser]] component and converts natural language into Beckn-compatible JSON. Because every downstream step (Beckn `/search`, [[comparison_scoring_engine|comparison]], [[negotiation_engine|negotiation]]) depends on the quality of this parsing, it has the **highest accuracy target** of any model in the system: ≥ 95%.
+> The Intent Parsing Model is the **first AI call** in every procurement workflow. It sits inside the [[nl_intent_parser]] component and converts natural language into Beckn-compatible JSON. Because every downstream step (Beckn `discover`, [[comparison_scoring_engine|comparison]], [[negotiation_engine|negotiation]]) depends on the quality of this parsing, it has the **highest accuracy target** of any model in the system: ≥ 95%.
 
 ## Model Configuration
 

@@ -38,7 +38,7 @@ Critical medical supply (PPE kits) running low due to unexpected patient surge.
 7. [[audit_trail_system|Full audit trail captured automatically]] — every decision documented with reasoning, even under emergency conditions.
 
 > [!architecture] Technical Workflow
-> `NL Parser (urgency detection)` → `Emergency Mode Activation` → `Parallel multi-network /search` → `/on_search` → `Compliance Filter (Level 3 cert)` → `Speed-Priority Scoring` → `[[approval_workflow|Approval Routing]] (CFO + countdown)` → `/confirm (multi-location)` → `[[event_streaming_kafka|Kafka]] (audit)` → `[[communication_slack_teams|Notification]]`.
+> `NL Parser (urgency detection)` → `Emergency Mode Activation` → `Parallel multi-network discover (concurrent sync queries to multiple Discovery Services)` → `Compliance Filter (Level 3 cert)` → `Speed-Priority Scoring` → `[[approval_workflow|Approval Routing]] (CFO + countdown)` → `/confirm (multi-location)` → `[[event_streaming_kafka|Kafka]] (audit)` → `[[communication_slack_teams|Notification]]`.
 
 > [!insight] Emergency to Compliant in 3 Minutes
 > The historical failure mode — hours of calls, incomplete documentation, audit flag, potential penalty — is replaced with 3 minutes of automated action with full compliance. The [[audit_trail_system|audit trail]] captures everything: which sellers were found, why the fastest was selected, when CFO approval was granted. This is the story that resonates most strongly with hospital, utilities, and defence procurement audiences.

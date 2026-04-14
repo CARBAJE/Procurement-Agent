@@ -23,7 +23,7 @@ Procuring 200 enterprise laptops for a new office.
 **Input:** "200 business laptops, 16GB RAM, 512GB SSD, i7 or equivalent, Windows 11 Pro, 3-year warranty, deliver to Mumbai HQ within 15 business days, budget ₹1.6 crore."
 
 1. [[nl_intent_parser]] parses request with detailed technical specifications.
-2. [[beckn_bap_client]] runs multi-network `/search` across ONDC and Beckn-compatible networks → 8 sellers with matching inventory identified.
+2. [[beckn_bap_client]] sends `discover` queries to multiple Discovery Services across ONDC and Beckn-compatible networks → 8 sellers with matching inventory returned.
 3. [[comparison_scoring_engine]] scores: price, warranty terms, delivery timeline, seller rating, **ISO 27001 certification** (required for IT equipment per enterprise policy).
 4. Agent presents top 3 options to Rajesh with detailed comparison and reasoning.
    > *"Seller C recommended despite 4% higher unit price — superior warranty (5-year vs. 3-year) and bulk discount at 200+ units produce 8% lower TCO."*
@@ -35,7 +35,7 @@ Procuring 200 enterprise laptops for a new office.
 10. [[real_time_tracking|Real-time delivery tracking]] via `/status` on dashboard.
 
 > [!architecture] Technical Workflow
-> `NL Parser` → `Multi-network /search` → `/on_search` → `Catalog Normalizer` → `[[comparison_scoring_engine|Comparison Engine]]` (ISO 27001 compliance check + TCO scoring) → `Human-in-the-Loop` (Rajesh selects) → `[[approval_workflow|Approval Routing]]` (CFO notification) → `/init` → `/confirm` → `[[event_streaming_kafka|Kafka]]` (audit + [[erp_integration|ERP sync]]) → `[[real_time_tracking|/status polling]]` (real-time tracking).
+> `NL Parser` → `Multi-network discover (sync queries to multiple Discovery Services)` → `Catalog Normalizer` → `[[comparison_scoring_engine|Comparison Engine]]` (ISO 27001 compliance check + TCO scoring) → `Human-in-the-Loop` (Rajesh selects) → `[[approval_workflow|Approval Routing]]` (CFO notification) → `/init` → `/confirm` → `[[event_streaming_kafka|Kafka]]` (audit + [[erp_integration|ERP sync]]) → `[[real_time_tracking|/status polling]]` (real-time tracking).
 
 > [!insight] Human-in-the-Loop Value
 > This story demonstrates that the agent's value in human-in-the-loop mode is **not just speed** (3–4 weeks → 2 days) but **comparison quality**. The agent evaluated 8 sellers more rigorously than a manual process evaluating 5. The ISO 27001 compliance check — which Rajesh's team might have missed under time pressure — was automatic. The audit trail eliminates 2 weeks of documentation work.

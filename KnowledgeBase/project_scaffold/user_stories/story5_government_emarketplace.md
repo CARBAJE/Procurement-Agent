@@ -29,7 +29,7 @@ The agent is **pre-configured for government procurement rules**:
 ## Step-by-Step Agent Journey
 
 1. Dr. Krishnan submits requirements through the [[frontend_react_nextjs|agent dashboard]].
-2. [[beckn_bap_client|Agent]] searches ONDC for sellers meeting **minimum quality standards** (rating ≥ 4.0, certifications present).
+2. [[beckn_bap_client|Agent]] sends `discover` query to ONDC Discovery Service filtering for sellers meeting **minimum quality standards** (rating ≥ 4.0, certifications present).
 3. Among qualified sellers, [[comparison_scoring_engine|agent auto-selects L1]] (lowest price) per government rules.
 4. Full transparency report generated:
    - All sellers considered.
@@ -38,7 +38,7 @@ The agent is **pre-configured for government procurement rules**:
 5. **RTI-ready documentation created automatically** — every decision traceable and explainable via [[audit_trail_system]].
 
 > [!architecture] Technical Workflow
-> `NL Parser` → `ONDC /search` → `/on_search` → `Compliance Filter (quality floor: rating ≥ 4.0 + certifications)` → `L1 Selection (deterministic: lowest price among qualified)` → `Transparency Report Generation` → `RTI Document Export` → `[[event_streaming_kafka|Kafka → PostgreSQL → Splunk]]`.
+> `NL Parser` → `discover (sync query to Discovery Service)` → `Compliance Filter (quality floor: rating ≥ 4.0 + certifications)` → `L1 Selection (deterministic: lowest price among qualified)` → `Transparency Report Generation` → `RTI Document Export` → `[[event_streaming_kafka|Kafka → PostgreSQL → Splunk]]`.
 
 > [!guardrail] L1 Compliance Enforcement
 > The L1 selection rule is **deterministic and non-overridable** in government mode. The agent cannot select a higher-priced seller without a documented policy exception approved by a designated authority. Any override attempt is logged to [[audit_trail_system|audit events]] and flagged in [[audit_splunk_servicenow|ServiceNow]].

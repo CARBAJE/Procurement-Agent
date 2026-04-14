@@ -8,7 +8,7 @@ related: ["[[frontend_react_nextjs]]", "[[data_visualization]]", "[[databases_po
 # Component: Analytics Dashboard
 
 > [!architecture] Role in the System
-> The Analytics Dashboard is the **CPO's command center** — a [[frontend_react_nextjs|React/Next.js]] page powered by [[data_visualization|Recharts and D3.js]] that visualizes procurement KPIs, savings trends, and supplier performance. It also hosts the **Benchmarking Report** feature ([[story4_strategic_sourcing_analysis|Story 4]]), where the agent runs shadow `/search` queries across ONDC to compare current contract terms against live market pricing — in advisory mode, with no purchases executed.
+> The Analytics Dashboard is the **CPO's command center** — a [[frontend_react_nextjs|React/Next.js]] page powered by [[data_visualization|Recharts and D3.js]] that visualizes procurement KPIs, savings trends, and supplier performance. It also hosts the **Benchmarking Report** feature ([[story4_strategic_sourcing_analysis|Story 4]]), where the agent runs shadow `discover` queries across ONDC to compare current contract terms against live market pricing — in advisory mode, with no purchases executed.
 
 ## Metrics Displayed (6+ Required, Phase 3)
 
@@ -26,7 +26,7 @@ related: ["[[frontend_react_nextjs]]", "[[data_visualization]]", "[[databases_po
 
 ## CPO Benchmarking Feature ([[story4_strategic_sourcing_analysis|Story 4]])
 
-- Initiates shadow `/search` queries across ONDC for each of 50 procurement categories.
+- Initiates shadow `discover` queries across ONDC for each of 50 procurement categories.
 - Advisory mode — queries for price discovery only, **no purchases executed**.
 - Compares current contract terms against live market offers.
 - Flags categories where enterprise overpays by > 10%.
@@ -35,7 +35,7 @@ related: ["[[frontend_react_nextjs]]", "[[data_visualization]]", "[[databases_po
 > [!milestone] Phase 3 Acceptance (Weeks 9–12)
 > From [[phase3_advanced_intelligence_enterprise_features|Phase 3 Analytics Dashboard milestone]]:
 > - Dashboard shows **6+ metrics** with drill-down capability (click category → see supplier breakdown).
-> - Benchmarking report generated from live shadow `/search` queries.
+> - Benchmarking report generated from live shadow `discover` queries.
 
 > [!insight] CPO Value Proposition
 > The quarterly sourcing analysis that previously took 3 analysts 2 weeks is completed in **4 hours** with full open-market coverage across all 50 categories. The ₹8–12 crore in annually identified savings gives CPOs concrete data-backed negotiation leverage. This makes the analytics dashboard one of the highest-ROI features for enterprise leadership adoption. See [[business_impact_metrics]] and [[user_adoption_metrics]].

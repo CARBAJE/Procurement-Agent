@@ -19,7 +19,7 @@ related: ["[[observability_stack]]", "[[observability_monitoring]]", "[[model_go
 | Comparison quality vs. human expert ranking | `≥ 85%` agreement | Blind comparison test: agent vs. expert rankings |
 | Beckn API success rate | `≥ 99.5%` | [[observability_stack\|Prometheus]] monitoring of API call outcomes |
 | System uptime | `≥ 99.9%` | [[orchestration_kubernetes\|Kubernetes]] health checks + [[observability_stack\|Grafana]] alerts |
-| Catalog normalization success rate | `≥ 95%` | Automated schema validation on `/on_search` responses |
+| Catalog normalization success rate | `≥ 95%` | Automated schema validation on `discover` responses |
 
 ## Performance Optimization ([[phase4_hardening_testing_production|Phase 4]])
 

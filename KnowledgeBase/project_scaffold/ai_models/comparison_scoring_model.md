@@ -8,7 +8,7 @@ related: ["[[comparison_scoring_engine]]", "[[llm_providers]]", "[[agent_memory_
 # AI Model: Comparison & Scoring
 
 > [!architecture] Role in the AI Stack
-> The Comparison & Scoring Model powers the [[comparison_scoring_engine]] component. It evaluates every seller offer in a Beckn `/on_search` response set and produces a ranked list with plain-language explanations. The model is **hybrid** by design: deterministic Python functions handle quantifiable metrics, while [[llm_providers|GPT-4o in a ReAct loop]] handles qualitative assessment and holistic reasoning.
+> The Comparison & Scoring Model powers the [[comparison_scoring_engine]] component. It evaluates every seller offering in a Beckn v2 `discover` response set and produces a ranked list with plain-language explanations. The model is **hybrid** by design: deterministic Python functions handle quantifiable metrics, while [[llm_providers|GPT-4o in a ReAct loop]] handles qualitative assessment and holistic reasoning.
 
 ## Architecture — Hybrid Approach
 

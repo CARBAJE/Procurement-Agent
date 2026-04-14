@@ -47,7 +47,7 @@ project_scaffold/
 | [[api_gateway]] | Kong Gateway / AWS API Gateway; RBAC enforcement |
 | [[agent_framework_langchain_langgraph]] | LangChain, LangGraph, ReAct loop; 3 operating modes |
 | [[llm_providers]] | GPT-4o (primary), Claude Sonnet 4.6 (fallback), GPT-4o-mini |
-| [[beckn_client]] | Python + aiohttp async Beckn BAP client implementation |
+| [[beckn_client]] | beckn-onix Go adapter (BAP/BPP) + Python agent HTTP client; ED25519 signing |
 | [[databases_postgresql_redis]] | PostgreSQL 16 (transactional), Redis 7 (caching, 15-min TTL) |
 | [[vector_db_qdrant_pinecone]] | Qdrant (self-hosted, preferred) / Pinecone (managed) |
 | [[event_streaming_kafka]] | Apache Kafka — central event bus for all data flows |
@@ -65,7 +65,7 @@ project_scaffold/
 | File | Contents |
 |---|---|
 | [[nl_intent_parser]] | NL → Beckn JSON; GPT-4o with schema-constrained decoding; ≥ 95% accuracy |
-| [[beckn_bap_client]] | All 5 Beckn flows; catalog normalization layer |
+| [[beckn_bap_client]] | All 6 Beckn flows via ONIX adapter; ED25519 signing; catalog normalization layer |
 | [[comparison_scoring_engine]] | Hybrid scoring (Python + ReAct); explainability; ≥ 85% quality |
 | [[negotiation_engine]] | Strategy-based /select; 20% discount cap; per-category config |
 | [[agent_memory_learning]] | Vector DB RAG; < 100ms retrieval; cross-enterprise learning |

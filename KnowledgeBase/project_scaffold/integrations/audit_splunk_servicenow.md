@@ -31,7 +31,7 @@ Indexed, searchable audit records
 
 ## Events Sunk to SIEM
 
-- `/search` parameters and intent (from [[nl_intent_parser]])
+- `discover` query parameters and intent (from [[nl_intent_parser]])
 - All seller responses received and normalization output (from [[beckn_bap_client]])
 - [[comparison_scoring_engine|Comparison scores and reasoning]] for each seller
 - [[negotiation_engine|Negotiation steps]]: counter-offers sent, responses received, strategy applied

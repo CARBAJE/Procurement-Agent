@@ -21,7 +21,7 @@ related: ["[[databases_postgresql_redis]]", "[[vector_db_qdrant_pinecone]]", "[[
 
 | Event | Source | Consumers |
 |---|---|---|
-| Beckn `/on_search` responses | [[beckn_bap_client\|BAP Client]] | Catalog Normalizer, [[databases_postgresql_redis\|Redis]] cache |
+| Beckn `discover` responses | [[beckn_bap_client\|BAP Client]] | Catalog Normalizer, [[databases_postgresql_redis\|Redis]] cache |
 | Agent decisions (with reasoning) | [[agent_framework_langchain_langgraph\|Agent Framework]] | [[databases_postgresql_redis\|PostgreSQL]] (audit), [[observability_stack\|LangSmith]] |
 | User interactions (requests, selections, feedback) | [[frontend_react_nextjs\|Frontend]] | [[databases_postgresql_redis\|PostgreSQL]], [[vector_db_qdrant_pinecone\|Vector DB]] |
 | Order confirmations (`/confirm`) | [[beckn_bap_client\|BAP Client]] | [[erp_integration\|ERP sync]], Notification service |

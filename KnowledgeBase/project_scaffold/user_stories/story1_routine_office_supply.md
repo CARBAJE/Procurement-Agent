@@ -28,8 +28,8 @@ Handles 200+ routine purchase requests monthly.
 
 1. Priya submits request via [[frontend_react_nextjs|dashboard]] or [[communication_slack_teams|Slack]].
 2. [[nl_intent_parser]] parses: `item=A4 paper 80gsm`, `qty=500 reams`, `location=12.9716°N 77.5946°E`, `delivery=3 days`.
-3. [[beckn_bap_client|Agent]] broadcasts `/search` on ONDC → reaches 50+ stationery sellers in Bangalore.
-4. Within 8 seconds, 12 sellers respond. [[beckn_bap_client|BAP client]] normalizes all responses.
+3. [[beckn_bap_client|Agent]] sends `discover` query to the ONDC Discovery Service → Discovery Service returns matching offerings from 50+ stationery sellers registered in Bangalore.
+4. Discovery Service returns catalog from 12 matching sellers in < 1 second. BAP client normalizes the discover response.
 5. [[comparison_scoring_engine]] scores: Seller A (₹195/ream, ⭐4.8, 2-day), Seller B (₹189/ream, ⭐4.5, 3-day), etc.
 6. [[negotiation_engine]] auto-negotiates with top 3 via `/select` — 5% discount counter-offer. Seller B accepts ₹180/ream.
 7. Total (₹90,000) < auto-approval threshold (₹1,00,000) → [[approval_workflow|no approval required]]; agent proceeds to `/init` → `/confirm`.
@@ -38,7 +38,7 @@ Handles 200+ routine purchase requests monthly.
 **Total time: 45 seconds.**
 
 > [!architecture] Technical Workflow
-> `NL Parser` → `Beckn /search (broadcast)` → `/on_search (collect)` → `Catalog Normalizer` → `[[comparison_scoring_engine|Comparison Engine]]` (scoring + explainability) → `[[negotiation_engine|Negotiation Engine]]` (`/select` with modified terms) → `[[approval_workflow|Policy Check]]` (threshold validation) → `/init` → `/confirm` → `[[event_streaming_kafka|Kafka event]]` (audit + [[erp_integration|ERP sync]]) → [[communication_slack_teams|Notification dispatch]].
+> `NL Parser` → `discover (sync query to Discovery Service)` → `Catalog Normalizer` → `[[comparison_scoring_engine|Comparison Engine]]` (scoring + explainability) → `[[negotiation_engine|Negotiation Engine]]` (`ONIX: POST /bap/caller/select` with modified terms) → `[[approval_workflow|Policy Check]]` (threshold validation) → `ONIX: POST /bap/caller/init` → `POST /bap/caller/confirm` → `[[event_streaming_kafka|Kafka event]]` (audit + [[erp_integration|ERP sync]]) → [[communication_slack_teams|Notification dispatch]].
 
 ## Expected Outcomes
 

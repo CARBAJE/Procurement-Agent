@@ -34,7 +34,7 @@ related: ["[[orchestration_kubernetes]]", "[[phase4_hardening_testing_production
 
 > [!milestone] Phase 4 Acceptance Criteria (Weeks 13–16)
 > From [[phase4_hardening_testing_production|Phase 4 Integration Testing milestone]]:
-> - End-to-end test suite covering all Beckn flows (search → on_search → select → init → confirm → status).
+> - End-to-end test suite covering all Beckn flows (discover → select → init → confirm → status).
 > - Code coverage: **≥ 80%** on critical paths.
 > - Evaluation suite: agent achieves **≥ 85%** accuracy.
 > - CI pipeline runs in < 15 minutes end-to-end.

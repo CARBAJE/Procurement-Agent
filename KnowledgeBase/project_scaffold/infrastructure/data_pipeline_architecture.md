@@ -14,7 +14,7 @@ related: ["[[event_streaming_kafka]]", "[[databases_postgresql_redis]]", "[[vect
 
 | Data Source | Type | Volume | Freshness | Processing |
 |---|---|---|---|---|
-| Beckn/ONDC Catalog Responses | Semi-structured JSON (async callbacks) | 100–10,000 responses/search | Real-time | Normalize → Score → Cache ([[databases_postgresql_redis\|Redis]], 15-min TTL) |
+| Beckn/ONDC Catalog Responses | Semi-structured JSON (sync discover response) | Matching offerings per discover query | Real-time | Normalize → Score → Cache ([[databases_postgresql_redis\|Redis]], 15-min TTL) |
 | Enterprise Procurement History | Structured (ERP exports, DB records) | 50K–500K records | Daily batch sync | ETL → [[databases_postgresql_redis\|PostgreSQL]] → Embed → [[vector_db_qdrant_pinecone\|Qdrant]] |
 | User Interaction Logs | Semi-structured (request text, selections, feedback) | 1K–10K events/day | Real-time streaming | [[event_streaming_kafka\|Kafka]] → PostgreSQL (audit) + Qdrant (learning) |
 | Supplier Performance Data | Structured (ratings, delivery metrics, certifications) | Aggregated ONDC + internal | Weekly aggregation | Batch → Supplier scoring model update |
@@ -22,7 +22,7 @@ related: ["[[event_streaming_kafka]]", "[[databases_postgresql_redis]]", "[[vect
 ## Full Pipeline Flow
 
 ```
-Beckn /on_search callbacks ──→ Kafka ──→ Catalog Normalizer ──→ Redis cache (15-min TTL)
+Beckn discover responses ──→ Kafka ──→ Catalog Normalizer ──→ Redis cache (15-min TTL)
                                       ↓
                                Comparison Engine ──→ PostgreSQL (offers table)
 
