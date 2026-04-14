@@ -1,1 +1,8 @@
-{}
+{
+  "enabledCssSnippets": [
+    "snippsets",
+    "tags-graph",
+    "project-theme"
+  ],
+  "theme": "system"
+}

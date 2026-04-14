@@ -1,0 +1,780 @@
+/* ================================================================
+   BECKN PROCUREMENT AGENT — OBSIDIAN KNOWLEDGE BASE
+   Master Theme Snippet · project-theme.css · v2.1
+   ─────────────────────────────────────────────────────────────────
+   SELECTOR MODEL (Obsidian cssclasses):
+     cssclasses adds the class TO .markdown-preview-view itself.
+     So .procurement-doc h1  ✓  (descendant of the classed element)
+        .procurement-doc .markdown-preview-view h1  ✗  (wrong nesting)
+
+   §0   CSS Design Tokens
+   §1   Keyframe Animations  (16 effects)
+   §2   Callouts Base Reset
+   §3   Custom Callouts      (12 types)   — GLOBAL, no cssclass needed
+   §4   Built-in Callout Overrides        — GLOBAL
+   §5   cssclass: procurement-doc  (base layout)
+   §6   cssclass: theory-doc
+   §7   cssclass: ai-doc
+   §8   Global Typography  — blockquote · lists · em · strong
+   §9   Global Tables      — base stripe + cssclass overrides
+   §10  Global Code        — inline & blocks
+   §11  Global Tags · WikiLinks · Frontmatter
+   §12  UI — Glassmorphism menus · sidebar · command palette
+   §13  Workspace background
+   ================================================================ */
+
+
+/* ────────────────────────────────────────────────────────────────
+   §0  CSS DESIGN TOKENS
+   ──────────────────────────────────────────────────────────────── */
+
+:root {
+  --bpa-blue:     100, 140, 255;
+  --bpa-cyan:       0, 200, 220;
+  --bpa-green:     80, 200, 120;
+  --bpa-orange:   255, 120,  50;
+  --bpa-gold:     255, 200,  50;
+  --bpa-indigo:   139,  92, 246;
+  --bpa-teal:      20, 184, 166;
+  --bpa-pink:     236,  72, 153;
+  --bpa-emerald:   16, 185, 129;
+  --bpa-amber:    245, 158,  11;
+  --bpa-sky:       14, 165, 233;
+  --bpa-red:      239,  68,  68;
+  --bpa-violet:   168,  85, 247;
+  --bpa-slate:    148, 163, 184;
+  --bpa-coral:    251, 146,  60;
+
+  --bpa-font-body: 'Inter', 'Segoe UI', 'SF Pro Text', system-ui, sans-serif;
+  --bpa-font-mono: 'JetBrains Mono', 'Fira Code', 'Source Code Pro', monospace;
+  --bpa-max-width:   900px;
+  --bpa-line-height: 1.78;
+}
+
+
+/* ────────────────────────────────────────────────────────────────
+   §1  KEYFRAME ANIMATIONS
+   ──────────────────────────────────────────────────────────────── */
+
+@keyframes bpa-arch-glow {
+  0%,100% { box-shadow: 0 0 5px rgba(100,140,255,.18), inset 0 0 6px rgba(100,140,255,.04); }
+  50%     { box-shadow: 0 0 24px rgba(100,140,255,.60), inset 0 0 22px rgba(100,140,255,.10); }
+}
+@keyframes bpa-theory-breathe {
+  0%,100% { box-shadow: 0 0 0px rgba(139,92,246,.00); background-color: rgba(139,92,246,.04); }
+  50%     { box-shadow: 0 0 20px rgba(139,92,246,.25); background-color: rgba(139,92,246,.11); }
+}
+@keyframes bpa-milestone-shimmer {
+  0%   { background-position: -200% center; }
+  100% { background-position:  200% center; }
+}
+@keyframes bpa-guardrail-pulse {
+  0%,100% { border-left-color: rgba(255,120,50,.80); }
+  40%     { border-left-color: rgba(220,40,40,1.00); }
+  70%     { border-left-color: rgba(255,80,20,.95); }
+}
+@keyframes bpa-insight-breathe {
+  0%,100% { background-color: rgba(255,200,50,.04); box-shadow: 0 0 0px rgba(255,200,50,.00); }
+  50%     { background-color: rgba(255,200,50,.12); box-shadow: 0 0 16px rgba(255,200,50,.20); }
+}
+@keyframes bpa-tech-wave {
+  0%   { background-position:   0% 50%; }
+  50%  { background-position: 100% 50%; }
+  100% { background-position:   0% 50%; }
+}
+@keyframes bpa-beckn-flash {
+  0%,88%,100% { border-left-color: rgba(20,184,166,.80); box-shadow: none; }
+  94%         { border-left-color: rgba(20,184,166,1.00); box-shadow: 0 0 16px rgba(20,184,166,.40); }
+}
+@keyframes bpa-routing-scan {
+  0%   { background-position:  200% 50%; }
+  100% { background-position: -200% 50%; }
+}
+@keyframes bpa-validator-beat {
+  0%,82%,100% { box-shadow: 0 0  0px rgba(16,185,129,.00); }
+  88%         { box-shadow: 0 0 18px rgba(16,185,129,.48); }
+}
+@keyframes bpa-warning-amber {
+  0%,100% { border-left-color: rgba(245,158,11,.72); box-shadow: none; }
+  50%     { border-left-color: rgba(245,158,11,1.00); box-shadow: 0 0 12px rgba(245,158,11,.22); }
+}
+@keyframes bpa-pipeline-flow {
+  0%   { background-position: -120% 0; }
+  100% { background-position:  220% 0; }
+}
+@keyframes bpa-abstract-width {
+  0%,100% { border-left-width: 3px; }
+  50%     { border-left-width: 5px; }
+}
+@keyframes bpa-important-flash {
+  0%,100% { background-color: rgba(239,68,68,.04); box-shadow: none; }
+  50%     { background-color: rgba(239,68,68,.10); box-shadow: 0 0 14px rgba(239,68,68,.20); }
+}
+@keyframes bpa-integration-glow {
+  0%,100% { box-shadow: 0 0  0px rgba(168,85,247,.00); }
+  50%     { box-shadow: 0 0 20px rgba(168,85,247,.28); }
+}
+@keyframes bpa-menu-appear {
+  from { opacity: 0; transform: translateY(6px) scale(.975); }
+  to   { opacity: 1; transform: translateY(0px) scale(1.00); }
+}
+
+
+/* ────────────────────────────────────────────────────────────────
+   §2  CALLOUTS BASE RESET  (global — no cssclass dependency)
+   ──────────────────────────────────────────────────────────────── */
+
+.callout {
+  border-radius: 8px;
+  margin: 1.3em 0;
+  border-left-width: 4px;
+  border-left-style: solid;
+  text-align: justify;
+}
+.callout .callout-icon svg { display: none !important; }
+.callout .callout-title {
+  font-weight: 700;
+  letter-spacing: .065em;
+  text-transform: uppercase;
+  font-size: .73em;
+  display: flex;
+  align-items: center;
+}
+.callout .callout-title::before {
+  display: inline-block;
+  margin-right: 8px;
+  font-size: 1.15em;
+  line-height: 1;
+}
+
+
+/* ────────────────────────────────────────────────────────────────
+   §3  CUSTOM CALLOUTS  (global)
+   ──────────────────────────────────────────────────────────────── */
+
+/* — THEORY — indigo nebula breathe — */
+.callout[data-callout="theory"] {
+  border-left-color: rgba(139,92,246,.85);
+  background-color:  rgba(139,92,246,.05);
+  animation: bpa-theory-breathe 6.5s ease-in-out infinite;
+}
+.callout[data-callout="theory"] .callout-title        { color: rgba(167,139,250,1); }
+.callout[data-callout="theory"] .callout-title::before { content: "⚗️"; }
+
+/* — ARCHITECTURE — electric blue double glow — */
+.callout[data-callout="architecture"] {
+  border-left-color: rgba(100,140,255,.90);
+  background-color:  rgba(100,140,255,.05);
+  animation: bpa-arch-glow 4.5s ease-in-out infinite;
+}
+.callout[data-callout="architecture"] .callout-title        { color: rgba(130,165,255,1); }
+.callout[data-callout="architecture"] .callout-title::before { content: "🏗️"; }
+
+/* — MILESTONE — green shimmer sweep — */
+.callout[data-callout="milestone"] {
+  border-left-color: rgba(80,200,120,.90);
+  background: linear-gradient(90deg, rgba(80,200,120,.03) 0%, rgba(80,200,120,.15) 50%, rgba(80,200,120,.03) 100%);
+  background-size: 200% auto;
+  animation: bpa-milestone-shimmer 7s linear infinite;
+}
+.callout[data-callout="milestone"] .callout-title        { color: rgba(80,215,125,1); }
+.callout[data-callout="milestone"] .callout-title::before { content: "🚩"; }
+
+/* — TECH-STACK — cyan gradient wave — */
+.callout[data-callout="tech-stack"] {
+  border-left-color: rgba(0,200,220,.90);
+  background: linear-gradient(270deg, rgba(0,200,220,.03), rgba(0,165,210,.10), rgba(0,200,220,.03));
+  background-size: 400% 400%;
+  animation: bpa-tech-wave 9s ease infinite;
+}
+.callout[data-callout="tech-stack"] .callout-title        { color: rgba(0,215,235,1); }
+.callout[data-callout="tech-stack"] .callout-title::before { content: "⚙️"; }
+
+/* — GUARDRAIL — orange-red pulse — */
+.callout[data-callout="guardrail"] {
+  border-left: 5px solid rgba(255,120,50,.90);
+  background-color: rgba(255,90,30,.05);
+  animation: bpa-guardrail-pulse 2.8s ease-in-out infinite;
+}
+.callout[data-callout="guardrail"] .callout-title        { color: rgba(255,145,75,1); font-weight: 800; }
+.callout[data-callout="guardrail"] .callout-title::before { content: "🛡️"; }
+
+/* — INSIGHT — golden breathe — */
+.callout[data-callout="insight"] {
+  border-left-color: rgba(255,200,50,.90);
+  animation: bpa-insight-breathe 5.5s ease-in-out infinite;
+}
+.callout[data-callout="insight"] .callout-title        { color: rgba(220,178,38,1); }
+.callout[data-callout="insight"] .callout-title::before { content: "💡"; }
+
+/* — BECKN — teal network-node flash — */
+.callout[data-callout="beckn"] {
+  border-left: 5px solid rgba(20,184,166,.85);
+  background-color: rgba(20,184,166,.05);
+  animation: bpa-beckn-flash 4s ease-in-out infinite;
+}
+.callout[data-callout="beckn"] .callout-title        { color: rgba(45,215,195,1); }
+.callout[data-callout="beckn"] .callout-title::before { content: "🔗"; }
+
+/* — ROUTING — pink left scan — */
+.callout[data-callout="routing"] {
+  border-left-color: rgba(236,72,153,.85);
+  background: linear-gradient(90deg, rgba(236,72,153,.03), rgba(236,72,153,.10), rgba(236,72,153,.03));
+  background-size: 300% 100%;
+  animation: bpa-routing-scan 8s linear infinite;
+}
+.callout[data-callout="routing"] .callout-title        { color: rgba(244,118,185,1); }
+.callout[data-callout="routing"] .callout-title::before { content: "🔀"; }
+
+/* — VALIDATOR — emerald heartbeat — */
+.callout[data-callout="validator"] {
+  border-left-color: rgba(16,185,129,.85);
+  background-color:  rgba(16,185,129,.04);
+  animation: bpa-validator-beat 3.2s ease-in-out infinite;
+}
+.callout[data-callout="validator"] .callout-title        { color: rgba(52,215,158,1); }
+.callout[data-callout="validator"] .callout-title::before { content: "✅"; }
+
+/* — PIPELINE — sky-blue flow — */
+.callout[data-callout="pipeline"] {
+  border-left-color: rgba(14,165,233,.85);
+  background: linear-gradient(90deg, rgba(14,165,233,.08) 0%, transparent 60%);
+  background-size: 300% 100%;
+  animation: bpa-pipeline-flow 5.5s linear infinite;
+}
+.callout[data-callout="pipeline"] .callout-title        { color: rgba(56,192,252,1); }
+.callout[data-callout="pipeline"] .callout-title::before { content: "⛓️"; }
+
+/* — INTEGRATION — violet slow glow — */
+.callout[data-callout="integration"] {
+  border-left-color: rgba(168,85,247,.85);
+  background-color:  rgba(168,85,247,.05);
+  animation: bpa-integration-glow 7s ease-in-out infinite;
+}
+.callout[data-callout="integration"] .callout-title        { color: rgba(200,152,255,1); }
+.callout[data-callout="integration"] .callout-title::before { content: "🔌"; }
+
+/* — USER-STORY — coral hover-lift card — */
+.callout[data-callout="user-story"] {
+  border-left-color: rgba(251,146,60,.85);
+  background-color:  rgba(251,146,60,.04);
+  transition: transform .28s ease, box-shadow .28s ease;
+}
+.callout[data-callout="user-story"]:hover {
+  transform:  translateY(-3px);
+  box-shadow: 0 8px 22px rgba(251,146,60,.18);
+}
+.callout[data-callout="user-story"] .callout-title        { color: rgba(251,152,72,1); }
+.callout[data-callout="user-story"] .callout-title::before { content: "👤"; }
+
+
+/* ────────────────────────────────────────────────────────────────
+   §4  BUILT-IN CALLOUT OVERRIDES  (global)
+   ──────────────────────────────────────────────────────────────── */
+
+/* abstract / summary / tldr  →  Rationale */
+.callout[data-callout="abstract"],
+.callout[data-callout="summary"],
+.callout[data-callout="tldr"] {
+  border-left-color: rgba(148,163,184,.78);
+  background-color:  rgba(148,163,184,.04);
+  animation: bpa-abstract-width 4s ease-in-out infinite;
+}
+.callout[data-callout="abstract"] .callout-title,
+.callout[data-callout="summary"] .callout-title,
+.callout[data-callout="tldr"]    .callout-title   { color: rgba(185,200,220,1); }
+.callout[data-callout="abstract"] .callout-icon svg,
+.callout[data-callout="summary"] .callout-icon svg,
+.callout[data-callout="tldr"]    .callout-icon svg { display: none !important; }
+.callout[data-callout="abstract"] .callout-title::before,
+.callout[data-callout="summary"] .callout-title::before,
+.callout[data-callout="tldr"]    .callout-title::before { content: "📐"; }
+
+/* warning  →  Trade-offs */
+.callout[data-callout="warning"] {
+  border-left-color: rgba(245,158,11,.85);
+  background-color:  rgba(245,158,11,.04);
+  animation: bpa-warning-amber 3.5s ease-in-out infinite;
+}
+.callout[data-callout="warning"] .callout-title        { color: rgba(252,196,42,1); }
+.callout[data-callout="warning"] .callout-icon svg     { display: none !important; }
+.callout[data-callout="warning"] .callout-title::before { content: "⚖️"; }
+
+/* info  →  Protocol context */
+.callout[data-callout="info"] {
+  border-left-color: rgba(0,200,220,.72);
+  background-color:  rgba(0,200,220,.04);
+}
+.callout[data-callout="info"] .callout-title        { color: rgba(0,215,235,1); }
+.callout[data-callout="info"] .callout-icon svg     { display: none !important; }
+.callout[data-callout="info"] .callout-title::before { content: "ℹ️"; }
+
+/* important  →  Critical red alert */
+.callout[data-callout="important"] {
+  border-left: 5px solid rgba(239,68,68,.90);
+  background-color: rgba(239,68,68,.05);
+  animation: bpa-important-flash 2.5s ease-in-out infinite;
+}
+.callout[data-callout="important"] .callout-title        { color: rgba(252,115,115,1); font-weight: 800; }
+.callout[data-callout="important"] .callout-icon svg     { display: none !important; }
+.callout[data-callout="important"] .callout-title::before { content: "🔴"; }
+
+/* tip / hint  →  Implementation key */
+.callout[data-callout="tip"],
+.callout[data-callout="hint"] {
+  border-left-color: rgba(80,200,120,.75);
+  background-color:  rgba(80,200,120,.04);
+}
+.callout[data-callout="tip"] .callout-title,
+.callout[data-callout="hint"] .callout-title        { color: rgba(100,222,142,1); }
+.callout[data-callout="tip"] .callout-icon svg,
+.callout[data-callout="hint"] .callout-icon svg     { display: none !important; }
+.callout[data-callout="tip"] .callout-title::before,
+.callout[data-callout="hint"] .callout-title::before { content: "🔑"; }
+
+
+/* ────────────────────────────────────────────────────────────────
+   §5  cssclass: procurement-doc  (base layout)
+
+   In Obsidian Reading View, cssclasses are added TO .markdown-preview-view.
+   So .procurement-doc h1 correctly targets headings inside it.
+   In Live Preview, we target .procurement-doc .cm-content for typography.
+   ──────────────────────────────────────────────────────────────── */
+
+/* Container — font & line-height (Reading view: class IS on the element) */
+.markdown-preview-view.procurement-doc,
+.procurement-doc .cm-content {
+  font-family: var(--bpa-font-body);
+  line-height:  var(--bpa-line-height);
+  max-width:    var(--bpa-max-width);
+  margin:       0 auto;
+}
+
+/* H1 */
+.procurement-doc h1 {
+  border-bottom:  2px solid rgba(100,140,255,.45) !important;
+  padding-bottom: 12px !important;
+  margin-bottom:  28px !important;
+  letter-spacing: -.02em;
+  color: var(--h1-color, inherit);
+}
+
+/* H2 */
+.procurement-doc h2 {
+  border-left:  4px solid rgba(0,200,220,.65) !important;
+  padding-left: 14px !important;
+  margin-top:   42px !important;
+  color: rgba(160,210,255,.95);
+}
+
+/* H3 */
+.procurement-doc h3 {
+  border-left:  2px solid rgba(100,140,255,.40) !important;
+  padding-left: 12px !important;
+  color: rgba(160,188,255,.88);
+}
+
+/* H4 */
+.procurement-doc h4 {
+  color: rgba(220,178,38,.88) !important;
+  font-size: .93em;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+}
+
+/* HR */
+.procurement-doc hr {
+  border: none !important;
+  border-top: 1px solid rgba(100,140,255,.22) !important;
+  margin: 34px 0 !important;
+}
+
+
+/* ────────────────────────────────────────────────────────────────
+   §6  cssclass: theory-doc
+   ──────────────────────────────────────────────────────────────── */
+
+.markdown-preview-view.theory-doc,
+.theory-doc .cm-content {
+  font-family: var(--bpa-font-body);
+  line-height:  var(--bpa-line-height);
+  max-width:    var(--bpa-max-width);
+  margin:       0 auto;
+}
+
+.theory-doc h1 {
+  border-bottom:  2px solid rgba(139,92,246,.50) !important;
+  padding-bottom: 12px !important;
+  margin-bottom:  28px !important;
+  letter-spacing: -.02em;
+  color: rgba(167,139,250,1) !important;
+}
+
+.theory-doc h2 {
+  border-left:  4px solid rgba(139,92,246,.65) !important;
+  padding-left: 14px !important;
+  margin-top:   42px !important;
+  color: rgba(167,139,250,.95) !important;
+}
+
+.theory-doc h3 {
+  border-left:  2px solid rgba(139,92,246,.38) !important;
+  padding-left: 12px !important;
+  color: rgba(200,185,255,.85) !important;
+}
+
+.theory-doc h4 {
+  color: rgba(45,215,195,.88) !important;
+  font-size: .93em;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+}
+
+.theory-doc hr {
+  border: none !important;
+  border-top: 1px solid rgba(139,92,246,.22) !important;
+  margin: 34px 0 !important;
+}
+
+/* Table accent — indigo */
+.theory-doc th {
+  background:    rgba(139,92,246,.14) !important;
+  border-bottom: 2px solid rgba(139,92,246,.35) !important;
+  color:         rgba(200,185,255,1)  !important;
+}
+.theory-doc tr:nth-child(even) td { background: rgba(139,92,246,.03) !important; }
+.theory-doc tr:hover td           { background: rgba(139,92,246,.08) !important; }
+
+
+/* ────────────────────────────────────────────────────────────────
+   §7  cssclass: ai-doc
+   ──────────────────────────────────────────────────────────────── */
+
+.markdown-preview-view.ai-doc,
+.ai-doc .cm-content {
+  font-family: var(--bpa-font-body);
+  line-height:  var(--bpa-line-height);
+  max-width:    var(--bpa-max-width);
+  margin:       0 auto;
+}
+
+.ai-doc h1 {
+  border-bottom:  2px solid rgba(236,72,153,.48) !important;
+  padding-bottom: 12px !important;
+  margin-bottom:  28px !important;
+  letter-spacing: -.02em;
+  color: rgba(244,118,185,1) !important;
+}
+
+.ai-doc h2 {
+  border-left:  4px solid rgba(236,72,153,.58) !important;
+  padding-left: 14px !important;
+  margin-top:   42px !important;
+  color: rgba(244,118,185,.95) !important;
+}
+
+.ai-doc h3 {
+  border-left:  2px solid rgba(16,185,129,.42) !important;
+  padding-left: 12px !important;
+  color: rgba(52,215,158,.85) !important;
+}
+
+.ai-doc h4 {
+  color: rgba(220,178,38,.88) !important;
+  font-size: .93em;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+}
+
+.ai-doc hr {
+  border: none !important;
+  border-top: 1px solid rgba(236,72,153,.20) !important;
+  margin: 34px 0 !important;
+}
+
+/* Table accent — pink */
+.ai-doc th {
+  background:    rgba(236,72,153,.13) !important;
+  border-bottom: 2px solid rgba(236,72,153,.32) !important;
+  color:         rgba(244,118,185,1)  !important;
+}
+.ai-doc tr:nth-child(even) td { background: rgba(236,72,153,.03) !important; }
+.ai-doc tr:hover td           { background: rgba(236,72,153,.07) !important; }
+
+
+/* ────────────────────────────────────────────────────────────────
+   §8  GLOBAL TYPOGRAPHY  (applies to ALL notes)
+   ──────────────────────────────────────────────────────────────── */
+
+/* Blockquote */
+.markdown-preview-view blockquote {
+  border-left:   3px solid rgba(100,140,255,.35) !important;
+  padding:       .85em 1.3em !important;
+  font-style:    italic;
+  color:         rgba(200,210,235,.78);
+  background:    rgba(100,140,255,.03) !important;
+  border-radius: 0 6px 6px 0;
+  margin:        1.3em 0;
+}
+
+/* Bold */
+.markdown-preview-view strong { color: rgba(210,222,255,1); }
+
+/* Italic */
+.markdown-preview-view em { color: rgba(167,139,250,.88); }
+
+/* Lists */
+.markdown-preview-view ul,
+.markdown-preview-view ol {
+  margin-left: 1.6em;
+  line-height: 1.72;
+}
+.markdown-preview-view li { margin-bottom: .2em; }
+
+
+/* ────────────────────────────────────────────────────────────────
+   §9  GLOBAL TABLES
+   ──────────────────────────────────────────────────────────────── */
+
+.markdown-preview-view table {
+  border-collapse: collapse;
+  width:           100%;
+  margin:          20px 0;
+  font-size:       .91em;
+  border-radius:   8px;
+  overflow:        hidden;
+}
+
+/* Default header — blue (overridden by cssclass if theory/ai) */
+.markdown-preview-view th {
+  background:     rgba(100,140,255,.14) !important;
+  font-weight:    700 !important;
+  padding:        10px 15px !important;
+  text-align:     left !important;
+  border-bottom:  2px solid rgba(100,140,255,.32) !important;
+  color:          rgba(165,195,255,1) !important;
+  text-transform: uppercase;
+  font-size:      .81em;
+  letter-spacing: .055em;
+}
+
+.markdown-preview-view td {
+  padding:       9px 15px;
+  border-bottom: 1px solid rgba(255,255,255,.055);
+  vertical-align: top;
+}
+
+/* First column emphasis */
+.markdown-preview-view td:first-child {
+  font-weight: 600;
+  color: rgba(185,205,255,.90);
+}
+
+.markdown-preview-view tr:nth-child(even) td { background: rgba(100,140,255,.03); }
+.markdown-preview-view tr:hover td {
+  background:  rgba(100,140,255,.07);
+  transition:  background .18s ease;
+}
+
+
+/* ────────────────────────────────────────────────────────────────
+   §10  GLOBAL CODE — inline & blocks
+   ──────────────────────────────────────────────────────────────── */
+
+/* Inline code */
+.markdown-rendered :not(pre) > code {
+  background:    rgba(100,140,255,.14) !important;
+  border:        1px solid rgba(100,140,255,.26) !important;
+  border-radius: 4px !important;
+  padding:       2px 7px !important;
+  font-size:     .86em !important;
+  font-family:   var(--bpa-font-mono) !important;
+  color:         rgba(168,212,255,1) !important;
+}
+
+/* Code block container */
+.markdown-rendered pre {
+  background:    rgba(12,14,24,.88) !important;
+  border:        1px solid rgba(100,140,255,.16) !important;
+  border-radius: 10px !important;
+  padding:       1.3em 1.5em !important;
+  overflow-x:    auto;
+  position:      relative;
+}
+
+/* Code text */
+.markdown-rendered pre code {
+  background:  transparent !important;
+  border:      none !important;
+  padding:     0 !important;
+  color:       rgba(222,228,244,.92) !important;
+  font-size:   .87em !important;
+  font-family: var(--bpa-font-mono) !important;
+  line-height: 1.68 !important;
+}
+
+/* Language color tinting */
+.markdown-rendered pre code.language-json { color: rgba(152,224,180,.92) !important; }
+.markdown-rendered pre code.language-css  { color: rgba(202,175,255,.92) !important; }
+.markdown-rendered pre code.language-bash,
+.markdown-rendered pre code.language-sh   { color: rgba(180,230,200,.92) !important; }
+
+
+/* ────────────────────────────────────────────────────────────────
+   §11  GLOBAL TAGS · WIKILINKS · FRONTMATTER
+   ──────────────────────────────────────────────────────────────── */
+
+/* Tag pill base */
+.tag {
+  display:         inline-block !important;
+  border-radius:   20px !important;
+  padding:         .14em .72em !important;
+  font-size:       .78em !important;
+  font-weight:     600 !important;
+  margin:          0 .14em .14em 0 !important;
+  text-decoration: none !important;
+  letter-spacing:  .03em;
+  border:          1px solid;
+  transition:      transform .2s ease, box-shadow .2s ease;
+}
+.tag:hover {
+  transform:  translateY(-2px);
+  box-shadow: 0 4px 10px rgba(0,0,0,.25);
+}
+
+/* Tag color map */
+a.tag[href*="#theory"],
+a.tag[href*="#theory/"]           { background: rgba(139,92,246,.16);  color: rgba(167,139,250,1); border-color: rgba(139,92,246,.40); }
+a.tag[href*="#architecture"]      { background: rgba(100,140,255,.16); color: rgba(130,165,255,1); border-color: rgba(100,140,255,.40); }
+a.tag[href*="#nlp"]               { background: rgba(0,200,220,.14);   color: rgba(0,215,235,1);   border-color: rgba(0,200,220,.34); }
+a.tag[href*="#structured"]        { background: rgba(16,185,129,.14);  color: rgba(52,215,158,1);  border-color: rgba(16,185,129,.36); }
+a.tag[href*="#pydantic"]          { background: rgba(16,185,129,.14);  color: rgba(52,215,158,1);  border-color: rgba(16,185,129,.36); }
+a.tag[href*="#instructor"]        { background: rgba(16,185,129,.14);  color: rgba(52,215,158,1);  border-color: rgba(16,185,129,.36); }
+a.tag[href*="#beckn"]             { background: rgba(20,184,166,.15);  color: rgba(45,215,195,1);  border-color: rgba(20,184,166,.40); }
+a.tag[href*="#decentralized"]     { background: rgba(20,184,166,.15);  color: rgba(45,215,195,1);  border-color: rgba(20,184,166,.40); }
+a.tag[href*="#ai-models"],
+a.tag[href*="#ai/"]               { background: rgba(236,72,153,.14);  color: rgba(244,118,185,1); border-color: rgba(236,72,153,.36); }
+a.tag[href*="#llm"]               { background: rgba(236,72,153,.14);  color: rgba(244,118,185,1); border-color: rgba(236,72,153,.36); }
+a.tag[href*="#model-routing"]     { background: rgba(236,72,153,.14);  color: rgba(244,118,185,1); border-color: rgba(236,72,153,.36); }
+a.tag[href*="#heuristics"]        { background: rgba(168,85,247,.14);  color: rgba(200,152,255,1); border-color: rgba(168,85,247,.36); }
+a.tag[href*="#milestone"]         { background: rgba(80,200,120,.14);  color: rgba(80,215,125,1);  border-color: rgba(80,200,120,.36); }
+a.tag[href*="#kpi"]               { background: rgba(255,200,50,.14);  color: rgba(220,178,38,1);  border-color: rgba(255,200,50,.36); }
+a.tag[href*="#compute"]           { background: rgba(255,200,50,.14);  color: rgba(220,178,38,1);  border-color: rgba(255,200,50,.36); }
+a.tag[href*="#warning"]           { background: rgba(245,158,11,.14);  color: rgba(252,196,42,1);  border-color: rgba(245,158,11,.36); }
+a.tag[href*="#security"]          { background: rgba(255,120,50,.14);  color: rgba(255,145,75,1);  border-color: rgba(255,120,50,.36); }
+a.tag[href*="#integration"]       { background: rgba(168,85,247,.14);  color: rgba(200,152,255,1); border-color: rgba(168,85,247,.36); }
+a.tag[href*="#data-model"]        { background: rgba(14,165,233,.14);  color: rgba(56,192,252,1);  border-color: rgba(14,165,233,.36); }
+a.tag[href*="#anti-corruption"]   { background: rgba(255,120,50,.14);  color: rgba(255,145,75,1);  border-color: rgba(255,120,50,.36); }
+
+/* WikiLinks */
+.markdown-preview-view .internal-link {
+  color:           rgba(105,175,255,.90) !important;
+  text-decoration: none !important;
+  border-bottom:   1px dotted rgba(100,140,255,.40);
+  transition:      color .18s ease, border-bottom-color .18s ease;
+}
+.markdown-preview-view .internal-link:hover {
+  color:               rgba(165,205,255,1) !important;
+  border-bottom-color: rgba(100,140,255,.88);
+}
+.markdown-preview-view .internal-link.is-unresolved {
+  color:        rgba(148,163,184,.60) !important;
+  border-bottom: 1px dotted rgba(148,163,184,.28);
+}
+
+/* Frontmatter block */
+.markdown-preview-view .frontmatter-container {
+  border-left:   3px solid rgba(255,200,50,.55) !important;
+  padding:       10px 15px !important;
+  margin-bottom: 26px !important;
+  border-radius: 0 6px 6px 0;
+  background:    rgba(255,200,50,.04) !important;
+  font-size:     .84em;
+  font-family:   var(--bpa-font-mono);
+}
+
+
+/* ────────────────────────────────────────────────────────────────
+   §12  UI — GLASSMORPHISM MENUS · SIDEBAR · COMMAND PALETTE
+   ──────────────────────────────────────────────────────────────── */
+
+.menu,
+.dropdown,
+.suggestion-container,
+.popover,
+.modal,
+.context-menu,
+.prompt {
+  backdrop-filter:  blur(16px) saturate(165%) !important;
+  background-color: rgba(14,16,28,.62) !important;
+  border:           1px solid rgba(100,140,255,.16) !important;
+  border-radius:    10px !important;
+  box-shadow:
+    0 10px 36px rgba(0,0,0,.45),
+    0  0   0 1px rgba(100,140,255,.08) !important;
+  animation: bpa-menu-appear .22s cubic-bezier(.23,1,.32,1) !important;
+}
+
+.menu-item,
+.suggestion-item {
+  background-color: transparent !important;
+  border-radius:    6px !important;
+  margin:           2px 5px !important;
+  transition:       background .14s ease, transform .14s ease !important;
+}
+.menu-item:hover,
+.suggestion-item:hover {
+  background-color: rgba(100,140,255,.13) !important;
+  transform:        translateX(4px) !important;
+}
+
+.is-selected,
+.suggestion-item.is-selected {
+  background-color: rgba(100,140,255,.22) !important;
+  border-left:      3px solid rgba(100,140,255,.88) !important;
+}
+
+.prompt {
+  backdrop-filter:  blur(22px) saturate(180%) !important;
+  background-color: rgba(12,14,26,.72) !important;
+  border-color:     rgba(100,140,255,.22) !important;
+}
+
+/* Light theme overrides */
+.theme-light .menu,
+.theme-light .suggestion-container,
+.theme-light .prompt {
+  background-color: rgba(245,247,255,.82) !important;
+  border-color:     rgba(100,140,255,.22) !important;
+  box-shadow:
+    0 8px 28px rgba(0,0,80,.12),
+    0 0 0 1px rgba(100,140,255,.10) !important;
+}
+.theme-light .menu-item:hover,
+.theme-light .suggestion-item:hover {
+  background-color: rgba(100,140,255,.10) !important;
+}
+
+
+/* ────────────────────────────────────────────────────────────────
+   §13  WORKSPACE BACKGROUND
+   ──────────────────────────────────────────────────────────────── */
+
+/* Dark — deep blue-indigo gradient */
+.theme-dark .horizontal-main-container {
+  background:
+    radial-gradient(ellipse at 20% 50%, rgba(30,20,80,.55) 0%, transparent 60%),
+    radial-gradient(ellipse at 80% 20%, rgba(10,40,80,.45) 0%, transparent 55%),
+    linear-gradient(135deg, #080b18 0%, #0d1225 50%, #0a1020 100%);
+  background-size: cover;
+}
+
+/* Light — soft off-white */
+.theme-light .horizontal-main-container {
+  background: linear-gradient(135deg, #f0f4ff 0%, #f8f9ff 100%);
+}
+
+/* Content pane stays opaque */
+.workspace-split.mod-root { background-color: var(--background-primary); }
+
+body { --divider-width: 0px; }
