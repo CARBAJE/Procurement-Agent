@@ -967,9 +967,9 @@ Usuario escribe → [NL Intent Parser] → BecknIntent JSON
 | **1.6 Data Models** (PostgreSQL schema — requests, offers, orders, audit) | **Emi**     | El schema define las entidades del sistema. P1 ya conoce los flujos Beckn y qué campos produce cada endpoint.                  |
 
 **Dependencias Fase 1:**
-- P2 (1.4) depende de que el `BecknIntent` JSON ya exista (1.3 ✅) para conectar el parser al grafo del agente.
-- P1 (1.2) y P3 (1.5) son completamente paralelos entre sí.
-- P1 (1.6) puede hacerse en paralelo con (1.2) usando los objetos que definen los flows.
+- Cris (1.4) depende de que el `BecknIntent` JSON ya exista (1.3 de Emi ✅) para conectar el parser al grafo del agente.
+- Lalo (1.2) y Cris (1.5) son completamente paralelos entre sí.
+- Emi (1.6) puede hacerse en paralelo con (1.2 Lalo) usando los objetos que definen los flows.
 
 ---
 
