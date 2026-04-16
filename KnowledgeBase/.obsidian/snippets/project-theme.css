@@ -53,9 +53,78 @@
 
 
 /* ────────────────────────────────────────────────────────────────
+   §0.5  OBSIDIAN THEME VARIABLE OVERRIDES
+   Obsidian pinta sidebar, settings, tabs y fondo via CSS vars.
+   Atacar elementos directamente (§13) no es suficiente — hay que
+   redefinir las variables en body.theme-dark / body.theme-light.
+   ──────────────────────────────────────────────────────────────── */
+
+body.theme-dark {
+  /* Dot-grid canvas — visible through glass panels */
+  background-color:  #04060e;
+  background-image:  radial-gradient(circle, rgba(100,140,255,.055) 1px, transparent 1px);
+  background-size:   26px 26px;
+
+  /* Semi-transparent panel backgrounds — required so backdrop-filter sees the canvas */
+  --background-primary:                   rgba(5,8,20,.82);
+  --background-primary-alt:               rgba(7,10,26,.86);
+  --background-secondary:                 rgba(3,5,14,.66);
+  --background-secondary-alt:             rgba(2,4,12,.70);
+  --background-modifier-border:           rgba(100,140,255,.16);
+  --background-modifier-border-hover:     rgba(100,140,255,.26);
+  --background-modifier-hover:            rgba(100,140,255,.09);
+  --background-modifier-active-hover:     rgba(100,140,255,.16);
+  --background-modifier-form-field:       rgba(5,8,20,.75);
+  --background-modifier-form-field-highlighted: rgba(8,12,28,.92);
+  --background-modifier-box-shadow:       rgba(0,0,40,.58);
+  --background-modifier-cover:            rgba(2,4,14,.90);
+  --background-modifier-success:          rgba(80,200,120,.12);
+  --background-modifier-error:            rgba(239,68,68,.12);
+  --interactive-normal:                   rgba(100,140,255,.10);
+  --interactive-hover:                    rgba(100,140,255,.17);
+  --interactive-accent:                   rgb(100,140,255);
+  --interactive-accent-hover:             rgb(130,165,255);
+  --interactive-accent-rgb:               100,140,255;
+  --text-normal:                          rgba(220,228,248,.92);
+  --text-muted:                           rgba(148,163,210,.68);
+  --text-faint:                           rgba(100,120,175,.50);
+  --text-on-accent:                       rgba(6,8,20,1);
+  --nav-item-color:                       rgba(185,200,240,.80);
+  --nav-item-color-hover:                 rgba(220,228,248,1);
+  --nav-item-background-hover:            rgba(100,140,255,.09);
+  --nav-item-background-active:           rgba(100,140,255,.16);
+  --tab-background-active:                rgba(8,12,28,.88);
+  --tab-text-color-active:                rgba(220,228,248,.92);
+  --titlebar-background:                  rgba(3,4,12,.88);
+  --titlebar-background-focused:          rgba(5,7,18,.92);
+  --modal-background:                     rgba(5,8,20,.88);
+  --divider-color:                        rgba(100,140,255,.12);
+  --scrollbar-thumb-bg:                   rgba(100,140,255,.22);
+  --scrollbar-active-thumb-bg:            rgba(100,140,255,.38);
+  --ribbon-background:                    rgba(3,4,12,.80);
+  --ribbon-background-collapsed:          rgba(3,4,12,.80);
+}
+
+body.theme-light {
+  --background-primary:       #f2f5ff;
+  --background-primary-alt:   #eaedff;
+  --background-secondary:     #e4e9ff;
+  --background-secondary-alt: #dce3ff;
+  --interactive-accent:       rgb(80,110,220);
+  --interactive-accent-hover: rgb(100,130,240);
+}
+
+
+/* ────────────────────────────────────────────────────────────────
    §1  KEYFRAME ANIMATIONS
    ──────────────────────────────────────────────────────────────── */
 
+@keyframes bpa-nebula-drift {
+  0%   { opacity: .88; transform: scale(1.00) translate(  0%,    0%); }
+  30%  { opacity: 1.00; transform: scale(1.04) translate(-1.4%,  .8%); }
+  65%  { opacity: .93; transform: scale(.97)  translate(  .9%, -1.2%); }
+  100% { opacity: .88; transform: scale(1.01) translate(  .3%,  .5%); }
+}
 @keyframes bpa-arch-glow {
   0%,100% { box-shadow: 0 0 5px rgba(100,140,255,.18), inset 0 0 6px rgba(100,140,255,.04); }
   50%     { box-shadow: 0 0 24px rgba(100,140,255,.60), inset 0 0 22px rgba(100,140,255,.10); }
@@ -125,11 +194,25 @@
    ──────────────────────────────────────────────────────────────── */
 
 .callout {
-  border-radius: 8px;
-  margin: 1.3em 0;
+  border-radius:     10px;
+  margin:            1.4em 0;
   border-left-width: 4px;
   border-left-style: solid;
-  text-align: justify;
+  border-top:        1px solid rgba(255,255,255,.07);
+  border-right:      1px solid rgba(255,255,255,.04);
+  border-bottom:     1px solid rgba(255,255,255,.03);
+  text-align:        justify;
+  backdrop-filter:   blur(10px) saturate(145%);
+  box-shadow:
+    0 4px 28px rgba(0,0,0,.25),
+    inset 0 1px 0 rgba(255,255,255,.06);
+  transition:        box-shadow .28s ease, transform .28s ease;
+}
+.callout:hover {
+  box-shadow:
+    0 8px 36px rgba(0,0,0,.32),
+    inset 0 1px 0 rgba(255,255,255,.09);
+  transform: translateY(-1px);
 }
 .callout .callout-icon svg { display: none !important; }
 .callout .callout-title {
@@ -695,59 +778,116 @@ a.tag[href*="#anti-corruption"]   { background: rgba(255,120,50,.14);  color: rg
 
 
 /* ────────────────────────────────────────────────────────────────
-   §12  UI — GLASSMORPHISM MENUS · SIDEBAR · COMMAND PALETTE
+   §12  UI — GLASSMORPHISM PANELS · MENUS · SIDEBAR · TABS
    ──────────────────────────────────────────────────────────────── */
 
+/* === Workspace leaf panels — primary glass surfaces === */
+.theme-dark .workspace-leaf-content {
+  backdrop-filter:  blur(20px) saturate(160%) brightness(.94) !important;
+  background:       rgba(5,8,20,.76) !important;
+  border-right:     1px solid rgba(100,140,255,.08);
+  box-shadow:       inset 0 1px 0 rgba(255,255,255,.04);
+}
+
+/* === Sidebar — slightly more transparent === */
+.theme-dark .workspace-split.mod-left-split  .workspace-leaf-content,
+.theme-dark .workspace-split.mod-right-split .workspace-leaf-content {
+  backdrop-filter:  blur(16px) saturate(150%) brightness(.92) !important;
+  background:       rgba(3,5,14,.68) !important;
+}
+.theme-dark .nav-folder-children,
+.theme-dark .tree-item-children {
+  background: transparent !important;
+}
+
+/* === Tab header bar === */
+.theme-dark .workspace-tab-header-container {
+  backdrop-filter:  blur(18px) saturate(155%) !important;
+  background:       rgba(3,5,14,.74) !important;
+  border-bottom:    1px solid rgba(100,140,255,.13);
+}
+.theme-dark .workspace-tab-header {
+  background:       rgba(5,8,20,.50) !important;
+  border-radius:    7px 7px 0 0;
+  border:           1px solid rgba(100,140,255,.08);
+  border-bottom:    none;
+  margin-right:     2px;
+  transition:       background .18s ease, box-shadow .18s ease;
+}
+.theme-dark .workspace-tab-header.is-active {
+  background:       rgba(8,14,32,.88) !important;
+  border-color:     rgba(100,140,255,.22);
+  box-shadow:       0 -2px 12px rgba(100,140,255,.12), inset 0 1px 0 rgba(100,140,255,.16);
+}
+
+/* === Menus · dropdowns · modals · command palette === */
 .menu,
 .dropdown,
 .suggestion-container,
 .popover,
-.modal,
-.context-menu,
-.prompt {
-  backdrop-filter:  blur(16px) saturate(165%) !important;
-  background-color: rgba(14,16,28,.62) !important;
-  border:           1px solid rgba(100,140,255,.16) !important;
-  border-radius:    10px !important;
+.context-menu {
+  backdrop-filter:  blur(24px) saturate(185%) brightness(.88) !important;
+  background-color: rgba(5,8,22,.72) !important;
+  border:           1px solid rgba(100,140,255,.18) !important;
+  border-radius:    12px !important;
   box-shadow:
-    0 10px 36px rgba(0,0,0,.45),
-    0  0   0 1px rgba(100,140,255,.08) !important;
+    0 16px 48px rgba(0,0,0,.55),
+    0  0   0 1px rgba(100,140,255,.10),
+    inset 0 1px 0 rgba(255,255,255,.05) !important;
   animation: bpa-menu-appear .22s cubic-bezier(.23,1,.32,1) !important;
+}
+
+.modal {
+  backdrop-filter:  blur(30px) saturate(190%) brightness(.86) !important;
+  background-color: rgba(4,7,18,.82) !important;
+  border:           1px solid rgba(100,140,255,.20) !important;
+  border-radius:    14px !important;
+  box-shadow:
+    0 24px 72px rgba(0,0,0,.65),
+    0  0   0 1px rgba(100,140,255,.12),
+    inset 0 1px 0 rgba(255,255,255,.06) !important;
+}
+
+.prompt {
+  backdrop-filter:  blur(32px) saturate(200%) brightness(.85) !important;
+  background-color: rgba(4,6,18,.82) !important;
+  border-color:     rgba(100,140,255,.24) !important;
+  border-radius:    14px !important;
+  box-shadow:
+    0 28px 72px rgba(0,0,0,.68),
+    0  0   0 1px rgba(100,140,255,.15),
+    inset 0 1px 0 rgba(255,255,255,.07) !important;
 }
 
 .menu-item,
 .suggestion-item {
   background-color: transparent !important;
-  border-radius:    6px !important;
+  border-radius:    7px !important;
   margin:           2px 5px !important;
   transition:       background .14s ease, transform .14s ease !important;
 }
 .menu-item:hover,
 .suggestion-item:hover {
-  background-color: rgba(100,140,255,.13) !important;
+  background-color: rgba(100,140,255,.14) !important;
   transform:        translateX(4px) !important;
+  box-shadow:       inset 0 1px 0 rgba(255,255,255,.05) !important;
 }
 
 .is-selected,
 .suggestion-item.is-selected {
   background-color: rgba(100,140,255,.22) !important;
   border-left:      3px solid rgba(100,140,255,.88) !important;
-}
-
-.prompt {
-  backdrop-filter:  blur(22px) saturate(180%) !important;
-  background-color: rgba(12,14,26,.72) !important;
-  border-color:     rgba(100,140,255,.22) !important;
+  box-shadow:       inset 0 1px 0 rgba(100,140,255,.15) !important;
 }
 
 /* Light theme overrides */
 .theme-light .menu,
 .theme-light .suggestion-container,
 .theme-light .prompt {
-  background-color: rgba(245,247,255,.82) !important;
+  background-color: rgba(245,247,255,.80) !important;
   border-color:     rgba(100,140,255,.22) !important;
   box-shadow:
-    0 8px 28px rgba(0,0,80,.12),
+    0 12px 36px rgba(0,0,80,.15),
     0 0 0 1px rgba(100,140,255,.10) !important;
 }
 .theme-light .menu-item:hover,
@@ -757,24 +897,99 @@ a.tag[href*="#anti-corruption"]   { background: rgba(255,120,50,.14);  color: rg
 
 
 /* ────────────────────────────────────────────────────────────────
-   §13  WORKSPACE BACKGROUND
+   §13  WORKSPACE BACKGROUND — nebula canvas · dot grid
    ──────────────────────────────────────────────────────────────── */
 
-/* Dark — deep blue-indigo gradient */
+/* Dark — nebula gradient on the main container (canvas for glass panels) */
 .theme-dark .horizontal-main-container {
+  position: relative;
+  overflow: hidden;
   background:
-    radial-gradient(ellipse at 20% 50%, rgba(30,20,80,.55) 0%, transparent 60%),
-    radial-gradient(ellipse at 80% 20%, rgba(10,40,80,.45) 0%, transparent 55%),
-    linear-gradient(135deg, #080b18 0%, #0d1225 50%, #0a1020 100%);
-  background-size: cover;
+    radial-gradient(ellipse 58% 52% at 14% 68%, rgba( 80, 50,220,.38) 0%, transparent 70%),
+    radial-gradient(ellipse 52% 46% at 83% 16%, rgba(  0,145,215,.30) 0%, transparent 65%),
+    radial-gradient(ellipse 44% 40% at 52% 90%, rgba( 55, 20,160,.24) 0%, transparent 62%),
+    radial-gradient(ellipse 32% 30% at 68% 42%, rgba( 20,175,166,.14) 0%, transparent 56%),
+    linear-gradient(155deg, #04060e 0%, #07091a 45%, #050a10 100%);
+  background-attachment: fixed;
 }
 
-/* Light — soft off-white */
+/* Animated secondary nebula layer — slow drift */
+.theme-dark .horizontal-main-container::before {
+  content: '';
+  position: absolute;
+  inset: -10%;          /* overshoot so transform edges don't clip */
+  pointer-events: none;
+  z-index: 0;
+  animation: bpa-nebula-drift 30s ease-in-out infinite alternate;
+  background:
+    radial-gradient(ellipse 48% 42% at 28% 22%, rgba(100, 60,255,.18) 0%, transparent 65%),
+    radial-gradient(ellipse 38% 34% at 74% 78%, rgba(  0,200,220,.14) 0%, transparent 60%),
+    radial-gradient(ellipse 30% 26% at 90% 48%, rgba(168, 85,247,.11) 0%, transparent 55%);
+}
+
+/* Light — soft gradient */
 .theme-light .horizontal-main-container {
-  background: linear-gradient(135deg, #f0f4ff 0%, #f8f9ff 100%);
+  background: linear-gradient(148deg, #edf0ff 0%, #f5f7ff 55%, #eef2ff 100%);
 }
 
-/* Content pane stays opaque */
-.workspace-split.mod-root { background-color: var(--background-primary); }
+/* Content root: transparent so nebula shows through glass panels */
+.theme-dark .workspace-split.mod-root {
+  background: transparent;
+  position:   relative;
+  z-index:    1;
+}
+
+/* Ribbon */
+.theme-dark .workspace-ribbon { background: var(--ribbon-background); }
 
 body { --divider-width: 0px; }
+
+
+/* ────────────────────────────────────────────────────────────────
+   §14  CALLOUT BACKGROUND ENFORCEMENT — todos los modos de vista
+   En Live Preview, Obsidian aplica sus propios backgrounds con
+   mayor especificidad. Este bloque los fuerza con !important para
+   que funcionen tanto en Reading como en Editing (Live Preview).
+   Los borders también se refuerzan aquí.
+   ──────────────────────────────────────────────────────────────── */
+
+/* Custom callouts — glass tint (backdrop-filter in §2 base picks up nebula behind it) */
+.callout[data-callout="theory"]
+  { background-color: rgba(139, 92,246,.09) !important; border-left-color: rgba(139, 92,246,.88) !important; }
+.callout[data-callout="architecture"]
+  { background-color: rgba(100,140,255,.09) !important; border-left-color: rgba(100,140,255,.92) !important; }
+.callout[data-callout="milestone"]
+  { background-color: rgba( 80,200,120,.08) !important; border-left-color: rgba( 80,200,120,.92) !important; }
+.callout[data-callout="tech-stack"]
+  { background-color: rgba(  0,200,220,.08) !important; border-left-color: rgba(  0,200,220,.92) !important; }
+.callout[data-callout="guardrail"]
+  { background-color: rgba(255, 90, 30,.09) !important; border-left-color: rgba(255,120, 50,.92) !important; }
+.callout[data-callout="insight"]
+  { background-color: rgba(255,200, 50,.08) !important; border-left-color: rgba(255,200, 50,.92) !important; }
+.callout[data-callout="beckn"]
+  { background-color: rgba( 20,184,166,.08) !important; border-left-color: rgba( 20,184,166,.88) !important; }
+.callout[data-callout="routing"]
+  { background-color: rgba(236, 72,153,.08) !important; border-left-color: rgba(236, 72,153,.88) !important; }
+.callout[data-callout="validator"]
+  { background-color: rgba( 16,185,129,.08) !important; border-left-color: rgba( 16,185,129,.88) !important; }
+.callout[data-callout="pipeline"]
+  { background-color: rgba( 14,165,233,.08) !important; border-left-color: rgba( 14,165,233,.88) !important; }
+.callout[data-callout="integration"]
+  { background-color: rgba(168, 85,247,.09) !important; border-left-color: rgba(168, 85,247,.88) !important; }
+.callout[data-callout="user-story"]
+  { background-color: rgba(251,146, 60,.08) !important; border-left-color: rgba(251,146, 60,.88) !important; }
+
+/* Built-in callout overrides */
+.callout[data-callout="abstract"],
+.callout[data-callout="summary"],
+.callout[data-callout="tldr"]
+  { background-color: rgba(148,163,184,.07) !important; border-left-color: rgba(148,163,184,.80) !important; }
+.callout[data-callout="warning"]
+  { background-color: rgba(245,158, 11,.08) !important; border-left-color: rgba(245,158, 11,.88) !important; }
+.callout[data-callout="info"]
+  { background-color: rgba(  0,200,220,.08) !important; border-left-color: rgba(  0,200,220,.75) !important; }
+.callout[data-callout="important"]
+  { background-color: rgba(239, 68, 68,.09) !important; border-left-color: rgba(239, 68, 68,.92) !important; }
+.callout[data-callout="tip"],
+.callout[data-callout="hint"]
+  { background-color: rgba( 80,200,120,.08) !important; border-left-color: rgba( 80,200,120,.78) !important; }
