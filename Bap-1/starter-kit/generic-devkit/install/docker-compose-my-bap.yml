@@ -1,0 +1,91 @@
+services:
+  # ============================================================
+  # Redis — shared cache for both adapters
+  # ============================================================
+  redis:
+    image: redis:alpine
+    container_name: redis
+    ports:
+      - "6379:6379"
+    networks:
+      - beckn_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # ============================================================
+  # onix-bap — BAP adapter
+  #   Caller  (outbound): http://localhost:8081/bap/caller/
+  #   Receiver (inbound): http://localhost:8081/bap/receiver/
+  #   → forwards on_* to host:8000/bap/receiver via BAPReceiver.yaml
+  # ============================================================
+  onix-bap:
+    image: fidedocker/onix-adapter
+    container_name: onix-bap
+    platform: linux/amd64
+    networks:
+      - beckn_network
+    ports:
+      - "8081:8081"
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      REDIS_ADDR: redis:6379
+    volumes:
+      - ../config:/app/config
+    command: ["./server", "--config=/app/config/generic-bap.yaml"]
+
+  # ============================================================
+  # onix-bpp — BPP adapter
+  #   Caller  (outbound): http://localhost:8082/bpp/caller/
+  #   Receiver (inbound): http://localhost:8082/bpp/receiver/
+  # ============================================================
+  onix-bpp:
+    image: fidedocker/onix-adapter
+    container_name: onix-bpp
+    platform: linux/amd64
+    networks:
+      - beckn_network
+    ports:
+      - "8082:8082"
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      REDIS_ADDR: redis:6379
+    volumes:
+      - ../config:/app/config
+    command: ["./server", "--config=/app/config/generic-bpp.yaml"]
+
+  # ============================================================
+  # sandbox-bpp — mock BPP application
+  #   Receives action requests at: http://sandbox-bpp:3002/api/webhook
+  #   sandbox-bap is intentionally absent — replaced by the Python BAP
+  #   running on the host at port 8000.
+  # ============================================================
+  sandbox-bpp:
+    container_name: sandbox-bpp
+    image: fidedocker/sandbox-2.0:latest
+    environment:
+      - NODE_ENV=production
+      - PORT=3002
+    ports:
+      - "3002:3002"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3002/api/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    networks:
+      - beckn_network
+
+networks:
+  beckn_network:
+    name: beckn_network
+    driver: bridge

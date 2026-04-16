@@ -1,0 +1,22 @@
+# BAP Receiver Routing — inbound on_* callbacks from BPPs to the Python BAP
+#
+# All on_* callbacks are forwarded to the Python BAP server running on the host.
+# host.docker.internal resolves to the host machine from inside Docker containers.
+
+routingRules:
+  - domain: "beckn.one/testnet"
+    version: "2.0.0"
+    targetType: "url"
+    target:
+      url: "http://host.docker.internal:8000/bap/receiver"
+    endpoints:
+      - on_discover
+      - on_select
+      - on_init
+      - on_confirm
+      - on_status
+      - on_track
+      - on_update
+      - on_cancel
+      - on_rate
+      - on_support
