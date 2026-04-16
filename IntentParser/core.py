@@ -23,8 +23,9 @@ _client = instructor.from_openai(
 
 _INTENT_PROMPT = """
 You are an intent classifier for a Beckn-based procurement system.
-Classify the user query into a PascalCase intent (e.g. SearchProduct, RequestQuote, TrackOrder, CancelOrder).
-Domain: users search for industrial products, request quotes (RFQ), and manage orders on a decentralized Beckn network.
+Classify the user query into a PascalCase intent.
+Procurement intents: SearchProduct, RequestQuote, PurchaseOrder, TrackOrder, CancelOrder.
+If the query is a greeting, general question, or unrelated to procurement, return GeneralInquiry.
 """.strip()
 
 _BECKN_PROMPT = """
@@ -83,8 +84,11 @@ def parse_request(query: str) -> ParseResult:
     intent = _chat(COMPLEX_MODEL, _INTENT_PROMPT, query, ParsedIntent)
     if intent.intent not in _PROCUREMENT_INTENTS:
         return ParseResult(intent=intent.intent, confidence=intent.confidence)
-    beckn, model = _parse_beckn(query)
-    return ParseResult(intent=intent.intent, confidence=intent.confidence, beckn_intent=beckn, routed_to=model)
+    try:
+        beckn, model = _parse_beckn(query)
+        return ParseResult(intent=intent.intent, confidence=intent.confidence, beckn_intent=beckn, routed_to=model)
+    except Exception:
+        return ParseResult(intent=intent.intent, confidence=intent.confidence)
 
 
 def parse_batch(queries: list[str], max_workers: int = 4) -> list[ParseResult]:

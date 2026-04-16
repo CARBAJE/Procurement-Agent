@@ -51,6 +51,20 @@ Override defaults via environment variables:
 | `COMPLEX_MODEL` | `qwen3:8b` | Model for complex queries |
 | `SIMPLE_MODEL` | `qwen3:1.7b` | Model for simple queries |
 
+## Testing
+
+Requires Ollama running with the configured models (see Setup).
+
+| Command | Description |
+|---------|-------------|
+| `python -m pytest IntentParser/tests/test_milestone.py -v` | Run milestone suite (18 tests, output captured) |
+| `python -m pytest IntentParser/tests/test_milestone.py -v -s` | Same but prints each `ParseResult` JSON live |
+| `python -m pytest IntentParser/tests/test_milestone.py -v -s 2>&1 \| tee IntentParser/tests/results.txt` | Live output + save to file |
+
+The milestone suite validates:
+- 16 diverse procurement queries → valid `BecknIntent` (item, quantity, timeline, budget, descriptions)
+- 2 non-procurement queries (greetings) → no `BecknIntent`
+
 ## Module layout
 
 ```

@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "project_scaffold/ai_models/heuristic_routing_theory/complexity_routing_theory.md",
+                "file": "project_scaffold/milestones/phase1_foundation_protocol_integration.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "complexity_routing_theory"
+              "title": "phase1_foundation_protocol_integration"
             }
           }
         ]
@@ -182,11 +182,12 @@
   },
   "active": "45b3d14b86f4e272",
   "lastOpenFiles": [
+    "project_scaffold/ai_models/comparison_scoring_model.md",
+    "project_scaffold/ai_models/heuristic_routing_theory/complexity_routing_theory.md",
     "project_scaffold/ai_models/intent_parsing_classification_notebook.md",
     "project_scaffold/integrations/beckn_data_theory/protocol_data_model_theory.md",
     "project_scaffold/integrations/beckn_data_theory/protocol_data_model_theory.md.tmp.248120.1776090467397",
     "project_scaffold/integrations/beckn_data_theory",
-    "project_scaffold/ai_models/heuristic_routing_theory/complexity_routing_theory.md",
     "project_scaffold/ai_models/heuristic_routing_theory/complexity_routing_theory.md.tmp.248120.1776090371607",
     "project_scaffold/ai_models/heuristic_routing_theory",
     "project_scaffold/technologies/schema_driven_extraction/constrained_generation_theory.md",
@@ -199,7 +200,6 @@
     "project_scaffold/milestones/phase3_advanced_intelligence_enterprise_features.md",
     "project_scaffold/milestones/phase2_core_intelligence_transaction_flow.md",
     "project_scaffold/user_stories/story2_high_value_it_equipment.md",
-    "project_scaffold/ai_models/comparison_scoring_model.md",
     "Procurement_Agent_Beckn_Protocol.md",
     "project_scaffold/ai_models/negotiation_strategy_model.md.tmp.30174.1776064093750",
     "project_scaffold/ai_models/comparison_scoring_model.md.tmp.30174.1776064076463",
