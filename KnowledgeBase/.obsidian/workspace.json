@@ -198,6 +198,8 @@
   },
   "active": "a67c35dc2c48b379",
   "lastOpenFiles": [
+    "project_scaffold/ai_models/comparison_scoring_model.md",
+    "project_scaffold/ai_models/heuristic_routing_theory/complexity_routing_theory.md",
     "project_scaffold/ai_models/intent_parsing_classification_notebook.md",
     "project_scaffold/infrastructure/observability_monitoring.md",
     "project_scaffold/infrastructure/kubernetes_deployment.md",
@@ -224,7 +226,6 @@
     "project_scaffold/milestones/phase3_advanced_intelligence_enterprise_features.md",
     "project_scaffold/milestones/phase2_core_intelligence_transaction_flow.md",
     "project_scaffold/user_stories/story2_high_value_it_equipment.md",
-    "project_scaffold/ai_models/comparison_scoring_model.md",
     "Procurement_Agent_Beckn_Protocol.md",
     "project_scaffold/ai_models/negotiation_strategy_model.md.tmp.30174.1776064093750",
     "project_scaffold/ai_models/comparison_scoring_model.md.tmp.30174.1776064076463",
