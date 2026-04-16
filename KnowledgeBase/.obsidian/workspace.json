@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "project_scaffold/infrastructure/cloud_providers.md",
+                "file": "project_scaffold/ai_models/intent_parsing_model.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "cloud_providers"
+              "title": "intent_parsing_model"
             }
           }
         ]
@@ -110,7 +110,7 @@
             "state": {
               "type": "backlink",
               "state": {
-                "file": "project_scaffold/infrastructure/cloud_providers.md",
+                "file": "project_scaffold/ai_models/intent_parsing_model.md",
                 "collapseAll": false,
                 "extraContext": false,
                 "sortOrder": "alphabetical",
@@ -120,7 +120,7 @@
                 "unlinkedCollapsed": true
               },
               "icon": "links-coming-in",
-              "title": "Backlinks for cloud_providers"
+              "title": "Backlinks for intent_parsing_model"
             }
           },
           {
@@ -198,11 +198,17 @@
   },
   "active": "a67c35dc2c48b379",
   "lastOpenFiles": [
-    "project_scaffold/technologies/api_gateway.md",
-    "project_scaffold/infrastructure/cloud_providers.md",
-    "project_scaffold/infrastructure/postgresql_local_setup.md",
-    "project_scaffold/ai_models/heuristic_routing_theory/complexity_routing_theory.md",
     "project_scaffold/ai_models/intent_parsing_classification_notebook.md",
+    "project_scaffold/infrastructure/observability_monitoring.md",
+    "project_scaffold/infrastructure/kubernetes_deployment.md",
+    "project_scaffold/infrastructure/data_pipeline_architecture.md",
+    "project_scaffold/infrastructure/cloud_providers.md",
+    "project_scaffold/components/beckn_bap_client.md",
+    "project_scaffold/infrastructure/postgresql_local_setup.md",
+    "project_scaffold/technologies/databases_postgresql_redis.md",
+    "project_scaffold/components/agent_memory_learning.md",
+    "project_scaffold/technologies/api_gateway.md",
+    "project_scaffold/ai_models/heuristic_routing_theory/complexity_routing_theory.md",
     "project_scaffold/integrations/beckn_data_theory/protocol_data_model_theory.md",
     "project_scaffold/integrations/beckn_data_theory/protocol_data_model_theory.md.tmp.248120.1776090467397",
     "project_scaffold/integrations/beckn_data_theory",
