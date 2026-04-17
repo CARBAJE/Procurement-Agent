@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "milestones/phase1_foundation_protocol_integration.md",
+                "file": "components/agent_react_framework.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "phase1_foundation_protocol_integration"
+              "title": "agent_react_framework"
             }
           },
           {
@@ -199,25 +199,25 @@
   },
   "active": "a09ea921d0d00df7",
   "lastOpenFiles": [
+    "components/beckn_bap_client.md",
+    "technologies/beckn_client.md",
+    "components/nl_intent_parser.md",
+    "milestones/phase1_foundation_protocol_integration.md",
     "components/agent_react_framework.md",
     "infrastructure/postgresql_local_setup.md",
     "system_architecture_diagram.md",
-    "components/nl_intent_parser.md",
     "components/negotiation_engine.md",
     "components/erp_integration.md",
     "components/comparison_scoring_engine.md",
-    "components/beckn_bap_client.md",
     "components/audit_trail_system.md",
     "components/approval_workflow.md",
     "components/analytics_dashboard.md",
-    "milestones/phase1_foundation_protocol_integration.md",
     "components/agent_memory_learning.md",
     "technologies/frontend_react_nextjs.md",
     "system_architecture_diagram_en.md",
     "Captura de pantalla 2026-04-14 a la(s) 4.16.56 p.m..png",
     "infrastructure/data_pipeline_architecture.md",
     "technologies/event_streaming_kafka.md",
-    "technologies/beckn_client.md",
     "README.md",
     "deep-research-report.md",
     "ai_models/heuristic_routing_theory/complexity_routing_theory.md"
