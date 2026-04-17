@@ -37,21 +37,7 @@ logging.basicConfig(
 logging.getLogger("aiohttp").setLevel(logging.WARNING)
 logging.getLogger("aiohttp.access").setLevel(logging.WARNING)
 
-
-# ── Procurement intent (edit this) ────────────────────────────────────────────
-
-INTENT = BecknIntent(
-    item="A4 paper 80gsm",
-    descriptions=["A4", "80gsm"],
-    quantity=500,
-    location_coordinates="12.9716,77.5946",
-    delivery_timeline=72,                        # 3 days in hours
-    budget_constraints=BudgetConstraints(max=200.0),
-)
-
-
 # ── Server startup ────────────────────────────────────────────────────────────
-
 
 async def start_server(port: int = 8000) -> web.AppRunner:
     app = create_app()
@@ -91,7 +77,7 @@ async def main() -> None:
         if nl_query:
             result = await agent.arun(nl_query)
         else:
-            result = await agent.arun_with_intent(INTENT)
+            sys.exit("No NL query provided. Please run with a query argument, e.g.:\n  python run.py \"500 reams A4 paper Bangalore\"")
 
         print("  Reasoning trace:")
         for msg in result["messages"]:
