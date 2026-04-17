@@ -11,7 +11,7 @@ from .schemas import BecknIntent, ParsedIntent, ParseResult
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-COMPLEX_MODEL = os.getenv("COMPLEX_MODEL", "qwen3:8b")
+COMPLEX_MODEL = os.getenv("COMPLEX_MODEL", "qwen3:1.7b")
 SIMPLE_MODEL  = os.getenv("SIMPLE_MODEL",  "qwen3:1.7b")
 
 _client = instructor.from_openai(

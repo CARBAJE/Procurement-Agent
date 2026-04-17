@@ -1,61 +1,277 @@
 ---
-tags: [component, ai, nlp, intent-parsing, structured-output, gpt4o, json-schema, beckn]
+tags: [component, ai, nlp, intent-parsing, structured-output, ollama, instructor, qwen3, two-stage, beckn]
 cssclasses: [procurement-doc, component-doc]
-status: "#processed"
-related: ["[[llm_providers]]", "[[beckn_bap_client]]", "[[agent_framework_langchain_langgraph]]", "[[phase1_foundation_protocol_integration]]", "[[intent_parsing_model]]", "[[story1_routine_office_supply]]", "[[story3_emergency_procurement]]"]
+status: "#implemented"
+related: ["[[llm_providers]]", "[[beckn_bap_client]]", "[[phase1_foundation_protocol_integration]]", "[[intent_parsing_model]]", "[[story1_routine_office_supply]]", "[[story3_emergency_procurement]]"]
 ---
 
 # Component: Natural Language Intent Parser
 
 > [!architecture] Role in the System
-> The NL Intent Parser is the **entry gate** of the procurement pipeline. Every user request — typed into the [[frontend_react_nextjs|dashboard]] or sent via [[communication_slack_teams|Slack]] — passes through this component before anything else happens. It converts free-form natural language into a structured JSON object that maps directly to Beckn v2 `discover` query parameters. A bad parse here cascades into bad search results; hence it is the highest-priority component in [[phase1_foundation_protocol_integration|Phase 1]].
+> The NL Intent Parser is the **entry gate** of the procurement pipeline. It converts a free-form natural language request into a `BecknIntent` — the structured, machine-processable object that the [[beckn_bap_client|BAP client]] uses to query the Beckn network. The parser lives in the standalone `IntentParser/` module, connected to `Bap-1` through a thin facade (`src/nlp/intent_parser_facade.py`). Both subsystems share `shared/models.py` as the **Anti-Corruption Layer** that defines the canonical intent schema.
+
+---
+
+## Module Locations
+
+| Module | Path | Responsibility |
+|---|---|---|
+| NLP core | `IntentParser/core.py` | Two-stage pipeline, heuristic routing, Ollama calls |
+| Schemas | `IntentParser/schemas.py` | `ParsedIntent`, `ParseResult`, city→coordinates lookup |
+| Public API | `IntentParser/__init__.py` | Exports `parse_request`, `parse_batch` |
+| Shared ACL | `shared/models.py` | `BecknIntent`, `BudgetConstraints` — shared by both modules |
+| BAP facade | `Bap-1/src/nlp/intent_parser_facade.py` | Wraps `parse_request()`, returns `BecknIntent \| None` |
+| Entry point | `Bap-1/run.py` | Wires CLI arg → facade → `BecknClient.discover_async()` |
+
+---
+
+## End-to-End Flow
+
+```mermaid
+flowchart TD
+    A["User NL Query\ne.g. '500 resmas papel A4 80GSM\nBangalore 3 dias max 200 INR'"]
+    B["run.py — sys.argv[1]"]
+    C["intent_parser_facade.py\nparse_nl_to_intent(query)"]
+    D["IntentParser/core.py\nparse_request(query)"]
+    E["Stage 1 — Intent Classification\n_INTENT_PROMPT + COMPLEX_MODEL\n→ ParsedIntent {intent, confidence, reasoning}"]
+    F{"intent in\nPROCUREMENT_INTENTS?"}
+    G["ParseResult\nbeckn_intent=None"]
+    H["run.py exits —\nnot a procurement query"]
+    I{"_is_complex(query)?"}
+    J["SIMPLE_MODEL\nqwen3:1.7b"]
+    K["COMPLEX_MODEL\nqwen3:1.7b"]
+    L["Stage 2 — Data Extraction\n_BECKN_PROMPT → BecknIntent\ninstructor / Mode.JSON / max_retries=3"]
+    M["ParseResult\n{intent, confidence, beckn_intent, routed_to}"]
+    N["facade returns BecknIntent"]
+    O["BecknClient.discover_async()\nPOST /bap/caller/discover → ONIX"]
+
+    A --> B --> C --> D --> E --> F
+    F -- "No\nGeneralInquiry / TrackOrder\nCancelOrder / etc." --> G --> H
+    F -- "Yes\nSearchProduct / RequestQuote\nPurchaseOrder" --> I
+    I -- No --> J --> L
+    I -- Yes --> K --> L
+    L --> M --> N --> O
+```
+
+---
+
+## Stage 1 — Intent Classification
+
+**File:** `IntentParser/core.py` → `_chat(COMPLEX_MODEL, _INTENT_PROMPT, query, ParsedIntent)`
+
+The first LLM call classifies the query into a PascalCase intent and produces a confidence score.
+
+**System prompt (`_INTENT_PROMPT`):**
+```
+You are an intent classifier for a Beckn-based procurement system.
+Classify the user query into a PascalCase intent.
+Procurement intents: SearchProduct, RequestQuote, PurchaseOrder, TrackOrder, CancelOrder.
+If the query is a greeting, general question, or unrelated to procurement, return GeneralInquiry.
+```
+
+**Output schema (`ParsedIntent` — `IntentParser/schemas.py`):**
+
+```python
+class ParsedIntent(BaseModel):
+    intent: str          # PascalCase, e.g. "SearchProduct"
+    product_name: Optional[str] = None
+    quantity: Optional[int] = None
+    confidence: float    # 0.0–1.0, validated
+    reasoning: str
+```
+
+**Procurement filter (`_PROCUREMENT_INTENTS`):**  
+Only `SearchProduct`, `RequestQuote`, and `PurchaseOrder` trigger Stage 2.  
+All other intents (`TrackOrder`, `CancelOrder`, `GeneralInquiry`) return a `ParseResult` with `beckn_intent=None` — the facade returns `None` and `run.py` exits early.
+
+---
+
+## Complexity Routing Heuristic
+
+Before Stage 2, `_is_complex(query)` decides which model to use:
+
+```python
+def _is_complex(query: str) -> bool:
+    lower = query.lower()
+    return (
+        len(query) > 120
+        or len(re.findall(r"\b\d+(?:\.\d+)?\b", query)) >= 2
+        or any(kw in lower for kw in _COMPLEX_KEYWORDS)
+    )
+```
+
+**Complex keywords trigger:** `delivery`, `timeline`, `deadline`, `days`, `weeks`, `hours`, `within`, `budget`, `price`, `cost`, `rupee`, `inr`, `usd`, `per unit`, `per sheet`, `under`, `maximum`, `max`.
+
+| Condition | Result |
+|---|---|
+| Query length > 120 chars | COMPLEX_MODEL |
+| ≥ 2 numeric tokens | COMPLEX_MODEL |
+| Contains any complex keyword | COMPLEX_MODEL |
+| None of the above | SIMPLE_MODEL |
+
+> [!note] Phase 1 Configuration
+> Both `COMPLEX_MODEL` and `SIMPLE_MODEL` default to `qwen3:1.7b` (overridable via env vars). The routing heuristic is designed to allow a heavier model for complex queries in Phase 2, when different model sizes may be deployed.
+
+**Fallback:** If the simple model fails, it automatically retries with the complex model before raising.
+
+---
+
+## Stage 2 — Beckn Data Extraction
+
+**File:** `IntentParser/core.py` → `_parse_beckn(query)`
+
+The second LLM call extracts all structured fields needed to build a Beckn `/discover` request.
+
+**System prompt (`_BECKN_PROMPT`):**
+```
+You are a procurement data extractor for the Beckn protocol. Extract structured data from the user query.
+- descriptions: all technical specs (e.g. "80gsm", "A4", "Cat6", "2 inch")
+- delivery_timeline: convert to hours — 1 day=24h, 1 week=168h
+- budget: numeric values only, no currency symbols; if only upper bound given, set min=0
+- location lookup: Bangalore/Bengaluru=12.9716,77.5946 | Mumbai=19.0760,72.8777 |
+  Delhi=28.7041,77.1025 | Chennai=13.0827,80.2707 | Hyderabad=17.3850,78.4867 |
+  Pune=18.5204,73.8567 | Kolkata=22.5726,88.3639 | unknown city → raw text
+```
+
+**Structured output:** `instructor` library with `Mode.JSON`, `max_retries=3`, targeting the `BecknIntent` schema directly.
+
+---
+
+## Shared Anti-Corruption Layer — `shared/models.py`
+
+Both `IntentParser` and `Bap-1` import `BecknIntent` from `shared/models.py`.  
+This is the **single source of truth** for canonical field formats. Neither module does its own conversion.
+
+```python
+class BudgetConstraints(BaseModel):
+    max: float
+    min: float = 0.0   # open lower bound — "under ₹200" means min=0, max=200
+
+class BecknIntent(BaseModel):
+    item: str
+    descriptions: list[str]           # ["80gsm", "A4"] — atomic specs
+    quantity: int                      # positive integer, validated
+    location_coordinates: Optional[str]  # "lat,lon" decimal — never city names
+    delivery_timeline: Optional[int]     # hours (int) — never ISO 8601
+    budget_constraints: Optional[BudgetConstraints]
+```
+
+**Canonical form invariants:**
+
+| Field | Raw input | Canonical form |
+|---|---|---|
+| Location | `"Bangalore"` | `"12.9716,77.5946"` |
+| Timeline | `"3 days"` | `72` (hours as int) |
+| Timeline | `"1 week"` | `168` |
+| Budget | `"max 200 INR"` | `BudgetConstraints(max=200.0, min=0.0)` |
+| Specs | `"A4 80gsm paper"` | `["A4", "80gsm"]` |
+
+---
+
+## BAP Facade — `Bap-1/src/nlp/intent_parser_facade.py`
+
+The facade is the **seam point** between `IntentParser` and `Bap-1`. It hides all NLP implementation details.
+
+```python
+from IntentParser import parse_request
+from shared.models import BecknIntent
+
+def parse_nl_to_intent(query: str) -> BecknIntent | None:
+    result = parse_request(query)
+    return result.beckn_intent
+```
+
+- Returns `BecknIntent` if the query is a procurement request.
+- Returns `None` for non-procurement queries — `run.py` exits with a user-facing message.
+- **Replacement contract:** If `IntentParser` is replaced by an HTTP microservice in Phase 3, only this file changes. Nothing else in `Bap-1` is affected.
+
+**Import resolution at runtime:**
+- `run.py` inserts the parent directory into `sys.path` so `IntentParser` is importable.
+- `pytest` uses `pythonpath = ..` in `pytest.ini` for the same effect.
+
+---
 
 ## Example Transformation
 
 **Input (natural language):**
-> "I need 500 units of A4 printer paper, 80gsm, delivered to our Bangalore office within 5 days, budget under ₹2 per sheet."
+> `"500 resmas papel A4 80GSM Bangalore 3 dias max 200 INR"`
 
-**Output (structured JSON):**
+**Stage 1 output (`ParsedIntent`):**
 ```json
 {
-  "item": "A4 printer paper",
-  "specifications": { "gsm": 80 },
+  "intent": "SearchProduct",
+  "product_name": "papel A4",
   "quantity": 500,
-  "unit": "reams",
-  "location": { "lat": 12.9716, "lon": 77.5946 },
-  "delivery_deadline_days": 5,
-  "budget_per_unit": 2.0,
-  "currency": "INR"
+  "confidence": 0.97,
+  "reasoning": "Query clearly describes a product search with quantity and specifications."
 }
 ```
 
-## Implementation
+**Stage 2 output (`BecknIntent` — canonical ACL form):**
+```json
+{
+  "item": "papel A4 80GSM",
+  "descriptions": ["A4", "80GSM"],
+  "quantity": 500,
+  "location_coordinates": "12.9716,77.5946",
+  "delivery_timeline": 72,
+  "budget_constraints": {
+    "max": 200.0,
+    "min": 0.0
+  }
+}
+```
 
-- **Primary model:** [[llm_providers|GPT-4o]] with structured output (JSON mode).
-- **Fallback model:** [[llm_providers|Claude Sonnet 4.6]].
-- **Lightweight model:** [[llm_providers|GPT-4o-mini]] for simple, well-structured requests.
-- **Approach:** Schema-constrained decoding guarantees valid JSON output conforming to the Beckn intent schema. No fine-tuning — few-shot prompting with 50+ curated procurement examples achieves 95%+ accuracy.
-- Full model specification: [[intent_parsing_model]].
+**`ParseResult` returned by `parse_request()`:**
+```json
+{
+  "intent": "SearchProduct",
+  "confidence": 0.97,
+  "beckn_intent": { "...": "as above" },
+  "routed_to": "qwen3:1.7b"
+}
+```
 
-## Fields Extracted
+---
 
-- Item descriptors (name, specifications, certifications required)
-- Quantity and unit of measure
-- Delivery location (coordinates or address)
-- Delivery timeline (days)
-- Budget constraints (per-unit or total)
-- **Urgency flag** — `"URGENT:"` prefix detected → activates emergency procurement mode in [[story3_emergency_procurement]]
-- Compliance requirements (ISO certifications, geographic restrictions)
+## Configuration
 
-> [!milestone] Phase 1 Acceptance Criteria (Weeks 1–4)
-> From [[phase1_foundation_protocol_integration|Phase 1 NL Intent Parser milestone]]:
-> - Correctly parses **15+ diverse procurement requests** into valid Beckn-compatible intent JSON.
-> - Evaluated against 100 procurement requests spanning 15 categories.
-> - **Success criterion:** Valid JSON output matching expected schema with all extracted fields correct.
-> - Full evaluation methodology: [[intent_parsing_model]].
+| Env var | Default | Description |
+|---|---|---|
+| `COMPLEX_MODEL` | `qwen3:1.7b` | Model for complex queries |
+| `SIMPLE_MODEL` | `qwen3:1.7b` | Model for simple queries |
+| `OLLAMA_URL` | `http://localhost:11434/v1` | Ollama OpenAI-compatible base URL |
 
-> [!guardrail] Parsing Reliability
-> The parser uses **schema-constrained decoding** — the [[llm_providers|LLM]] is forced to output valid JSON conforming to the Beckn intent schema. This eliminates the risk of malformed JSON crashing the downstream [[beckn_bap_client|BAP client]]. If the primary model fails to produce valid JSON after 3 retries, the fallback model (`claude-sonnet-4-6`) is invoked automatically. All parse failures are logged to [[audit_trail_system|Kafka audit events]].
+---
 
-> [!insight] Accuracy Target
-> Intent parsing accuracy ≥ **95%** on the 100-scenario evaluation suite (per [[technical_performance_metrics]]). This is the highest accuracy target in the system — errors here compound through every downstream step.
+## Public API (`IntentParser/__init__.py`)
+
+```python
+from IntentParser import parse_request, parse_batch
+from IntentParser import ParsedIntent, BecknIntent, ParseResult
+```
+
+| Function | Signature | Use case |
+|---|---|---|
+| `parse_request` | `(query: str) → ParseResult` | Single query, synchronous |
+| `parse_batch` | `(queries: list[str], max_workers=4) → list[ParseResult]` | Bulk parsing via `ThreadPoolExecutor` |
+
+---
+
+## Fault Tolerance
+
+| Failure | Behaviour |
+|---|---|
+| Stage 1 `ParsedIntent` validation error | `instructor` retries up to 3 times with the same model |
+| Stage 2 `BecknIntent` validation error | Retries up to 3×; if simple model, escalates to complex model |
+| Non-procurement intent | Returns `ParseResult(beckn_intent=None)` — facade returns `None`, no exception |
+| Ollama unreachable | Exception propagates to `run.py` → unhandled, terminates with traceback |
+
+> [!guardrail] Schema-constrained output
+> `instructor` with `Mode.JSON` forces the LLM to produce valid JSON matching the Pydantic schema. All field validation (confidence range 0–1, quantity > 0, timeline > 0) is enforced by Pydantic validators before `ParseResult` is returned. A malformed LLM response triggers an automatic retry, not a crash.
+
+> [!milestone] Phase 1 Acceptance Criteria
+> From [[phase1_foundation_protocol_integration|Phase 1]]:
+> - Correctly parses diverse procurement requests (item, quantity, location, timeline, budget) into valid `BecknIntent` instances.
+> - Non-procurement queries (`GeneralInquiry`, `TrackOrder`, etc.) return `None` from the facade — no false positives sent to the Beckn network.
+> - `parse_batch` handles concurrent queries without race conditions (`ThreadPoolExecutor`, stateless `_client`).

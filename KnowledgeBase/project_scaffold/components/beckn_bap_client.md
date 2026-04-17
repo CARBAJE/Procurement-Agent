@@ -8,12 +8,44 @@ related: ["[[beckn_client]]", "[[nl_intent_parser]]", "[[comparison_scoring_engi
 # Component: Beckn BAP Client
 
 > [!architecture] Role in the System
-> The Beckn BAP Client is the **protocol bridge** between the [[agent_framework_langchain_langgraph|LangChain agent]] and the open Beckn/ONDC commerce network. The system acts as an intelligent **Beckn Application Platform (BAP)** using a two-layer architecture: the **Python agent layer** invokes the **beckn-onix Go adapter** via HTTP, which handles protocol compliance (ED25519 signing, schema validation, async routing). Implementation technology: [[beckn_client|beckn-onix + Python agent layer]].
+> The Beckn BAP Client is the **protocol bridge** between the [[nl_intent_parser|NL Intent Parser]] and the open Beckn/ONDC commerce network. The system acts as an intelligent **Beckn Application Platform (BAP)** using a two-layer architecture: the **Python BAP layer** invokes the **beckn-onix Go adapter** via HTTP, which handles protocol compliance (ED25519 signing, schema validation, async routing). Implementation technology: [[beckn_client|beckn-onix + Python BAP layer]].
+
+## Entry Point: From NL to Wire Format
+
+The full pipeline from user input to network call:
+
+```
+User NL Query
+      │
+      ▼
+IntentParser (Ollama / qwen3:1.7b)         ← IntentParser/core.py
+      │  ParseResult.beckn_intent
+      ▼
+intent_parser_facade.parse_nl_to_intent()  ← Bap-1/src/nlp/intent_parser_facade.py
+      │  BecknIntent (shared/models.py ACL)
+      ▼
+BecknAdapter.build_discover_payload()      ← Bap-1/src/beckn/adapter.py
+      │  Beckn v2 JSON (context + message)
+      ▼
+BecknClient.discover_async()               ← Bap-1/src/beckn/client.py
+      │  POST /bap/caller/discover
+      ▼
+beckn-onix Adapter (Go, port 8081)
+      │  ED25519-signed Beckn message
+      ▼
+BPP Network → on_discover callback
+      │  POST host:8000/bap/receiver/on_discover
+      ▼
+server.py → CallbackCollector              ← Bap-1/src/server.py
+      │  asyncio.Queue per (txn_id, action)
+      ▼
+discover_async() returns DiscoverResponse
+```
 
 ## Architecture: Two-Layer Protocol Bridge
 
 ```
-LangChain Agent (Python)
+Python BAP Layer (run.py + src/)
       │  HTTP calls to localhost:8081
       ▼
 beckn-onix Adapter (Go, BAP — port 8081)
@@ -22,15 +54,15 @@ beckn-onix Adapter (Go, BAP — port 8081)
 Beckn/ONDC Network (BPPs)
       │  Async /on_* callbacks → port 8081
       ▼
-beckn-onix Adapter routes to Python agent callback handlers
+beckn-onix Adapter routes to Python callback handlers (port 8000)
 ```
 
 ## Core Transaction Flows
 
 ### `discover` — Discovery (Beckn v2)
-- Python agent calls `GET /discover` on the Discovery Service with structured procurement intent.
-- Discovery Service queries the Catalog Service and returns matching BPP offerings synchronously.
-- No async callbacks — the response is immediate (< 1s target).
+- Python BAP layer calls `POST /bap/caller/discover` on the ONIX adapter with a structured `BecknIntent`.
+- ONIX adapter routes the request to the local catalog endpoint (`/bpp/discover` on `src/server.py`), which ACKs immediately and fires an async `on_discover` callback to `POST /bap/receiver/on_discover`.
+- `BecknClient.discover_async()` blocks on a `CallbackCollector` queue until the callback arrives (configurable timeout, default 10s).
 - Responses feed into the **Catalog Normalization Layer** (below).
 
 ### `publish` — Catalog Registration (BPP-side)
@@ -55,13 +87,13 @@ beckn-onix Adapter routes to Python agent callback handlers
 
 ## ONIX Endpoint Routing Table
 
-| Action   | Python Agent Calls                         | ONIX Routes To BPP           | Response                                    |
-| -------- | ------------------------------------------ | ---------------------------- | ------------------------------------------- |
-| discover | `GET /discover` (to Discovery Service)     | —                            | Synchronous response with matching offerings |
-| select   | `POST /bap/caller/select`                  | `POST /bpp/receiver/select`  | `POST /bap/receiver/on_select`              |
-| init    | `POST /bap/caller/init`    | `POST /bpp/receiver/init`    | `POST /bap/receiver/on_init`    |
-| confirm | `POST /bap/caller/confirm` | `POST /bpp/receiver/confirm` | `POST /bap/receiver/on_confirm` |
-| status  | `POST /bap/caller/status`  | `POST /bpp/receiver/status`  | `POST /bap/receiver/on_status`  |
+| Action   | Python BAP Layer Calls          | ONIX Routes To                        | Callback to BAP                         |
+| -------- | ------------------------------- | ------------------------------------- | --------------------------------------- |
+| discover | `POST /bap/caller/discover`     | `/bpp/discover` (local catalog)       | `POST /bap/receiver/on_discover`        |
+| select   | `POST /bap/caller/select`       | `POST /bpp/receiver/select`           | `POST /bap/receiver/on_select`          |
+| init     | `POST /bap/caller/init`         | `POST /bpp/receiver/init`             | `POST /bap/receiver/on_init`            |
+| confirm  | `POST /bap/caller/confirm`      | `POST /bpp/receiver/confirm`          | `POST /bap/receiver/on_confirm`         |
+| status   | `POST /bap/caller/status`       | `POST /bpp/receiver/status`           | `POST /bap/receiver/on_status`          |
 
 ## Security: ED25519 Signing (beckn-onix)
 

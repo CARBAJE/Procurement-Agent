@@ -947,11 +947,11 @@ Usuario escribe → [NL Intent Parser] → BecknIntent JSON
 
 ### Roles
 
-| Persona | Rol | Stack principal |
-|---|---|---|
-| **P1** | Protocol & Backend Engineer | Go (beckn-onix), Python (agent backend), PostgreSQL, Kafka, Redis |
-| **P2** | AI & Agent Engineer | Python (LangChain/LangGraph), GPT-4o, Qdrant, embeddings, evaluación |
-| **P3** | Frontend & Infrastructure Engineer | React/Next.js, TypeScript, Docker, Kubernetes, seguridad, testing |
+| Persona          | Rol                                | Stack principal                                                      |
+| ---------------- | ---------------------------------- | -------------------------------------------------------------------- |
+| **Emi and Lalo** | Protocol & Backend Engineer        | Go (beckn-onix), Python (agent backend), PostgreSQL, Kafka, Redis    |
+| **Cris**         | AI & Agent Engineer                | Python (LangChain/LangGraph), GPT-4o, Qdrant, embeddings, evaluación |
+| **Cris**         | Frontend & Infrastructure Engineer | React/Next.js, TypeScript, Docker, Kubernetes, seguridad, testing    |
 
 ---
 

@@ -1,5 +1,11 @@
+from pathlib import Path
+
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Resolve .env relative to this file so BecknConfig works regardless of the
+# working directory the caller uses (e.g. `python Bap-1/run.py` from parent).
+_ENV_FILE = Path(__file__).parent.parent / ".env"
 
 
 class BecknConfig(BaseSettings):
@@ -18,7 +24,7 @@ class BecknConfig(BaseSettings):
     callback_timeout: float = Field(default=10.0, alias="CALLBACK_TIMEOUT")
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=str(_ENV_FILE),
         extra="ignore",
         populate_by_name=True,
     )
