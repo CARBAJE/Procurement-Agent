@@ -17,7 +17,7 @@ from datetime import datetime, timezone
 from typing import Optional
 from uuid import uuid4
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field
 from pydantic.alias_generators import to_camel
 
 
@@ -61,49 +61,9 @@ class BecknContext(BaseModel):
 
 
 # ── Beckn v2 Intent (Anti-Corruption Layer) ───────────────────────────────────
+# Imported from shared — single source of truth across all modules.
 
-
-class BudgetConstraints(BaseModel):
-    """Budget as a range — not a string amount.
-
-    min defaults to 0.0 (open lower bound): a buyer who says "under Rs 2/sheet"
-    welcomes any price below the max, including very low prices.
-    """
-
-    max: float
-    min: float = 0.0
-
-
-class BecknIntent(BaseModel):
-    """Canonical form for Beckn v2 discovery intent.
-
-    All fields are machine-processable and unit-normalized:
-    - location_coordinates: "lat,lon" decimal string (never a city name)
-    - delivery_timeline:    positive integer in HOURS
-    - descriptions:         list of atomic technical attributes
-    - budget_constraints:   typed range, not a raw string
-    """
-
-    item: str
-    descriptions: list[str] = Field(default_factory=list)
-    quantity: int
-    location_coordinates: Optional[str] = None
-    delivery_timeline: Optional[int] = None      # hours
-    budget_constraints: Optional[BudgetConstraints] = None
-
-    @field_validator("quantity")
-    @classmethod
-    def quantity_positive(cls, v: int) -> int:
-        if v <= 0:
-            raise ValueError("quantity must be a positive integer")
-        return v
-
-    @field_validator("delivery_timeline")
-    @classmethod
-    def timeline_positive(cls, v: Optional[int]) -> Optional[int]:
-        if v is not None and v <= 0:
-            raise ValueError("delivery_timeline must be positive (hours)")
-        return v
+from shared.models import BecknIntent, BudgetConstraints  # noqa: F401, E402
 
 
 # ── Discover request/response (v2 synchronous discovery) ─────────────────────

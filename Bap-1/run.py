@@ -8,16 +8,21 @@ v2 change: discovery is synchronous.
 Requires:
   - mock_onix.py running on port 8081  (or real beckn-onix adapter)
   - .env configured (see .env.example)
+  - Ollama running (for NL query mode)
 
 Run:
     Terminal 1:  python mock_onix.py
-    Terminal 2:  python run.py
+    Terminal 2:  python run.py                          # hardcoded intent
+    Terminal 2:  python run.py "500 A4 paper Bangalore" # NL query
 """
 from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import sys
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 
 from aiohttp import web
 
@@ -71,6 +76,17 @@ async def start_server(port: int = 8000) -> web.AppRunner:
 
 
 async def main() -> None:
+    # Resolve intent: NL query from CLI arg, or hardcoded fallback
+    nl_query = sys.argv[1] if len(sys.argv) > 1 else None
+    if nl_query:
+        from src.nlp.intent_parser_facade import parse_nl_to_intent
+        intent = parse_nl_to_intent(nl_query)
+        if intent is None:
+            print(f"  Query not recognised as procurement: {nl_query!r}")
+            sys.exit(1)
+    else:
+        intent = INTENT
+
     config = BecknConfig()
     adapter = BecknProtocolAdapter(config)
 
@@ -79,11 +95,11 @@ async def main() -> None:
     print("=" * 60)
     print(f"  BAP ID     : {config.bap_id}")
     print(f"  ONIX URL   : {config.onix_url}")
-    print(f"  Item       : {INTENT.item}")
-    print(f"  Quantity   : {INTENT.quantity}")
-    print(f"  Timeline   : {INTENT.delivery_timeline}h")
-    if INTENT.budget_constraints:
-        print(f"  Budget max : Rs. {INTENT.budget_constraints.max}")
+    print(f"  Item       : {intent.item}")
+    print(f"  Quantity   : {intent.quantity}")
+    print(f"  Timeline   : {intent.delivery_timeline}h")
+    if intent.budget_constraints:
+        print(f"  Budget max : Rs. {intent.budget_constraints.max}")
 
     runner = await start_server(port=8000)
 
@@ -93,7 +109,7 @@ async def main() -> None:
             # 1. Async discover — send to ONIX, wait for on_discover callback
             print("\n  Discovering ...")
             discover_resp = await client.discover_async(
-                INTENT, collector, timeout=config.callback_timeout
+                intent, collector, timeout=config.callback_timeout
             )
             txn_id = discover_resp.transaction_id
 
@@ -122,7 +138,7 @@ async def main() -> None:
                 provider=SelectProvider(id=best.provider_id),
                 items=[SelectedItem(
                     id=best.item_id,
-                    quantity=INTENT.quantity,
+                    quantity=intent.quantity,
                     name=best.item_name,
                     price_value=best.price_value,
                     price_currency=best.price_currency,
