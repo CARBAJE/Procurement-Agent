@@ -4,11 +4,11 @@
     "type": "split",
     "children": [
       {
-        "id": "d75e0ed833503dd4",
+        "id": "33ff99e7a41a19a0",
         "type": "tabs",
         "children": [
           {
-            "id": "a09ea921d0d00df7",
+            "id": "1fb9aa6ceb57d842",
             "type": "leaf",
             "state": {
               "type": "markdown",
@@ -19,20 +19,6 @@
               },
               "icon": "lucide-file",
               "title": "agent_react_framework"
-            }
-          },
-          {
-            "id": "1db1ecc2643a1285",
-            "type": "leaf",
-            "state": {
-              "type": "markdown",
-              "state": {
-                "file": "system_architecture_diagram.md",
-                "mode": "source",
-                "source": false
-              },
-              "icon": "lucide-file",
-              "title": "system_architecture_diagram"
             }
           }
         ]
@@ -197,15 +183,17 @@
       "bases:Crear nueva base": false
     }
   },
-  "active": "a09ea921d0d00df7",
+  "active": "1fb9aa6ceb57d842",
   "lastOpenFiles": [
+    "technologies/agent_framework_langchain_langgraph.md",
+    "system_architecture_diagram.md",
+    "system_architecture_diagram_en.md",
+    "infrastructure/postgresql_local_setup.md",
+    "components/agent_react_framework.md",
     "components/beckn_bap_client.md",
     "technologies/beckn_client.md",
     "components/nl_intent_parser.md",
     "milestones/phase1_foundation_protocol_integration.md",
-    "components/agent_react_framework.md",
-    "infrastructure/postgresql_local_setup.md",
-    "system_architecture_diagram.md",
     "components/negotiation_engine.md",
     "components/erp_integration.md",
     "components/comparison_scoring_engine.md",
@@ -214,7 +202,6 @@
     "components/analytics_dashboard.md",
     "components/agent_memory_learning.md",
     "technologies/frontend_react_nextjs.md",
-    "system_architecture_diagram_en.md",
     "Captura de pantalla 2026-04-14 a la(s) 4.16.56 p.m..png",
     "infrastructure/data_pipeline_architecture.md",
     "technologies/event_streaming_kafka.md",

@@ -503,27 +503,92 @@ These were removed from `BAP-1` when the agent was isolated to this branch.
 
 ---
 
-## Expected Test Coverage
+## Test Coverage
 
-**File:** `Bap-1/tests/test_agent.py`
+**File:** `Bap-1/tests/test_agent.py`  
+**Command:** `pytest tests/test_agent.py -v`  
+**Result:** 14 tests, all pass without Docker or Ollama.
 
-| Test | What it verifies |
+**Key principle:** All tests use `AsyncMock` for `BecknClient` and mock `parse_nl_to_intent`. Zero real HTTP or Ollama calls.
+
+### Common Fixtures
+
+| Fixture | Description |
 |---|---|
-| `test_initial_state_all_fields_present` | TypedDict shape is correct |
-| `test_parse_intent_skipped_when_pre_loaded` | NLP skipped when intent already in state |
-| `test_parse_intent_calls_facade` | `parse_nl_to_intent()` called with the correct query |
-| `test_discover_returns_3_plus_offerings` | Phase 1 acceptance criterion |
-| `test_rank_selects_cheapest` | PaperDirect (₹189) beats OfficeWorld (₹195) and StationeryHub (₹201) |
-| `test_transaction_id_propagated` | `txn_id` flows from discover to state |
-| `test_select_called_with_cheapest_provider` | `/select` uses the correct provider with qty=500 |
-| `test_select_ack_stored_in_state` | ACK dict stored in `state["select_ack"]` |
-| `test_empty_discover_skips_select` | Empty offerings → `/select` never called, no error |
-| `test_discover_exception_captured` | RuntimeError captured in `state["error"]` |
-| `test_select_exception_captured` | `/select` error captured, `selected` still in state |
-| `test_messages_trace_contains_all_node_tags` | All 5 `[node_name]` tags appear in messages |
-| `test_messages_are_ordered` | Tags appear in execution order |
+| `sample_intent` | `BecknIntent` with 500 units of A4 80gsm paper, Bangalore, 72h, max ₹200 |
+| `three_offerings` | List of 3 `DiscoverOffering`: OfficeWorld ₹195, PaperDirect ₹189, StationeryHub ₹201 |
+| `mock_client` | `AsyncMock` that returns the 3 offerings from `discover_async` and an ACK from `select` |
+| `mock_collector` | Real `CallbackCollector` with 0.1s timeout (not used with the mock client) |
 
-**Key principle:** All tests use `AsyncMock` for `BecknClient` and mock `parse_nl_to_intent`. Zero real HTTP calls or Ollama calls.
+### Test Descriptions
+
+#### `test_initial_state_all_fields_present`
+Verifies that the graph's final state contains all fields defined in `ProcurementState`. Always-present fields are checked with `in result`; the `error` field is checked with `result.get("error") is None` because LangGraph does not include it in the output when no node writes to it.
+
+---
+
+#### `test_parse_intent_skipped_when_pre_loaded`
+When `state["intent"]` is already populated at the start (pre-loaded), the `parse_intent` node must return immediately without calling `parse_nl_to_intent`. The function is patched with `unittest.mock.patch` and `assert_not_called()` is verified. Ensures that `run.py` and `arun_with_intent()` do not consume Ollama unnecessarily.
+
+---
+
+#### `test_parse_intent_calls_facade`
+When the intent is **not** pre-loaded (`intent=None`), the node must call `parse_nl_to_intent` with exactly the query from `state["request"]`. The function is patched to return a valid `BecknIntent` and `assert_called_once_with("500 reams A4 paper")` is verified.
+
+---
+
+#### `test_discover_returns_3_plus_offerings`
+Phase 1 acceptance criterion: the graph must return at least 3 offerings in `state["offerings"]` when the mock client returns the 3 fixture offerings. Verifies that the `discover` node correctly propagates the full list to the state.
+
+---
+
+#### `test_rank_selects_cheapest`
+Verifies that the `rank_and_select` node picks **PaperDirect** (₹189) over OfficeWorld (₹195) and StationeryHub (₹201). Both `provider_name` and `price_value` are checked in `state["selected"]`. Validates the logic `min(offerings, key=lambda o: float(o.price_value))`.
+
+---
+
+#### `test_discover_called_with_correct_intent`
+Verifies that the `discover` node calls `client.discover_async` with exactly the same `BecknIntent` object from the state. Ensures that the intent is neither constructed nor modified inside the node — it is passed through as-is to the client.
+
+---
+
+#### `test_transaction_id_propagated`
+Verifies that the `transaction_id` returned by `discover_async` (`"test-txn-001"`) is stored in `state["transaction_id"]` and reaches subsequent nodes. Critical because `send_select` needs it to build the Beckn context.
+
+---
+
+#### `test_select_called_with_cheapest_provider`
+Verifies that `client.select` is called exactly once and that the `SelectOrder` it receives contains `provider.id == "p2"` (PaperDirect) and `items[0].quantity == 500`. Validates the integration between `rank_and_select` and `send_select`.
+
+---
+
+#### `test_select_ack_stored_in_state`
+Verifies that the ACK dict returned by `client.select` (`{"message": {"ack": {"status": "ACK"}}}`) is stored in `state["select_ack"]`. Important so the caller can inspect the ONIX response.
+
+---
+
+#### `test_empty_discover_skips_select`
+When `discover_async` returns zero offerings, the conditional edge must redirect the graph directly to `present_results`, skipping `rank_and_select` and `send_select`. `mock_client.select.assert_not_called()` is verified and the state must have no error.
+
+---
+
+#### `test_discover_exception_captured`
+When `discover_async` raises `RuntimeError("ONIX unreachable")`, the `discover` node must catch the exception, write the message to `state["error"]`, and the graph must continue to `present_results` without propagating the exception. Also verifies that `/select` is never called.
+
+---
+
+#### `test_select_exception_captured`
+When `client.select` raises `RuntimeError("/select timed out")`, the `send_select` node must catch the error and write it to `state["error"]`. Also verifies that `state["selected"]` still holds the offering chosen by `rank_and_select` — the error occurs after selection, not before.
+
+---
+
+#### `test_messages_trace_contains_all_node_tags`
+Verifies that the reasoning trace (`state["messages"]`) contains exactly the 5 node prefixes: `[parse_intent]`, `[discover]`, `[rank_and_select]`, `[send_select]`, `[present_results]`. Ensures no node omits its log entry.
+
+---
+
+#### `test_messages_are_ordered`
+Verifies that the 5 tags appear in the trace in the correct graph execution order. The position of each tag is found in the concatenated string and the positions are checked to be in ascending order.
 
 ---
 

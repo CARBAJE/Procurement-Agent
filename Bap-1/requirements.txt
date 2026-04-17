@@ -1,4 +1,6 @@
 aiohttp>=3.9.0
+langgraph>=0.2.0
+langchain-core>=0.3.0
 pydantic>=2.5.0
 pydantic-settings>=2.1.0
 python-dotenv>=1.0.0
