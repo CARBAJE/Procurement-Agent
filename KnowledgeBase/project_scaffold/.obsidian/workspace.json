@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "components/agent_react_framework.md",
+                "file": "milestones/phase4_hardening_testing_production.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "agent_react_framework"
+              "title": "phase4_hardening_testing_production"
             }
           }
         ]
@@ -185,15 +185,17 @@
   },
   "active": "1fb9aa6ceb57d842",
   "lastOpenFiles": [
+    "milestones/phase3_advanced_intelligence_enterprise_features.md",
+    "milestones/phase4_hardening_testing_production.md",
+    "infrastructure/postgresql_local_setup.md",
+    "milestones/phase1_foundation_protocol_integration.md",
+    "components/agent_react_framework.md",
     "technologies/agent_framework_langchain_langgraph.md",
     "system_architecture_diagram.md",
     "system_architecture_diagram_en.md",
-    "infrastructure/postgresql_local_setup.md",
-    "components/agent_react_framework.md",
     "components/beckn_bap_client.md",
     "technologies/beckn_client.md",
     "components/nl_intent_parser.md",
-    "milestones/phase1_foundation_protocol_integration.md",
     "components/negotiation_engine.md",
     "components/erp_integration.md",
     "components/comparison_scoring_engine.md",
