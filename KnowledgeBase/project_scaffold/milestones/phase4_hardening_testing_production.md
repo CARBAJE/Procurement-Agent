@@ -12,14 +12,14 @@ related: ["[[cicd_pipeline]]", "[[orchestration_kubernetes]]", "[[security_encry
 
 ## Milestones & Deliverables
 
-| Milestone | Deliverable | Skills Required | Acceptance Criteria |
-|---|---|---|---|
-| Performance Optimization | Agent response time `< 5s` for standard requests | Performance tuning, [[databases_postgresql_redis\|caching]] | P95 latency under 5s; [[databases_postgresql_redis\|Redis]] caching reduces redundant Beckn calls by **50%+** |
-| Security Hardening | Pen test remediation, data encryption, access controls | AppSec, [[security_encryption\|encryption]], RBAC | OWASP Top 10 addressed; data encrypted at rest and in transit |
-| Integration Testing | End-to-end test suite covering all Beckn flows | Test automation, [[cicd_pipeline\|CI/CD]] | **80%+** code coverage; all critical paths tested |
-| Evaluation Suite | 20+ procurement scenarios with ground-truth scoring | AI evaluation, benchmarking | Agent achieves **≥ 85%** accuracy on evaluation suite |
-| Containerization | Docker images, Helm charts, [[orchestration_kubernetes\|Kubernetes]] manifests | DevOps, K8s, IaC | Full stack runs via `docker-compose`; Helm deploys to K8s cluster |
-| Documentation & Demo | Architecture docs, API docs, 5-minute demo video | Technical writing, presentation | Documentation sufficient for handoff; demo covers all key capabilities |
+| Milestone                | Deliverable                                                                    | Skills Required                                             | Acceptance Criteria                                                                                           |
+| ------------------------ | ------------------------------------------------------------------------------ | ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| Performance Optimization | Agent response time `< 5s` for standard requests                               | Performance tuning, [[databases_postgresql_redis\|caching]] | P95 latency under 5s; [[databases_postgresql_redis\|Redis]] caching reduces redundant Beckn calls by **50%+** |
+| Security Hardening       | Pen test remediation, data encryption, access controls                         | AppSec, [[security_encryption\|encryption]], RBAC           | OWASP Top 10 addressed; data encrypted at rest and in transit                                                 |
+| Integration Testing      | End-to-end test suite covering all Beckn flows                                 | Test automation, [[cicd_pipeline\|CI/CD]]                   | **80%+** code coverage; all critical paths tested                                                             |
+| Evaluation Suite         | 20+ procurement scenarios with ground-truth scoring                            | AI evaluation, benchmarking                                 | Agent achieves **≥ 85%** accuracy on evaluation suite                                                         |
+| Containerization         | Docker images, Helm charts, [[orchestration_kubernetes\|Kubernetes]] manifests | DevOps, K8s, IaC                                            | Full stack runs via `docker-compose`; Helm deploys to K8s cluster                                             |
+| Documentation & Demo     | Architecture docs, API docs, 5-minute demo video                               | Technical writing, presentation                             | Documentation sufficient for handoff; demo covers all key capabilities                                        |
 
 > [!architecture] Technical Focus Areas
 > - [[databases_postgresql_redis|Redis]] caching layer tuned for ≥ 50% reduction in redundant Beckn network calls.
