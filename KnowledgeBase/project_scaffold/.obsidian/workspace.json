@@ -4,35 +4,21 @@
     "type": "split",
     "children": [
       {
-        "id": "d75e0ed833503dd4",
+        "id": "33ff99e7a41a19a0",
         "type": "tabs",
         "children": [
           {
-            "id": "a09ea921d0d00df7",
+            "id": "1fb9aa6ceb57d842",
             "type": "leaf",
             "state": {
               "type": "markdown",
               "state": {
-                "file": "milestones/phase1_foundation_protocol_integration.md",
+                "file": "milestones/phase4_hardening_testing_production.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "phase1_foundation_protocol_integration"
-            }
-          },
-          {
-            "id": "1db1ecc2643a1285",
-            "type": "leaf",
-            "state": {
-              "type": "markdown",
-              "state": {
-                "file": "system_architecture_diagram.md",
-                "mode": "source",
-                "source": false
-              },
-              "icon": "lucide-file",
-              "title": "system_architecture_diagram"
+              "title": "phase4_hardening_testing_production"
             }
           }
         ]
@@ -197,27 +183,30 @@
       "bases:Crear nueva base": false
     }
   },
-  "active": "a09ea921d0d00df7",
+  "active": "1fb9aa6ceb57d842",
   "lastOpenFiles": [
-    "components/agent_react_framework.md",
+    "milestones/phase3_advanced_intelligence_enterprise_features.md",
+    "milestones/phase4_hardening_testing_production.md",
     "infrastructure/postgresql_local_setup.md",
+    "milestones/phase1_foundation_protocol_integration.md",
+    "components/agent_react_framework.md",
+    "technologies/agent_framework_langchain_langgraph.md",
     "system_architecture_diagram.md",
+    "system_architecture_diagram_en.md",
+    "components/beckn_bap_client.md",
+    "technologies/beckn_client.md",
     "components/nl_intent_parser.md",
     "components/negotiation_engine.md",
     "components/erp_integration.md",
     "components/comparison_scoring_engine.md",
-    "components/beckn_bap_client.md",
     "components/audit_trail_system.md",
     "components/approval_workflow.md",
     "components/analytics_dashboard.md",
-    "milestones/phase1_foundation_protocol_integration.md",
     "components/agent_memory_learning.md",
     "technologies/frontend_react_nextjs.md",
-    "system_architecture_diagram_en.md",
     "Captura de pantalla 2026-04-14 a la(s) 4.16.56 p.m..png",
     "infrastructure/data_pipeline_architecture.md",
     "technologies/event_streaming_kafka.md",
-    "technologies/beckn_client.md",
     "README.md",
     "deep-research-report.md",
     "ai_models/heuristic_routing_theory/complexity_routing_theory.md"
