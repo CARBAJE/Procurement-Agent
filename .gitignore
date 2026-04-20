@@ -1,5 +1,15 @@
-IntentParser/__pycache__/__init__.cpython-313.pyc
-IntentParser/__pycache__/core.cpython-313.pyc
-IntentParser/__pycache__/schemas.cpython-313.pyc
-IntentParser/tests/__pycache__/test_milestone.cpython-313-pytest-9.0.3.pyc
+# ── Python ────────────────────────────────────────────────────────────────────
+__pycache__/
+*.pyc
+*.pyo
+.env
+.env.local
+
+# ── Frontend (Next.js) ────────────────────────────────────────────────────────
+frontend/.next/
+frontend/node_modules/
+frontend/.env.local
+frontend/.env*.local
+
+# ── KnowledgeBase ─────────────────────────────────────────────────────────────
 KnowledgeBase/.obsidian/workspace.json
