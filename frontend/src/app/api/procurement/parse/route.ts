@@ -13,7 +13,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "query is required" }, { status: 400 })
   }
 
-  const intentParserUrl = process.env.INTENT_PARSER_URL ?? "http://localhost:8001"
+  const intentParserUrl = process.env.INTENT_PARSER_URL ?? "http://localhost:8000"
   try {
     const { data } = await axios.post(`${intentParserUrl}/parse`, { query })
     return NextResponse.json(data)

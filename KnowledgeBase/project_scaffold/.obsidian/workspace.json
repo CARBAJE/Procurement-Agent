@@ -22,17 +22,29 @@
             }
           },
           {
+<<<<<<< HEAD
             "id": "1db1ecc2643a1285",
+=======
+            "id": "eaa95b6b8bf93ed6",
+>>>>>>> a6fe65f (Frontend connected to Agent)
             "type": "leaf",
             "state": {
               "type": "markdown",
               "state": {
+<<<<<<< HEAD
                 "file": "system_architecture_diagram.md",
+=======
+                "file": "components/beckn_bap_client.md",
+>>>>>>> a6fe65f (Frontend connected to Agent)
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
+<<<<<<< HEAD
               "title": "system_architecture_diagram"
+=======
+              "title": "beckn_bap_client"
+>>>>>>> a6fe65f (Frontend connected to Agent)
             }
           }
         ]
@@ -199,9 +211,23 @@
   },
   "active": "a09ea921d0d00df7",
   "lastOpenFiles": [
+<<<<<<< HEAD
+=======
+    "components/beckn_bap_client.md",
+    "milestones/phase1_foundation_protocol_integration.md",
+    "technologies/beckn_client.md",
+    "README.md",
+    "milestones/phase4_hardening_testing_production.md",
+    "milestones/phase3_advanced_intelligence_enterprise_features.md",
+    "infrastructure/postgresql_local_setup.md",
+>>>>>>> a6fe65f (Frontend connected to Agent)
     "components/agent_react_framework.md",
     "infrastructure/postgresql_local_setup.md",
     "system_architecture_diagram.md",
+<<<<<<< HEAD
+=======
+    "system_architecture_diagram_en.md",
+>>>>>>> a6fe65f (Frontend connected to Agent)
     "components/nl_intent_parser.md",
     "components/negotiation_engine.md",
     "components/erp_integration.md",
@@ -217,8 +243,11 @@
     "Captura de pantalla 2026-04-14 a la(s) 4.16.56 p.m..png",
     "infrastructure/data_pipeline_architecture.md",
     "technologies/event_streaming_kafka.md",
+<<<<<<< HEAD
     "technologies/beckn_client.md",
     "README.md",
+=======
+>>>>>>> a6fe65f (Frontend connected to Agent)
     "deep-research-report.md",
     "ai_models/heuristic_routing_theory/complexity_routing_theory.md"
   ]

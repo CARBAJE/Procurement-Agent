@@ -29,6 +29,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."
 import aiohttp
 from aiohttp import web
 
+from src.agent import ProcurementAgent
 from src.beckn.adapter import BecknProtocolAdapter
 from src.beckn.callbacks import CallbackCollector
 from src.beckn.client import BecknClient
@@ -41,6 +42,8 @@ config = BecknConfig()
 collector = CallbackCollector(default_timeout=config.callback_timeout)
 
 SUPPORTED_CALLBACKS = {"on_discover", "on_select", "on_init", "on_confirm", "on_status"}
+
+_PROCUREMENT_INTENTS = {"SearchProduct", "RequestQuote", "PurchaseOrder"}
 
 # ── Local catalog — returned for every discover request ───────────────────────
 # Mirrors the data in publish_catalog.py so the two stay in sync.
@@ -182,18 +185,60 @@ def _local_catalog_as_offerings() -> list[dict]:
     return result
 
 
+async def parse(request: web.Request) -> web.Response:
+    """Frontend-facing intent parser endpoint.
+
+    Calls IntentParser (Ollama) and returns a ParseResult compatible with the
+    Next.js frontend type definitions in frontend/src/lib/types.ts.
+
+    POST /parse
+    Body:     { "query": "<natural language request>" }
+    Response: { intent, confidence, beckn_intent, routed_to }
+              intent = "procurement" | "unknown"
+    """
+    try:
+        body = await request.json()
+    except json.JSONDecodeError:
+        raise web.HTTPBadRequest(reason="Invalid JSON")
+
+    query = body.get("query", "").strip()
+    if not query:
+        raise web.HTTPBadRequest(reason="query is required")
+
+    try:
+        from IntentParser import parse_request
+        result = parse_request(query)
+
+        intent_type = "procurement" if result.intent in _PROCUREMENT_INTENTS else "unknown"
+        beckn_dict = None
+        if result.beckn_intent:
+            beckn_dict = {**result.beckn_intent.model_dump(), "unit": "unit"}
+
+        return web.json_response({
+            "intent":       intent_type,
+            "confidence":   result.confidence,
+            "beckn_intent": beckn_dict,
+            "routed_to":    result.routed_to or "qwen3:1.7b",
+        })
+    except Exception as exc:
+        logger.error("Intent parsing failed: %s", exc)
+        raise web.HTTPInternalServerError(reason=f"Intent parsing failed: {exc}")
+
+
 async def discover(request: web.Request) -> web.Response:
-    """Frontend-facing discover endpoint.
+    """Frontend-facing discover endpoint — runs the full ProcurementAgent pipeline.
 
     Accepts an already-parsed BecknIntent JSON body (sent by the Next.js
-    frontend after the user confirms the IntentParser preview).
+    frontend after the user confirms the IntentParser preview) and runs
+    arun_with_intent(), which executes: discover → rank_and_select → send_select.
 
-    Tries real discover via ONIX adapter first. Falls back to the local
-    catalog if ONIX is unavailable, so the frontend works without Docker.
+    Falls back to the local catalog if the agent fails (ONIX unavailable),
+    so the frontend works without Docker.
 
     POST /discover
     Body:     BecknIntent fields (item, quantity, location_coordinates, …)
-    Response: { transaction_id, offerings: [...], status: "live"|"mock" }
+    Response: { transaction_id, offerings, selected, messages, status }
+              status = "live" | "mock"
     """
     try:
         body = await request.json()
@@ -206,35 +251,51 @@ async def discover(request: web.Request) -> web.Response:
         raise web.HTTPUnprocessableEntity(reason=f"Invalid BecknIntent: {exc}")
 
     adapter = BecknProtocolAdapter(config)
+    agent = ProcurementAgent(adapter, collector, discover_timeout=10.0)
 
     try:
-        async with BecknClient(adapter) as client:
-            result = await asyncio.wait_for(
-                client.discover_async(intent, collector, timeout=10.0),
-                timeout=12.0,
-            )
-        offerings = [o.model_dump() for o in result.offerings]
+        state = await agent.arun_with_intent(intent)
+
+        if state.get("error"):
+            logger.warning("Agent pipeline failed (%s) — returning local catalog", state["error"])
+            return web.json_response({
+                "transaction_id": str(uuid.uuid4()),
+                "offerings":      _local_catalog_as_offerings(),
+                "selected":       None,
+                "messages":       state.get("messages", []),
+                "status":         "mock",
+            })
+
+        offerings = [o.model_dump() for o in state.get("offerings", [])]
+        selected  = state["selected"].model_dump() if state.get("selected") else None
+
         return web.json_response({
-            "transaction_id": result.transaction_id,
+            "transaction_id": state.get("transaction_id"),
             "offerings":      offerings,
+            "selected":       selected,
+            "messages":       state.get("messages", []),
             "status":         "live",
         })
+
     except Exception as exc:
-        logger.warning("ONIX discover failed (%s) — returning local catalog", exc)
+        logger.warning("Agent failed (%s) — returning local catalog", exc)
         return web.json_response({
             "transaction_id": str(uuid.uuid4()),
             "offerings":      _local_catalog_as_offerings(),
+            "selected":       None,
+            "messages":       [],
             "status":         "mock",
         })
 
 
 def create_app() -> web.Application:
     app = web.Application()
-    app.router.add_get("/health", health)
-    app.router.add_post("/discover", discover)                    # frontend integration
+    app.router.add_get("/health",                health)
+    app.router.add_post("/parse",                parse)           # frontend: intent parsing
+    app.router.add_post("/discover",             discover)        # frontend: beckn discover
     app.router.add_post("/bap/receiver/{action}", bap_receiver)
-    app.router.add_post("/bpp/discover", bpp_discover)
-    app.router.add_post("/{action}", bap_receiver)  # real Beckn network posts without prefix
+    app.router.add_post("/bpp/discover",         bpp_discover)
+    app.router.add_post("/{action}",             bap_receiver)    # real Beckn network callbacks
     return app
 
 
