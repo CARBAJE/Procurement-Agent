@@ -14,7 +14,10 @@ pytest tests/test_discover.py -v
 # Run a single test by name
 pytest tests/test_discover.py::test_discover_returns_offerings -v
 
-# Run integration tests (requires ANTHROPIC_API_KEY)
+# Run unit tests for the NL parser facade (no Ollama needed — LLM is mocked)
+pytest tests/test_intent_parser.py -v -k "not integration"
+
+# Run integration tests (requires Ollama running with qwen3:8b)
 pytest tests/test_intent_parser.py -v -m integration
 
 # Start the Docker stack (onix-bap, onix-bpp, sandbox-bpp, redis)
@@ -22,7 +25,8 @@ cd starter-kit/generic-devkit/install
 docker compose -f docker-compose-my-bap.yml up -d
 
 # Run the end-to-end flow (Docker stack must be running)
-python run.py
+python run.py                                    # hardcoded intent
+python run.py "500 A4 paper Bangalore 3 days"   # NL query (requires Ollama)
 
 # Run the server standalone
 python -m src.server       # NOT python src/server.py (import resolution breaks)
@@ -40,7 +44,7 @@ This is a **Beckn Protocol v2 BAP (Buyer Application Platform)** — the buyer s
 
 ### Layer responsibilities
 
-- **`src/beckn/models.py`** — All Pydantic v2 models. `BecknIntent` is the Anti-Corruption Layer between AI/NL output and the Beckn wire format (delivery timeline in hours as `int`, budget as `{max, min}`, descriptions as `list[str]`). Never put protocol-formatting logic outside this file.
+- **`src/beckn/models.py`** — Pydantic v2 protocol models. `BecknIntent` and `BudgetConstraints` are defined in `shared/models.py` (repo root) and re-exported here — all imports from `src.beckn.models` still work. Never put protocol-formatting logic outside the beckn/ layer.
 
 - **`src/beckn/adapter.py`** — Builds protocol messages (UUID transaction IDs, RFC 3339 timestamps, context headers). Owns all URL construction — `discover_url`, `select_url`, `caller_action_url(action)`. Nothing else should construct Beckn URLs.
 
@@ -58,7 +62,12 @@ All tests mock HTTP with `aioresponses`. The `conftest.py` fixtures (`adapter`, 
 
 ### NL Intent Parser (`src/nlp/`)
 
-Skeleton exists. Uses `anthropic` SDK with `tool_choice={"type": "tool"}` forced to `parse_procurement_intent` — this guarantees structured JSON output with no ambiguous post-processing. Output maps to `BecknIntent` (hours for timeline, not ISO 8601). Requires `ANTHROPIC_API_KEY` env var for integration tests.
+Implemented as a **Facade** over the standalone `IntentParser/` module (one level above `Bap-1/`).
+
+- **`src/nlp/intent_parser_facade.py`** — single public function `parse_nl_to_intent(query) -> BecknIntent | None`. Returns `None` for non-procurement queries. No type conversion needed — both modules share `shared/models.BecknIntent`.
+- **IntentParser** uses `instructor` + Ollama (`qwen3:8b` complex, `qwen3:1.7b` simple). Routing heuristic: query > 120 chars or ≥ 2 numbers or procurement keywords → complex model.
+- **Path resolution**: `pytest.ini` has `pythonpath = ..` so tests find `IntentParser/`; `run.py` does `sys.path.insert` for runtime.
+- **Unit tests** mock `parse_request` — no Ollama needed. Integration tests (`-m integration`) require Ollama running with `qwen3:8b`.
 
 ## Key constraints
 

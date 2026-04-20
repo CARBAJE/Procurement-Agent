@@ -54,21 +54,28 @@ The Python BAP never talks directly to BPPs. All traffic goes through the **beck
 ## Project Structure
 
 ```
+../shared/                      # shared models (one level above Bap-1/)
+└── models.py                   # BecknIntent, BudgetConstraints — single source of truth
+
 bap-1/
 ├── src/
 │   ├── config.py               # BecknConfig (env-driven settings)
 │   ├── server.py               # aiohttp server on port 8000:
 │   │                           #   POST /bap/receiver/{action}  — async callbacks
 │   │                           #   POST /bpp/discover           — local catalog endpoint
+│   ├── nlp/
+│   │   ├── __init__.py         # re-exports parse_nl_to_intent
+│   │   └── intent_parser_facade.py  # Facade over IntentParser NLP module
 │   └── beckn/
-│       ├── models.py           # Pydantic v2 protocol models (BecknIntent, Contract, etc.)
+│       ├── models.py           # Pydantic v2 protocol models; re-exports BecknIntent from shared/
 │       ├── adapter.py          # Protocol adapter (context building, wire payloads, URLs)
 │       ├── client.py           # Async HTTP client (aiohttp)
 │       └── callbacks.py        # CallbackCollector for on_discover/on_select/etc.
 ├── tests/
 │   ├── conftest.py             # Shared pytest fixtures
 │   ├── test_discover.py        # /discover flow tests
-│   └── test_select.py          # /select flow tests
+│   ├── test_select.py          # /select flow tests
+│   └── test_intent_parser.py   # NL parser facade unit + integration tests
 ├── starter-kit/
 │   └── generic-devkit/
 │       ├── config/
@@ -148,6 +155,8 @@ Settings powered by `pydantic-settings`. Reads from `.env`.
 ### `BecknIntent` (Anti-Corruption Layer)
 
 Canonical representation of what the procurement agent wants. Sits between AI/NL output and the Beckn wire format.
+
+Defined in `shared/models.py` (one level above `Bap-1/`) and re-exported from `src/beckn/models.py` — so all existing imports remain unchanged.
 
 ```python
 BecknIntent(
@@ -244,7 +253,11 @@ docker ps   # should show: redis, onix-bap, onix-bpp, sandbox-bpp
 ### 5. Run the end-to-end flow
 
 ```bash
+# With hardcoded intent (no Ollama needed)
 python run.py
+
+# With natural language query (requires Ollama running with qwen3:8b)
+python run.py "500 reams A4 paper 80gsm Bangalore, 3 days, max 200 INR"
 ```
 
 Expected output:
@@ -313,7 +326,7 @@ pytest tests/test_select.py -v
 
 | Phase | Weeks | Milestone |
 |---|---|---|
-| **1 — Foundation** | 1–4 | Core API flows (v2) ✅, NL Intent Parser, Agent Framework, Data Models |
+| **1 — Foundation** | 1–4 | Core API flows (v2) ✅, NL Intent Parser ✅, Agent Framework, Data Models |
 | **2 — Intelligence** | 5–8 | `/init`, `/confirm`, `/status`, Catalog Normalizer, Comparison Engine |
 | **3 — Advanced** | 9–12 | Negotiation Engine, Agent Memory (Vector DB), Audit Trail, ERP Integration |
 | **4 — Production** | 13–16 | Performance, Security Hardening, CI/CD, Evaluation Suite |
