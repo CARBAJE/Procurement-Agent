@@ -174,13 +174,13 @@ parse_intent → discover ──(offerings found)──→ rank_and_select → s
 
 #### Nodes
 
-| Node | ReAct role | What it does |
-|---|---|---|
-| `parse_intent` | Reason | Calls `parse_nl_to_intent()`. Skips NLP if intent already pre-loaded. |
-| `discover` | Act | Calls `BecknClient.discover_async()` → populates `offerings` and `transaction_id`. |
-| `rank_and_select` | Reason | `min(offerings, key=lambda o: float(o.price_value))` — cheapest wins (Phase 1). |
-| `send_select` | Act | Builds `SelectOrder`, calls `BecknClient.select()`. |
-| `present_results` | Observe | Formats final summary. Always executes — never skipped. |
+| Node              | ReAct role | What it does                                                                       |
+| ----------------- | ---------- | ---------------------------------------------------------------------------------- |
+| `parse_intent`    | Reason     | Calls `parse_nl_to_intent()`. Skips NLP if intent already pre-loaded.              |
+| `discover`        | Act        | Calls `BecknClient.discover_async()` → populates `offerings` and `transaction_id`. |
+| `rank_and_select` | Reason     | `min(offerings, key=lambda o: float(o.price_value))` — cheapest wins (Phase 1).    |
+| `send_select`     | Act        | Builds `SelectOrder`, calls `BecknClient.select()`.                                |
+| `present_results` | Observe    | Formats final summary. Always executes — never skipped.                            |
 
 #### Reasoning trace example
 
