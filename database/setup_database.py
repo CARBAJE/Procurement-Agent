@@ -1,4 +1,10 @@
 #!/usr/bin/env python3
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
 """
 Database setup automation for Procurement Agent Beckn Protocol.
 

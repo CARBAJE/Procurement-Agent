@@ -4,6 +4,7 @@ __pycache__/
 *.pyo
 .env
 .env.local
+.venv
 
 # ── Frontend (Next.js) ────────────────────────────────────────────────────────
 frontend/.next/
@@ -19,6 +20,8 @@ frontend/coverage/
 .DS_Store
 *.pem
 npm-debug.log*
+.vscode/
+.claude
 
 # ── KnowledgeBase ─────────────────────────────────────────────────────────────
 KnowledgeBase/.obsidian/workspace.json

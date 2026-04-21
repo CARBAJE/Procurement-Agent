@@ -1,4 +1,9 @@
 #!/usr/bin/env python3
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
 """
 Database integration tests for Procurement Agent Beckn Protocol.
 

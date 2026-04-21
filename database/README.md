@@ -45,6 +45,26 @@ sudo apt install postgresql-16-pgvector
 brew install pgvector
 ```
 
+**Windows — Docker (recommended):**
+
+The `pgvector/pgvector:pg16` image bundles PostgreSQL 16 and pgvector in a single container. Run this in PowerShell or CMD (one line, no backslash continuations):
+
+```powershell
+docker run -d --name procurement-postgres -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres123 -e POSTGRES_DB=procurement_agent -p 5432:5432 pgvector/pgvector:pg16
+```
+
+Set `.env` to match:
+
+```dotenv
+DB_HOST=localhost
+DB_PORT=5432
+DB_NAME=procurement_agent
+DB_USER=postgres
+DB_PASSWORD=postgres123
+```
+
+Then skip straight to [Section 4](#4-setup-script--setup_databasepy) — the database and extension are already created by Docker.
+
 Then enable it inside the target database — the setup script does this automatically via `00_extensions_and_types.sql`.
 
 ---
