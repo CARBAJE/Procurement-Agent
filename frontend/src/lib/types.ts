@@ -23,6 +23,28 @@ export interface ParseResult {
   routed_to: string
 }
 
+export interface Offering {
+  bpp_id: string
+  bpp_uri?: string
+  provider_id: string
+  provider_name: string
+  item_id: string
+  item_name: string
+  price_value: string
+  price_currency: string
+  rating?: string
+  fulfillment_hours?: number
+  specifications?: string[]
+}
+
+export interface DiscoverResult {
+  transaction_id: string
+  offerings: Offering[]
+  selected: Offering | null
+  messages: string[]
+  status: "live" | "mock"
+}
+
 export type UserRole = "requester" | "approver" | "admin"
 
 export interface StubUser {

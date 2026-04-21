@@ -12,14 +12,14 @@ related: ["[[beckn_bap_client]]", "[[nl_intent_parser]]", "[[agent_framework_lan
 
 ## Milestones & Deliverables
 
-| Milestone            | Deliverable                                                                                  | Skills Required                                                              | Acceptance Criteria                                                                                                                                                          |
-| -------------------- | -------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Beckn Sandbox Setup  | beckn-onix adapter deployed + Python agent layer connected to Beckn sandbox                  | Protocol engineering, Go, beckn-onix, Python                                 | ONIX adapter sends `GET /discover` to Discovery Service and receives synchronous catalog response; BPP `POST /publish` to Catalog Service verified; ED25519 signing verified |
-| Core API Flows       | `discover`, `select`, `init` implemented (v2 flow)                                           | Beckn protocol spec, API design                                              | End-to-end discover flow against Beckn v2 sandbox with 3+ offerings returned                                                                                                 |
-| **NL Intent Parser** | [[nl_intent_parser\|LLM-based parser]] converting text to structured intent                  | LLM integration ([[llm_providers\|GPT-4o]]), prompt engineering, JSON schema | Correctly parses 15+ diverse requests into valid Beckn-compatible intent                                                                                                     |
-| Agent Framework      | [[agent_framework_langchain_langgraph\|LangChain/LangGraph]] agent with ReAct loop           | Python, LangChain, LLM APIs                                                  | Agent autonomously plans and executes a 3-step procurement workflow                                                                                                          |
-| Frontend Scaffold    | [[frontend_react_nextjs\|React/Next.js]] app with auth, basic request form                   | React, TypeScript, Next.js                                                   | Running locally with SSO stub; request submission functional                                                                                                                 |
-| Data Models          | [[databases_postgresql_redis\|PostgreSQL]] schema for requests, offers, orders, audit events | Database design, SQL, migrations                                             | Schema supports full procurement lifecycle with audit trail                                                                                                                  |
+| Milestone | Deliverable | Skills Required | Acceptance Criteria |
+|---|---|---|---|
+| Beckn Sandbox Setup | beckn-onix adapter deployed + Python agent layer connected to Beckn sandbox | Protocol engineering, Go, beckn-onix, Python | ONIX adapter sends `GET /discover` to Discovery Service and receives synchronous catalog response; BPP `POST /publish` to Catalog Service verified; ED25519 signing verified |
+| Core API Flows | `discover`, `select`, `init` implemented (v2 flow) | Beckn protocol spec, API design | End-to-end discover flow against Beckn v2 sandbox with 3+ offerings returned |
+| **NL Intent Parser** | [[nl_intent_parser\|LLM-based parser]] converting text to structured intent | LLM integration ([[llm_providers\|GPT-4o]]), prompt engineering, JSON schema | Correctly parses 15+ diverse requests into valid Beckn-compatible intent |
+| Agent Framework | [[agent_framework_langchain_langgraph\|LangChain/LangGraph]] agent with ReAct loop | Python, LangChain, LLM APIs | Agent autonomously plans and executes a 3-step procurement workflow |
+| Frontend Scaffold | [[frontend_react_nextjs\|React/Next.js]] app with auth, basic request form | React, TypeScript, Next.js | Running locally with SSO stub; request submission functional |
+| Data Models | [[databases_postgresql_redis\|PostgreSQL]] schema for requests, offers, orders, audit events | Database design, SQL, migrations | Schema supports full procurement lifecycle with audit trail |
 
 > [!architecture] Technical Focus Areas
 > - `beckn-onix` Go adapter for protocol compliance (ED25519 signing, schema validation); `discover` queries to Discovery Service; `publish` registration flow for BPP catalog updates.
@@ -39,6 +39,8 @@ related: ["[[beckn_bap_client]]", "[[nl_intent_parser]]", "[[agent_framework_lan
 > - [[frontend_react_nextjs|Frontend]] running locally.
 > - [[databases_postgresql_redis|Data model]] deployed with full lifecycle schema.
 
+<<<<<<< HEAD
+=======
 ---
 
 ## Implementation Record
@@ -172,13 +174,13 @@ parse_intent → discover ──(offerings found)──→ rank_and_select → s
 
 #### Nodes
 
-| Node | ReAct role | What it does |
-|---|---|---|
-| `parse_intent` | Reason | Calls `parse_nl_to_intent()`. Skips NLP if intent already pre-loaded. |
-| `discover` | Act | Calls `BecknClient.discover_async()` → populates `offerings` and `transaction_id`. |
-| `rank_and_select` | Reason | `min(offerings, key=lambda o: float(o.price_value))` — cheapest wins (Phase 1). |
-| `send_select` | Act | Builds `SelectOrder`, calls `BecknClient.select()`. |
-| `present_results` | Observe | Formats final summary. Always executes — never skipped. |
+| Node              | ReAct role | What it does                                                                       |
+| ----------------- | ---------- | ---------------------------------------------------------------------------------- |
+| `parse_intent`    | Reason     | Calls `parse_nl_to_intent()`. Skips NLP if intent already pre-loaded.              |
+| `discover`        | Act        | Calls `BecknClient.discover_async()` → populates `offerings` and `transaction_id`. |
+| `rank_and_select` | Reason     | `min(offerings, key=lambda o: float(o.price_value))` — cheapest wins (Phase 1).    |
+| `send_select`     | Act        | Builds `SelectOrder`, calls `BecknClient.select()`.                                |
+| `present_results` | Observe    | Formats final summary. Always executes — never skipped.                            |
 
 #### Reasoning trace example
 
@@ -215,7 +217,7 @@ Starts: `onix-bap` (port 8081), `onix-bpp`, `sandbox-bpp`, `redis`.
 ollama run qwen3:1.7b
 ```
 
-#### Step 3 — Run the agent
+#### Step 3 — Option A: Run via CLI (no frontend)
 
 ```bash
 cd Bap-1
@@ -227,8 +229,7 @@ python run.py "500 reams A4 paper 80gsm Bangalore 3 days max 200 INR"
 python run.py
 ```
 
-#### Expected output
-
+Expected output:
 ```
 ============================================================
   Procurement ReAct Agent — Beckn Protocol v2
@@ -248,6 +249,23 @@ python run.py
   Done. Next: /init -> /confirm -> /status
 ============================================================
 ```
+
+#### Step 3 — Option B: Run with frontend
+
+**Terminal 1** — BAP server (exposes `/parse` and `/discover` for the frontend):
+```bash
+cd Bap-1
+python -m src.server
+```
+
+**Terminal 2** — Next.js frontend:
+```bash
+cd frontend
+npm install       # first time only
+npm run dev
+```
+
+Open `http://localhost:3000` — login with any stub user (e.g. `priya@example.com` / `password123`) and submit a procurement request.
 
 ---
 
@@ -285,4 +303,5 @@ Procurement-Agent/
     └── tests/                  ← 59 unit tests
 ```
 
+>>>>>>> a6fe65f (Frontend connected to Agent)
 *Continues in → [[phase2_core_intelligence_transaction_flow]]*

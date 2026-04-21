@@ -11,13 +11,7 @@ export default async function NewRequestPage() {
   return (
     <>
       <Navbar />
-      <main className="container py-8 max-w-2xl">
-        <div className="mb-6">
-          <h1 className="text-3xl font-bold">Nueva Solicitud</h1>
-          <p className="text-muted-foreground">
-            Describe en lenguaje natural qué necesitas comprar
-          </p>
-        </div>
+      <main className="container py-8 max-w-5xl">
         <ProcurementForm />
       </main>
     </>
