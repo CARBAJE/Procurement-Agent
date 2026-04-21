@@ -19,7 +19,10 @@
       "Bash(python -c \"import sys; sys.path.insert\\(0, '.'\\); from Bap_1.src.server import create_app; print\\('OK'\\)\")",
       "Bash(python -c ' *)",
       "Bash(curl -s -X POST http://localhost:8001/parse -H 'Content-Type: application/json' -d '{\"query\": \"500 reams A4 paper\"}')",
-      "Bash(curl -s http://localhost:8000/health)"
+      "Bash(curl -s http://localhost:8000/health)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git checkout *)"
     ]
   }
 }

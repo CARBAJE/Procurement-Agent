@@ -12,14 +12,14 @@ related: ["[[comparison_scoring_engine]]", "[[beckn_bap_client]]", "[[approval_w
 
 ## Milestones & Deliverables
 
-| Milestone | Deliverable | Skills Required | Acceptance Criteria |
-|---|---|---|---|
-| Full Transaction Flow | `/init`, `/confirm`, `/status` implemented | Beckn protocol, state management | Complete order lifecycle working against sandbox |
-| Catalog Normalizer | Standardizes diverse seller response formats | Data engineering, schema mapping | Handles 5+ distinct seller catalog formats correctly |
-| [[comparison_scoring_engine\|Comparison Engine]] | Multi-criteria scoring with explainable reasoning | ML/AI, scoring algorithms | Ranks sellers correctly for 10+ test scenarios with clear explanations |
-| [[approval_workflow\|Approval Workflow]] | Configurable threshold-based routing | Workflow engine, RBAC | Orders above threshold require and receive approval before `/confirm` |
-| Comparison UI | Side-by-side offer comparison with agent reasoning | React, data visualization | Users can view, compare, and act on agent recommendations |
-| [[real_time_tracking\|Real-time Tracking]] | Order status updates via `/status` polling + webhooks | WebSockets, event handling | Dashboard reflects status within **30 seconds** of change |
+| Milestone                                        | Deliverable                                           | Skills Required                  | Acceptance Criteria                                                    |
+| ------------------------------------------------ | ----------------------------------------------------- | -------------------------------- | ---------------------------------------------------------------------- |
+| Full Transaction Flow                            | `/init`, `/confirm`, `/status` implemented            | Beckn protocol, state management | Complete order lifecycle working against sandbox                       |
+| Catalog Normalizer                               | Standardizes diverse seller response formats          | Data engineering, schema mapping | Handles 5+ distinct seller catalog formats correctly                   |
+| [[comparison_scoring_engine\|Comparison Engine]] | Multi-criteria scoring with explainable reasoning     | ML/AI, scoring algorithms        | Ranks sellers correctly for 10+ test scenarios with clear explanations |
+| [[approval_workflow\|Approval Workflow]]         | Configurable threshold-based routing                  | Workflow engine, RBAC            | Orders above threshold require and receive approval before `/confirm`  |
+| Comparison UI                                    | Side-by-side offer comparison with agent reasoning    | React, data visualization        | Users can view, compare, and act on agent recommendations              |
+| [[real_time_tracking\|Real-time Tracking]]       | Order status updates via `/status` polling + webhooks | WebSockets, event handling       | Dashboard reflects status within **30 seconds** of change              |
 
 > [!architecture] Technical Focus Areas
 > - State management for multi-step Beckn v2 transaction lifecycle: `discover` → `select` → `init` → `confirm` → `status`.

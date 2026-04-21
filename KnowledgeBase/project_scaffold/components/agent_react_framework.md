@@ -86,13 +86,13 @@ flowchart LR
     style PR  fill:#3A8C5C,stroke:#1E6B3F,color:#fff
 ```
 
-| Node | ReAct Role | Description |
-|---|---|---|
-| `parse_intent` | **Reason** | NL → `BecknIntent` via `intent_parser_facade` (Ollama) |
-| `discover` | **Act** | `BecknClient.discover_async()` → `POST /bap/caller/discover` |
-| `rank_and_select` | **Reason** | Evaluates offerings — cheapest wins in Phase 1 |
-| `send_select` | **Act** | `BecknClient.select()` → `POST /bap/caller/select` |
-| `present_results` | **Observe** | Always executes — formats final result |
+| Node              | ReAct Role  | Description                                                  |
+| ----------------- | ----------- | ------------------------------------------------------------ |
+| `parse_intent`    | **Reason**  | NL → `BecknIntent` via `intent_parser_facade` (Ollama)       |
+| `discover`        | **Act**     | `BecknClient.discover_async()` → `POST /bap/caller/discover` |
+| `rank_and_select` | **Reason**  | Evaluates offerings — cheapest wins in Phase 1               |
+| `send_select`     | **Act**     | `BecknClient.select()` → `POST /bap/caller/select`           |
+| `present_results` | **Observe** | Always executes — formats final result                       |
 
 ---
 

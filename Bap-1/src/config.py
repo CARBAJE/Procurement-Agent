@@ -9,7 +9,7 @@ _ENV_FILE = Path(__file__).parent.parent / ".env"
 
 
 class BecknConfig(BaseSettings):
-    bap_id: str = Field(default="procurement-bap", alias="BAP_ID")
+    bap_id: str = Field(default="bap.example.com", alias="BAP_ID")
     bap_uri: str = Field(default="http://localhost:8000/beckn", alias="BAP_URI")
 
     # beckn-onix Go adapter — handles ED25519 signing, schema validation, routing
