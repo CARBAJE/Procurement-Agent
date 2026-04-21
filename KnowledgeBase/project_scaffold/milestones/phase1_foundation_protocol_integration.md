@@ -39,8 +39,6 @@ related: ["[[beckn_bap_client]]", "[[nl_intent_parser]]", "[[agent_framework_lan
 > - [[frontend_react_nextjs|Frontend]] running locally.
 > - [[databases_postgresql_redis|Data model]] deployed with full lifecycle schema.
 
-<<<<<<< HEAD
-=======
 ---
 
 ## Implementation Record
@@ -303,5 +301,4 @@ Procurement-Agent/
     └── tests/                  ← 59 unit tests
 ```
 
->>>>>>> a6fe65f (Frontend connected to Agent)
 *Continues in → [[phase2_core_intelligence_transaction_flow]]*
