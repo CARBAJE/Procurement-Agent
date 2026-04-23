@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "milestones/phase2_core_intelligence_transaction_flow.md",
+                "file": "milestones/phase1_foundation_protocol_integration.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "phase2_core_intelligence_transaction_flow"
+              "title": "phase1_foundation_protocol_integration"
             }
           },
           {
@@ -213,13 +213,14 @@
   },
   "active": "1fb9aa6ceb57d842",
   "lastOpenFiles": [
+    "components/beckn_bap_client.md",
+    "components/catalog_normalizer.md",
+    "milestones/phase2_core_intelligence_transaction_flow.md",
     "milestones/phase1_foundation_protocol_integration.md",
     "README.md",
     "system_architecture_diagram.md",
-    "components/beckn_bap_client.md",
     "components/agent_react_framework.md",
     "technologies/frontend_react_nextjs.md",
-    "milestones/phase2_core_intelligence_transaction_flow.md",
     "data_dictionary_er_model.md",
     "components/approval_workflow.md",
     "milestones/phase4_hardening_testing_production.md",
@@ -238,7 +239,6 @@
     "Captura de pantalla 2026-04-14 a la(s) 4.16.56 p.m..png",
     "infrastructure/data_pipeline_architecture.md",
     "technologies/event_streaming_kafka.md",
-    "deep-research-report.md",
-    "ai_models/heuristic_routing_theory/complexity_routing_theory.md"
+    "deep-research-report.md"
   ]
 }

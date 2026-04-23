@@ -57,7 +57,7 @@ FINGERPRINT_RULES = [
 ]
 ```
 
-**Why "first match wins":** It is O(1) amortized for the common cases (Formats A and B represent 80%+ of real traffic), requires no scoring or confidence weighting, and makes the detection deterministic and trivially testable.
+**Why "first match wins":** O(1) amortized for the common cases (Formats A and B represent 80%+ of real traffic), requires no scoring or confidence weighting, and makes detection deterministic and trivially testable.
 
 ## LLM Fallback
 
