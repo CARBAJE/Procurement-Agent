@@ -73,12 +73,32 @@ All Beckn messages are signed automatically by the ONIX adapter:
 
 ## Catalog Normalization Layer
 
-Diverse sellers return different catalog formats from `/discover` response. The normalization layer:
-1. **Schema mapping rules** (deterministic) — covers known seller formats.
-2. **[[llm_providers|LLM]]-based normalizer** — handles edge cases and unknown formats.
-3. **Output:** Unified schema consumable by [[comparison_scoring_engine]].
+Diverse sellers return different catalog formats from `on_discover` callbacks. Normalization is fully handled by the [[catalog_normalizer]] module (`src/normalizer/`) — `BecknClient` delegates to it via a module-level singleton:
 
-**Phase 2 acceptance:** Handles 5+ distinct seller catalog formats correctly.
+```python
+_normalizer = CatalogNormalizer()
+# inside _build_discover_response():
+offerings.extend(_normalizer.normalize({"message": {"catalog": catalog}}, bpp_id, bpp_uri))
+```
+
+### Supported Formats
+
+| Variant | Structure | Detection |
+|---|---|---|
+| `BECKN_V2_FLAT_RESOURCES` (1) | `resources[]` at catalog root (real Beckn v2) | `resources` key is a non-empty list |
+| `ONDC_CATALOG` (4) | `fulfillments[]` + `tags[]` present | both keys present |
+| `LEGACY_PROVIDERS_ITEMS` (2) | `providers[].items[]` (mock_onix/legacy) | `providers` list with `items` sub-key |
+| `BPP_CATALOG_V1` (3) | `items[]` with `provider` as string ID | `items[0]["provider"]` is a string |
+| `UNKNOWN` (5) | No fingerprint matched | LLM fallback (instructor + Ollama `qwen3:1.7b`) |
+
+### Module layers (`src/normalizer/`)
+
+- `FormatDetector` — pure function, detects variant via `FINGERPRINT_RULES` (ordered, first-match-wins)
+- `SchemaMapper` — deterministic mapping for variants 1–4, no LLM
+- `LLMFallbackNormalizer` — instructor + Ollama for unknown formats; returns `[]` on error, never raises
+- `CatalogNormalizer` — public facade that orchestrates the 3-step pipeline
+
+**Phase 2 acceptance:** Implemented — 5+ formats validated, 17 unit tests pass without Ollama.
 
 > [!milestone] Phase Delivery
 > - **[[phase1_foundation_protocol_integration|Phase 1]] (Weeks 1–4):** beckn-onix adapter deployed; `discover` and `publish` functional against Beckn v2 sandbox; 3+ seller responses parsed.

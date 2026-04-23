@@ -19,10 +19,13 @@ from typing import TYPE_CHECKING, Any
 import aiohttp
 
 from .adapter import BecknProtocolAdapter
-from .models import BecknIntent, DiscoverOffering, DiscoverResponse, SelectOrder
+from .models import BecknIntent, DiscoverResponse, SelectOrder
+from ..normalizer import CatalogNormalizer
 
 if TYPE_CHECKING:
     from .callbacks import CallbackCollector
+
+_normalizer = CatalogNormalizer()
 
 
 class BecknClient:
@@ -97,79 +100,29 @@ class BecknClient:
         callbacks = await collector.collect(txn_id, "on_discover", timeout=timeout)
         collector.cleanup(txn_id, "on_discover")
 
-        return self._parse_on_discover(txn_id, callbacks)
+        return self._build_discover_response(txn_id, callbacks)
 
-    def _parse_on_discover(self, txn_id: str, callbacks: list) -> DiscoverResponse:
-        """Parse on_discover callback payloads into DiscoverResponse.
-
-        Handles two Beckn v2 catalog formats:
-
-        Format A — flat resources (real Beckn v2 Catalog Service):
-          message.catalogs[].resources[].{id, descriptor, provider, price, rating}
-
-        Format B — nested providers/items (mock_onix / legacy):
-          message.catalog.providers[].items[].{id, descriptor, price}
-        """
+    def _build_discover_response(self, txn_id: str, callbacks: list) -> DiscoverResponse:
+        """Parse on_discover callback payloads into DiscoverResponse via CatalogNormalizer."""
+        from .models import DiscoverOffering
         offerings: list[DiscoverOffering] = []
         for cb in callbacks:
             msg = cb.message
-            # Real Beckn v2: message.catalogs[] (array from Catalog Service)
             catalogs = msg.get("catalogs") or []
-            # Mock / legacy: message.catalog (single catalog object)
             if not catalogs and msg.get("catalog"):
                 catalogs = [msg["catalog"]]
 
             for catalog in catalogs:
-                bpp_id = catalog.get("bppId") or catalog.get("bpp_id") or cb.context.bpp_id or ""
-                bpp_uri = catalog.get("bppUri") or catalog.get("bpp_uri") or cb.context.bpp_uri or ""
+                bpp_id = (
+                    catalog.get("bppId") or catalog.get("bpp_id")
+                    or cb.context.bpp_id or ""
+                )
+                bpp_uri = (
+                    catalog.get("bppUri") or catalog.get("bpp_uri")
+                    or cb.context.bpp_uri or ""
+                )
+                offerings.extend(_normalizer.normalize({"message": {"catalog": catalog}}, bpp_id, bpp_uri))
 
-                # Format A: flat resources[] (real Beckn v2)
-                for resource in catalog.get("resources", []):
-                    provider = resource.get("provider", {})
-                    provider_id = provider.get("id", "")
-                    provider_name = provider.get("descriptor", {}).get("name", "") or provider_id
-                    price = resource.get("price", {})
-                    rating_obj = resource.get("rating", {})
-                    if isinstance(rating_obj, dict):
-                        rating = str(rating_obj.get("ratingValue", "")) or None
-                    else:
-                        rating = str(rating_obj) if rating_obj is not None else None
-                    offerings.append(
-                        DiscoverOffering(
-                            bpp_id=bpp_id,
-                            bpp_uri=bpp_uri,
-                            provider_id=provider_id,
-                            provider_name=provider_name,
-                            item_id=resource.get("id", ""),
-                            item_name=resource.get("descriptor", {}).get("name", ""),
-                            price_value=str(price.get("value", "0")),
-                            price_currency=price.get("currency", "INR"),
-                            rating=rating,
-                        )
-                    )
-
-                # Format B: providers[].items[] (mock_onix / legacy)
-                for provider in catalog.get("providers", []):
-                    provider_id = provider.get("id", "")
-                    provider_name = (
-                        provider.get("descriptor", {}).get("name", "") or provider_id
-                    )
-                    rating = provider.get("rating")
-                    for item in provider.get("items", []):
-                        price = item.get("price", {})
-                        offerings.append(
-                            DiscoverOffering(
-                                bpp_id=bpp_id,
-                                bpp_uri=bpp_uri,
-                                provider_id=provider_id,
-                                provider_name=provider_name,
-                                item_id=item.get("id", ""),
-                                item_name=item.get("descriptor", {}).get("name", ""),
-                                price_value=str(price.get("value", "0")),
-                                price_currency=price.get("currency", "INR"),
-                                rating=str(rating) if rating is not None else None,
-                            )
-                        )
         ctx = callbacks[0].context if callbacks else None
         return DiscoverResponse(
             context=ctx,
