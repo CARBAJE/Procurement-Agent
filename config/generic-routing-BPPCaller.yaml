@@ -1,0 +1,43 @@
+# BPP Caller Routing — outbound on_* callbacks from BPP back to the originating BAP
+#
+# targetType "bap" resolves the BAP's callback URI via DeDi registry lookup (bapId).
+# catalog/on_publish is routed back to the BPP's own receiver (the Discover service sends this).
+
+routingRules:
+  # on_discover: routed directly to onix-bap receiver (bypasses DeDi registry lookup)
+  # This is needed for local sandbox loop — the registry doesn't know our local onix-bap URL
+  - domain: "beckn.one/testnet"
+    version: "2.0.0"
+    targetType: "url"
+    target:
+      url: "http://onix-bap:8081/bap/receiver"
+    endpoints:
+      - on_discover
+
+  # All other on_* callbacks: routed directly to onix-bap receiver (local dev).
+  # Bypasses DeDi registry so callbacks reach the local adapter without ngrok.
+  # onix-bap then forwards to the Python BAP at host.docker.internal:8000 via BAPReceiver.yaml.
+  - domain: "beckn.one/testnet"
+    version: "2.0.0"
+    targetType: "url"
+    target:
+      url: "http://onix-bap:8081/bap/receiver"
+    endpoints:
+      - on_select
+      - on_init
+      - on_confirm
+      - on_status
+      - on_track
+      - on_update
+      - on_cancel
+      - on_rate
+      - on_support
+
+  # Catalog on_publish: Discover service sends this back to the BPP that submitted the catalog
+  - domain: "beckn.one/testnet"
+    version: "2.0.0"
+    targetType: "url"
+    target:
+      url: "https://fabric.nfh.global/beckn/catalog"   # Beckn Catalog service endpoint
+    endpoints:
+      - publish

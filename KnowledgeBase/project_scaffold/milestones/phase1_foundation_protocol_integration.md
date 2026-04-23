@@ -12,14 +12,14 @@ related: ["[[beckn_bap_client]]", "[[nl_intent_parser]]", "[[agent_framework_lan
 
 ## Milestones & Deliverables
 
-| Milestone | Deliverable | Skills Required | Acceptance Criteria |
-|---|---|---|---|
-| Beckn Sandbox Setup | beckn-onix adapter deployed + Python agent layer connected to Beckn sandbox | Protocol engineering, Go, beckn-onix, Python | ONIX adapter sends `GET /discover` to Discovery Service and receives synchronous catalog response; BPP `POST /publish` to Catalog Service verified; ED25519 signing verified |
-| Core API Flows | `discover`, `select`, `init` implemented (v2 flow) | Beckn protocol spec, API design | End-to-end discover flow against Beckn v2 sandbox with 3+ offerings returned |
-| **NL Intent Parser** | [[nl_intent_parser\|LLM-based parser]] converting text to structured intent | LLM integration ([[llm_providers\|GPT-4o]]), prompt engineering, JSON schema | Correctly parses 15+ diverse requests into valid Beckn-compatible intent |
-| Agent Framework | [[agent_framework_langchain_langgraph\|LangChain/LangGraph]] agent with ReAct loop | Python, LangChain, LLM APIs | Agent autonomously plans and executes a 3-step procurement workflow |
-| Frontend Scaffold | [[frontend_react_nextjs\|React/Next.js]] app with auth, basic request form | React, TypeScript, Next.js | Running locally with SSO stub; request submission functional |
-| Data Models | [[databases_postgresql_redis\|PostgreSQL]] schema for requests, offers, orders, audit events | Database design, SQL, migrations | Schema supports full procurement lifecycle with audit trail |
+| Milestone            | Deliverable                                                                                  | Skills Required                                                              | Acceptance Criteria                                                                                                                                                          |
+| -------------------- | -------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Beckn Sandbox Setup  | beckn-onix adapter deployed + Python agent layer connected to Beckn sandbox                  | Protocol engineering, Go, beckn-onix, Python                                 | ONIX adapter sends `GET /discover` to Discovery Service and receives synchronous catalog response; BPP `POST /publish` to Catalog Service verified; ED25519 signing verified |
+| Core API Flows       | `discover`, `select` implemented (v2 flow)                                                   | Beckn protocol spec, API design                                              | End-to-end discover flow against Beckn v2 sandbox with 3+ offerings returned                                                                                                 |
+| **NL Intent Parser** | [[nl_intent_parser\|LLM-based parser]] converting text to structured intent                  | LLM integration ([[llm_providers\|GPT-4o]]), prompt engineering, JSON schema | Correctly parses 15+ diverse requests into valid Beckn-compatible intent                                                                                                     |
+| Agent Framework      | [[agent_framework_langchain_langgraph\|LangChain/LangGraph]] agent with ReAct loop           | Python, LangChain, LLM APIs                                                  | Agent autonomously plans and executes a 3-step procurement workflow                                                                                                          |
+| Frontend Scaffold    | [[frontend_react_nextjs\|React/Next.js]] app with auth, basic request form                   | React, TypeScript, Next.js                                                   | Running locally with SSO stub; request submission functional                                                                                                                 |
+| Data Models          | [[databases_postgresql_redis\|PostgreSQL]] schema for requests, offers, orders, audit events | Database design, SQL, migrations                                             | Schema supports full procurement lifecycle with audit trail                                                                                                                  |
 
 > [!architecture] Technical Focus Areas
 > - `beckn-onix` Go adapter for protocol compliance (ED25519 signing, schema validation); `discover` queries to Discovery Service; `publish` registration flow for BPP catalog updates.
@@ -192,95 +192,9 @@ parse_intent → discover ──(offerings found)──→ rank_and_select → s
 
 ---
 
-### How to Run the Full Flow
-
-#### Prerequisites
-
-- Docker Desktop running
-- Ollama running with `qwen3:1.7b` (only for NL query mode)
-- `Bap-1/.env` configured
-
-#### Step 1 — Start the Docker stack
-
-```bash
-cd starter-kit/generic-devkit/install
-docker compose -f docker-compose-my-bap.yml up -d
-```
-
-Starts: `onix-bap` (port 8081), `onix-bpp`, `sandbox-bpp`, `redis`.
-
-#### Step 2 — Start Ollama (NL mode only)
-
-```bash
-ollama run qwen3:1.7b
-```
-
-#### Step 3 — Option A: Run via CLI (no frontend)
-
-```bash
-cd Bap-1
-
-# NL query — full pipeline including Ollama
-python run.py "500 reams A4 paper 80gsm Bangalore 3 days max 200 INR"
-
-# Hardcoded intent — skips Ollama, uses INTENT constant in run.py
-python run.py
-```
-
-Expected output:
-```
-============================================================
-  Procurement ReAct Agent — Beckn Protocol v2
-============================================================
-  BAP ID   : procurement-bap
-  ONIX URL : http://localhost:8081
-  Mode     : NL query
-
-  Running agent...
-
-    [parse_intent]    item='A4 paper 80gsm' qty=500 ...
-    [discover]        txn=abc-123 found 3 offering(s): ...
-    [rank_and_select] selected 'PaperDirect' ₹189 (cheapest of 3)
-    [send_select]     ACK=ACK bpp=seller-2 provider=PaperDirect
-    [present_results] Order initiated — PaperDirect | A4 Paper Ream × 500 | ₹189 INR | txn=abc-123
-
-  Done. Next: /init -> /confirm -> /status
-============================================================
-```
-
-#### Step 3 — Option B: Run with frontend
-
-**Terminal 1** — BAP server (exposes `/parse` and `/discover` for the frontend):
-```bash
-cd Bap-1
-python -m src.server
-```
-
-**Terminal 2** — Next.js frontend:
-```bash
-cd frontend
-npm install       # first time only
-npm run dev
-```
-
-Open `http://localhost:3000` — login with any stub user (e.g. `priya@example.com` / `password123`) and submit a procurement request.
-
----
-
-### Test Coverage
-
-**Command:** `pytest tests/ -v` (no Docker, no Ollama required)
-**Result:** 59 passed, 0 failed
-
-| File | Tests | Covers |
-|---|---|---|
-| `tests/test_agent.py` | 14 | LangGraph graph: state fields, routing, ranking, error propagation, reasoning trace |
-| `tests/test_callbacks.py` | 10 | `CallbackCollector`: routing by txn_id/action, timeouts, concurrency |
-| `tests/test_discover.py` | 17 | `BecknIntent` validation, adapter payload, discover URL, `discover_async` end-to-end |
-| `tests/test_intent_parser.py` | 10 | Facade bridge, canonical field conversion, 3 integration queries via Ollama |
-| `tests/test_select.py` | 9 | Select payload, ONIX URL invariant, `client.select()` end-to-end |
-
----
+> [!info] Tests
+> Los tests unitarios y smoke tests del flujo completo están documentados en [[phase1_bap_monolith]].
+> `cd Bap-1 && pytest tests/ -v` — 59 tests, sin Docker ni Ollama requeridos.
 
 ### Repository Layout
 

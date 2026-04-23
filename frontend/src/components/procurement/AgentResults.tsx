@@ -17,11 +17,11 @@ const NODE_META: Record<string, {
   bg: string
   role: string
 }> = {
-  "[parse_intent]":    { icon: Brain, color: "text-purple-600 dark:text-purple-400", bg: "bg-purple-100 dark:bg-purple-900/40", role: "Reason"  },
-  "[discover]":        { icon: Zap,   color: "text-orange-500 dark:text-orange-400", bg: "bg-orange-100 dark:bg-orange-900/40", role: "Act"     },
-  "[rank_and_select]": { icon: Brain, color: "text-purple-600 dark:text-purple-400", bg: "bg-purple-100 dark:bg-purple-900/40", role: "Reason"  },
-  "[send_select]":     { icon: Zap,   color: "text-orange-500 dark:text-orange-400", bg: "bg-orange-100 dark:bg-orange-900/40", role: "Act"     },
-  "[present_results]": { icon: Eye,   color: "text-green-600  dark:text-green-400",  bg: "bg-green-100  dark:bg-green-900/40",  role: "Observe" },
+  "[intention-parser]":        { icon: Brain, color: "text-purple-600 dark:text-purple-400", bg: "bg-purple-100 dark:bg-purple-900/40", role: "Reason"  },
+  "[beckn-bap-client]":        { icon: Zap,   color: "text-orange-500 dark:text-orange-400", bg: "bg-orange-100 dark:bg-orange-900/40", role: "Act"     },
+  "[comparative-scoring]":     { icon: Brain, color: "text-purple-600 dark:text-purple-400", bg: "bg-purple-100 dark:bg-purple-900/40", role: "Reason"  },
+  "[beckn-bap-client/select]": { icon: Zap,   color: "text-orange-500 dark:text-orange-400", bg: "bg-orange-100 dark:bg-orange-900/40", role: "Act"     },
+  "[orchestrator]":            { icon: Eye,   color: "text-green-600  dark:text-green-400",  bg: "bg-green-100  dark:bg-green-900/40",  role: "Observe" },
 }
 
 function getNodeMeta(msg: string) {
@@ -34,14 +34,14 @@ function getNodeMeta(msg: string) {
 }
 
 function extractAck(messages: string[]): string {
-  const line = messages.find(m => m.startsWith("[send_select]"))
+  const line = messages.find(m => m.startsWith("[beckn-bap-client/select]"))
   if (!line) return "—"
   return line.match(/ACK=(\w+)/)?.[1] ?? "—"
 }
 
 function extractSummary(messages: string[]): string {
-  const line = messages.find(m => m.startsWith("[present_results]"))
-  return line ? line.replace("[present_results] ", "") : ""
+  const line = messages.find(m => m.startsWith("[orchestrator]"))
+  return line ? line.replace("[orchestrator] ", "") : ""
 }
 
 // ── Offering row ──────────────────────────────────────────────────────────────

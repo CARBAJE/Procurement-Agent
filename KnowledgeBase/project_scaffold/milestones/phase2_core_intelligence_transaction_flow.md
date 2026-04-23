@@ -39,3 +39,39 @@ related: ["[[comparison_scoring_engine]]", "[[beckn_bap_client]]", "[[approval_w
 > - [[real_time_tracking|Real-time dashboard]] live with 30-second SLA.
 
 *Preceded by → [[phase1_foundation_protocol_integration]] | Continues in → [[phase3_advanced_intelligence_enterprise_features]]*
+
+---
+
+## Architecture Migration — Microservices
+
+> [!milestone] Completed: Bap-1 Monolith → Microservices (AWS Step Functions)
+
+The Bap-1 monolith has been decomposed into 4 services under `services/` following the `architecture/Architecture.md` Step Functions model. See [[microservices_architecture]] for full detail.
+
+### Services Delivered
+
+| Service               | Port | Lambda Equivalent                | Status |
+| --------------------- | ---- | -------------------------------- | ------ |
+| `intention-parser`    | 8001 | Lambda 1 — Intention Parser      | ✅      |
+| `beckn-bap-client`    | 8002 | Lambda 2 — Beckn BAP Client      | ✅      |
+| `comparative-scoring` | 8003 | Lambda 3 — Comparative & Scoring | ✅      |
+| `orchestrator`        | 8004 | Step Functions simulator         | ✅      |
+
+### Agent Stack Placement
+
+| Agent | Lambda | Location |
+|-------|--------|----------|
+| Parser Agent | Lambda 1 | `services/intention-parser/` via `IntentParser/` |
+| Normalizer Agent | Lambda 2 | `services/beckn-bap-client/src/normalizer/` |
+| Negotiator Agent | Lambda 4 (future) | `services/negotiation-engine/` |
+
+### State
+
+JSON payload passed between services via HTTP POST. No shared memory. Each Lambda is stateless. The orchestrator assembles the final result from each step's response.
+
+### Skipped Lambdas (not yet implemented)
+
+- Lambda 4 — Negotiation Engine
+- Lambda 5 — Approval Engine
+
+These will become services under `services/negotiation-engine/` and `services/approval-engine/` in a future phase.
