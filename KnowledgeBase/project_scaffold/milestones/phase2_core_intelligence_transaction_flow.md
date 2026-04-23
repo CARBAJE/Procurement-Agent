@@ -38,30 +38,30 @@ related: ["[[comparison_scoring_engine]]", "[[beckn_bap_client]]", "[[approval_w
 > - [[approval_workflow|Approval routing]] enforced for all role combinations.
 > - [[real_time_tracking|Real-time dashboard]] live with 30-second SLA.
 
-## Implementación Completada — Catalog Normalizer
+## Completed Implementation — Catalog Normalizer
 
-> [!done] Entregado
-> El **Catalog Normalizer** ha sido implementado como `src/normalizer/` dentro del proyecto `Bap-1`.
+> [!done] Delivered
+> The **Catalog Normalizer** has been implemented as `src/normalizer/` inside the `Bap-1` project.
 
-### Qué se construyó
+### What was built
 
-| Componente | Archivo | Responsabilidad |
+| Component | File | Responsibility |
 |---|---|---|
-| `FormatVariant` | `src/normalizer/formats.py` | Enum con 5 variantes + predicados de detección |
-| `FormatDetector` | `src/normalizer/detector.py` | Detecta el formato del catálogo raw sin IO |
-| `SchemaMapper` | `src/normalizer/schema_mapper.py` | Mapeo determinista para variantes 1–4 |
-| `LLMFallbackNormalizer` | `src/normalizer/llm_fallback.py` | Fallback LLM con instructor + Ollama para variante 5 |
-| `CatalogNormalizer` | `src/normalizer/normalizer.py` | Fachada pública que orquesta los 3 pasos |
+| `FormatVariant` | `src/normalizer/formats.py` | IntEnum with 5 variants + detection predicates |
+| `FormatDetector` | `src/normalizer/detector.py` | Detects the raw catalog format — no IO, no LLM |
+| `SchemaMapper` | `src/normalizer/schema_mapper.py` | Deterministic mapping for variants 1–4 |
+| `LLMFallbackNormalizer` | `src/normalizer/llm_fallback.py` | LLM fallback via instructor + Ollama for variant 5 |
+| `CatalogNormalizer` | `src/normalizer/normalizer.py` | Public facade that orchestrates the 3-step pipeline |
 
-### Decisiones de diseño tomadas
-- La lógica de `_parse_on_discover()` se **movió verbatim** a `SchemaMapper` para los Formatos A y B — sin regresiones.
-- El fallback LLM sigue el mismo patrón de `IntentParser/core.py` (instructor + Ollama) para consistencia en el proyecto.
-- `CatalogNormalizer` es un singleton a nivel de módulo en `client.py` — no requiere cambios en el grafo LangGraph ni en los nodos.
-- La detección usa orden de reglas: ONDC (variante 4) se verifica **antes** que LEGACY (variante 2) porque los catálogos ONDC también contienen `providers[].items[]`.
-- Ante error del LLM: retorna lista vacía en lugar de propagar excepción — el grafo maneja `offerings=[]` de forma graciosa (va directo a `present_results`).
+### Design decisions
+- The logic of `_parse_on_discover()` was **moved verbatim** into `SchemaMapper` for Formats A and B — no behavioral regressions.
+- The LLM fallback follows the same pattern as `IntentParser/core.py` (instructor + Ollama) for consistency across the project.
+- `CatalogNormalizer` is a module-level singleton in `client.py` — no changes required in the LangGraph graph or its nodes.
+- Detection rule ordering: ONDC (variant 4) is checked **before** LEGACY (variant 2) because ONDC catalogs also contain `providers[].items[]`.
+- On LLM error: returns an empty list instead of propagating the exception — the graph handles `offerings=[]` gracefully (routes directly to `present_results`).
 
 ### Tests
-- 17 tests unitarios en `tests/test_normalizer.py` — todos pasan sin Ollama.
-- Los tests existentes en `tests/test_discover.py` y `tests/test_agent.py` siguen pasando sin cambios (77 tests totales en verde).
+- 17 unit tests in `tests/test_normalizer.py` — all pass without Ollama running.
+- Existing tests in `tests/test_discover.py` and `tests/test_agent.py` continue passing without changes (77 tests total, all green).
 
 *Preceded by → [[phase1_foundation_protocol_integration]] | Continues in → [[phase3_advanced_intelligence_enterprise_features]]*

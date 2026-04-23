@@ -130,7 +130,7 @@ offerings.extend(_normalizer.normalize({"message": {"catalog": catalog}}, bpp_id
 - `LLMFallbackNormalizer` — instructor + Ollama for unknown formats; returns `[]` on error, never raises
 - `CatalogNormalizer` — public facade that orchestrates the 3-step pipeline
 
-**Phase 2 acceptance:** Implementado — 5+ formatos validados, 17 unit tests pasan sin Ollama.
+**Phase 2 acceptance:** Implementing — 5+ valid formats, 17 unit tests don't need Ollama.
 
 > [!milestone] Phase Delivery
 > - **[[phase1_foundation_protocol_integration|Phase 1]] (Weeks 1–4):** beckn-onix adapter deployed; `discover` and `publish` functional against Beckn v2 sandbox; 3+ seller responses parsed.
