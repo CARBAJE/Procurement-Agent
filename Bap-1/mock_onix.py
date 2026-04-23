@@ -2,8 +2,17 @@
 Mock beckn-onix Adapter — simulates the Go ONIX adapter for local development.
 
 Runs on port 8081. Provides:
-  POST /discover       → synchronous catalog response (v2 discovery)
-  POST /bap/caller/select  → ACK + optional on_select callback to BAP
+  POST /bap/caller/discover  → ACK + async on_discover callback
+  POST /bap/caller/select    → ACK + async on_select   callback
+  POST /bap/caller/init      → ACK + async on_init     callback (Phase 2)
+  POST /bap/caller/confirm   → ACK + async on_confirm  callback (Phase 2)
+  POST /bap/caller/status    → ACK + async on_status   callback (Phase 2)
+
+The Phase 2 callbacks progress the mock order through a realistic lifecycle:
+  - on_init    returns payment terms (COD) and the final quote
+  - on_confirm assigns an order_id and sets state=ACCEPTED
+  - on_status  advances the state on each poll
+               ACCEPTED → PACKED → SHIPPED → OUT_FOR_DELIVERY → DELIVERED
 
 Run in a separate terminal:
     python mock_onix.py
@@ -14,7 +23,9 @@ Then run the BAP:
 from __future__ import annotations
 
 import asyncio
+import itertools
 import logging
+from uuid import uuid4
 
 import aiohttp
 from aiohttp import web
@@ -71,6 +82,40 @@ CATALOG = [
 
 BAP_BASE_URL = "http://localhost:8000/bap/receiver"
 
+# ── Status state machine for /status polling ─────────────────────────────────
+# order_id → cycling iterator over the delivery lifecycle. Each /status call
+# advances one step; once DELIVERED we stay there.
+_STATE_CYCLE = [
+    "ACCEPTED",
+    "PACKED",
+    "SHIPPED",
+    "OUT_FOR_DELIVERY",
+    "DELIVERED",
+]
+_order_state: dict[str, int] = {}   # order_id → current index in cycle
+
+
+def _next_state(order_id: str) -> str:
+    idx = _order_state.get(order_id, 0)
+    _order_state[order_id] = min(idx + 1, len(_STATE_CYCLE) - 1)
+    return _STATE_CYCLE[idx if idx < len(_STATE_CYCLE) else -1]
+
+
+# ── Helpers ───────────────────────────────────────────────────────────────────
+
+
+async def _post_callback(action: str, payload: dict) -> None:
+    """POST a callback to the BAP receiver with a short simulated delay."""
+    await asyncio.sleep(0.5)
+    url = f"{BAP_BASE_URL}/{action}"
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.post(url, json=payload) as resp:
+                ack = await resp.json()
+                log.info("%s sent -> BAP | ACK=%s", action, ack)
+    except Exception as e:
+        log.error("Failed to send %s callback: %s", action, e)
+
 
 # ── Route handlers ────────────────────────────────────────────────────────────
 
@@ -80,34 +125,23 @@ async def health(request: web.Request) -> web.Response:
 
 
 async def bap_caller_discover(request: web.Request) -> web.Response:
-    """Receive /bap/caller/discover from Python agent.
-
-    Mirrors the real ONIX adapter:
-      - ACK immediately
-      - Send on_discover callback asynchronously with catalog
-    """
+    """Receive /bap/caller/discover from Python agent."""
     payload = await request.json()
     context = payload.get("context", {})
-    intent = payload.get("message", {})
-    txn_id = context.get("transaction_id", "unknown")
-    item = intent.get("item", "unknown")
-
-    log.info("/bap/caller/discover | txn=%s | item=%s", txn_id, item)
+    txn_id = context.get("transactionId") or context.get("transaction_id", "unknown")
+    log.info("/bap/caller/discover | txn=%s", txn_id)
 
     asyncio.create_task(send_on_discover_callback(context))
-
     return web.json_response({"message": {"ack": {"status": "ACK"}}})
 
 
 async def send_on_discover_callback(context: dict) -> None:
-    """Async: simulate Discovery Service returning catalog via on_discover callback."""
-    await asyncio.sleep(0.5)
     payload = {
         "context": {
             **context,
             "action": "on_discover",
-            "bpp_id": "mock-catalog-service",
-            "bpp_uri": "http://localhost:8081",
+            "bppId": "mock-catalog-service",
+            "bppUri": "http://localhost:8081",
         },
         "message": {
             "catalog": {
@@ -133,61 +167,156 @@ async def send_on_discover_callback(context: dict) -> None:
             }
         },
     }
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.post(f"{BAP_BASE_URL}/on_discover", json=payload) as resp:
-                ack = await resp.json()
-                log.info("on_discover sent -> BAP | ACK=%s", ack)
-    except Exception as e:
-        log.error("Failed to send on_discover callback: %s", e)
+    await _post_callback("on_discover", payload)
 
 
-async def send_on_select_callback(context: dict, order: dict) -> None:
-    """Async: simulate BPP processing select and calling back /on_select."""
-    await asyncio.sleep(0.5)
+async def bap_caller_select(request: web.Request) -> web.Response:
+    """Receive /select — ACK + async on_select with seller quote."""
+    payload = await request.json()
+    context = payload.get("context", {})
+    txn_id = context.get("transactionId") or context.get("transaction_id", "unknown")
+    log.info("/bap/caller/select | txn=%s", txn_id)
+
+    asyncio.create_task(send_on_select_callback(context, payload.get("message", {})))
+    return web.json_response({"message": {"ack": {"status": "ACK"}}})
+
+
+async def send_on_select_callback(context: dict, message: dict) -> None:
+    contract = message.get("contract") or {}
     payload = {
         "context": {**context, "action": "on_select"},
         "message": {
-            "order": {
-                **order,
-                "state": "ACCEPTED",
+            "contract": {
+                **contract,
+                "status": {"code": "ACCEPTED"},
                 "quote": {
-                    "price": {"currency": "INR", "value": order.get("items", [{}])[0].get("price", "189.00")},
+                    "price": {
+                        "currency": "INR",
+                        "value": _first_consideration_value(contract) or "189.00",
+                    },
                 },
             }
         },
     }
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.post(f"{BAP_BASE_URL}/on_select", json=payload) as resp:
-                ack = await resp.json()
-                log.info("on_select sent -> BAP | ACK=%s", ack)
-    except Exception as e:
-        log.error("Failed to send on_select callback: %s", e)
+    await _post_callback("on_select", payload)
 
 
-async def bap_caller_select(request: web.Request) -> web.Response:
-    """Receive /select from Python agent, ACK immediately, trigger async callback."""
+def _first_consideration_value(contract: dict) -> str | None:
+    considerations = contract.get("consideration") or []
+    if considerations:
+        return considerations[0].get("price", {}).get("value")
+    return None
+
+
+async def bap_caller_init(request: web.Request) -> web.Response:
+    """Receive /init — ACK + async on_init with payment terms (COD)."""
     payload = await request.json()
     context = payload.get("context", {})
-    order = payload.get("message", {}).get("order", {})
-    txn_id = context.get("transaction_id", "unknown")
-    provider_id = order.get("provider", {}).get("id", "unknown")
+    message = payload.get("message", {})
+    txn_id = context.get("transactionId") or context.get("transaction_id", "unknown")
+    log.info("/bap/caller/init | txn=%s", txn_id)
 
-    log.info("/select received | txn=%s | provider=%s", txn_id, provider_id)
-
-    # Fire on_select callback asynchronously
-    asyncio.create_task(send_on_select_callback(context, order))
-
+    asyncio.create_task(send_on_init_callback(context, message))
     return web.json_response({"message": {"ack": {"status": "ACK"}}})
 
 
+async def send_on_init_callback(context: dict, message: dict) -> None:
+    """BPP drafts payment terms — for this mock, confirm COD as proposed."""
+    contract = message.get("contract") or {}
+    quote_value = _first_consideration_value(contract) or "189.00"
+
+    payload = {
+        "context": {**context, "action": "on_init"},
+        "message": {
+            "contract": {
+                **contract,
+                "status": {"code": "INITIALIZED"},
+                "payment": {
+                    "type": "ON_FULFILLMENT",
+                    "collectedBy": "BPP",
+                    "status": "NOT-PAID",
+                    "currency": "INR",
+                },
+                "quote": {
+                    "price": {"currency": "INR", "value": quote_value},
+                },
+            }
+        },
+    }
+    await _post_callback("on_init", payload)
+
+
+async def bap_caller_confirm(request: web.Request) -> web.Response:
+    """Receive /confirm — ACK + async on_confirm with order_id."""
+    payload = await request.json()
+    context = payload.get("context", {})
+    message = payload.get("message", {})
+    txn_id = context.get("transactionId") or context.get("transaction_id", "unknown")
+    log.info("/bap/caller/confirm | txn=%s", txn_id)
+
+    asyncio.create_task(send_on_confirm_callback(context, message))
+    return web.json_response({"message": {"ack": {"status": "ACK"}}})
+
+
+async def send_on_confirm_callback(context: dict, message: dict) -> None:
+    contract = message.get("contract") or {}
+    order_id = f"order-{uuid4().hex[:12]}"
+    # Seed the status cycle so the first /status poll returns PACKED.
+    _order_state[order_id] = 1   # next state on first poll = PACKED
+
+    payload = {
+        "context": {**context, "action": "on_confirm"},
+        "message": {
+            "order": {
+                "id": order_id,
+                "contractId": contract.get("id"),
+                "status": {"code": "ACCEPTED"},
+                "state": "ACCEPTED",
+                "fulfillmentEta": "2026-04-26T10:00:00.000Z",
+            }
+        },
+    }
+    await _post_callback("on_confirm", payload)
+
+
+async def bap_caller_status(request: web.Request) -> web.Response:
+    """Receive /status — ACK + async on_status advancing the lifecycle."""
+    payload = await request.json()
+    context = payload.get("context", {})
+    message = payload.get("message", {})
+    txn_id = context.get("transactionId") or context.get("transaction_id", "unknown")
+    order_id = message.get("orderId") or message.get("order_id", "unknown")
+    log.info("/bap/caller/status | txn=%s order=%s", txn_id, order_id)
+
+    asyncio.create_task(send_on_status_callback(context, order_id))
+    return web.json_response({"message": {"ack": {"status": "ACK"}}})
+
+
+async def send_on_status_callback(context: dict, order_id: str) -> None:
+    state = _next_state(order_id)
+    payload = {
+        "context": {**context, "action": "on_status"},
+        "message": {
+            "order": {
+                "id": order_id,
+                "state": state,
+                "status": {"code": state},
+                "fulfillment": {
+                    "eta": "2026-04-26T10:00:00.000Z",
+                    "trackingUrl": f"http://localhost:8081/track/{order_id}",
+                },
+            }
+        },
+    }
+    await _post_callback("on_status", payload)
+
+
 async def bap_caller_generic(request: web.Request) -> web.Response:
-    """Handle init/confirm/status calls — just ACK for now."""
+    """Fallback for any other /bap/caller/{action} — just ACK."""
     action = request.match_info["action"]
     payload = await request.json()
-    txn_id = payload.get("context", {}).get("transaction_id", "unknown")
-    log.info("/bap/caller/%s received | txn=%s", action, txn_id)
+    txn_id = payload.get("context", {}).get("transactionId", "unknown")
+    log.info("/bap/caller/%s received (fallback ACK) | txn=%s", action, txn_id)
     return web.json_response({"message": {"ack": {"status": "ACK"}}})
 
 
@@ -198,7 +327,10 @@ def create_app() -> web.Application:
     app = web.Application()
     app.router.add_get("/health", health)
     app.router.add_post("/bap/caller/discover", bap_caller_discover)
-    app.router.add_post("/bap/caller/select", bap_caller_select)
+    app.router.add_post("/bap/caller/select",   bap_caller_select)
+    app.router.add_post("/bap/caller/init",     bap_caller_init)
+    app.router.add_post("/bap/caller/confirm",  bap_caller_confirm)
+    app.router.add_post("/bap/caller/status",   bap_caller_status)
     app.router.add_post("/bap/caller/{action}", bap_caller_generic)
     return app
 

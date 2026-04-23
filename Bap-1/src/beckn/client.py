@@ -19,7 +19,20 @@ from typing import TYPE_CHECKING, Any
 import aiohttp
 
 from .adapter import BecknProtocolAdapter
-from .models import BecknIntent, DiscoverOffering, DiscoverResponse, SelectOrder
+from .models import (
+    BecknIntent,
+    BillingInfo,
+    ConfirmResponse,
+    DiscoverOffering,
+    DiscoverResponse,
+    FulfillmentInfo,
+    InitResponse,
+    OrderState,
+    PaymentTerms,
+    SelectOrder,
+    SelectedItem,
+    StatusResponse,
+)
 
 if TYPE_CHECKING:
     from .callbacks import CallbackCollector
@@ -196,6 +209,258 @@ class BecknClient:
             order, transaction_id, bpp_id, bpp_uri
         )
         return await self._post(self.adapter.select_url, payload)
+
+    async def init(
+        self,
+        *,
+        contract_id: str,
+        items: list[SelectedItem],
+        billing: BillingInfo,
+        fulfillment: FulfillmentInfo,
+        transaction_id: str,
+        bpp_id: str,
+        bpp_uri: str,
+        collector: "CallbackCollector",
+        timeout: float = 15.0,
+    ) -> InitResponse:
+        """Send /init and await the on_init callback.
+
+        Follows the same async pattern as discover_async:
+          register → POST → collect → cleanup → parse.
+
+        The BPP's on_init typically adjusts payment terms, which /confirm
+        must use verbatim.
+        """
+        payload = self.adapter.build_init_wire_payload(
+            contract_id=contract_id,
+            items=items,
+            billing=billing,
+            fulfillment=fulfillment,
+            transaction_id=transaction_id,
+            bpp_id=bpp_id,
+            bpp_uri=bpp_uri,
+        )
+
+        collector.register(transaction_id, "on_init")
+        await self._post(self.adapter.caller_action_url("init"), payload)
+        callbacks = await collector.collect(transaction_id, "on_init", timeout=timeout)
+        collector.cleanup(transaction_id, "on_init")
+
+        return self._parse_on_init(transaction_id, contract_id, callbacks)
+
+    async def confirm(
+        self,
+        *,
+        contract_id: str,
+        payment: PaymentTerms,
+        transaction_id: str,
+        bpp_id: str,
+        bpp_uri: str,
+        collector: "CallbackCollector",
+        timeout: float = 15.0,
+    ) -> ConfirmResponse:
+        """Send /confirm and await the on_confirm callback.
+
+        On success the BPP returns an order_id that drives all subsequent
+        /status polling. Failure to get a callback within `timeout` raises.
+        """
+        payload = self.adapter.build_confirm_wire_payload(
+            contract_id=contract_id,
+            payment=payment,
+            transaction_id=transaction_id,
+            bpp_id=bpp_id,
+            bpp_uri=bpp_uri,
+        )
+
+        collector.register(transaction_id, "on_confirm")
+        await self._post(self.adapter.caller_action_url("confirm"), payload)
+        callbacks = await collector.collect(transaction_id, "on_confirm", timeout=timeout)
+        collector.cleanup(transaction_id, "on_confirm")
+
+        return self._parse_on_confirm(transaction_id, callbacks)
+
+    async def status(
+        self,
+        *,
+        order_id: str,
+        transaction_id: str,
+        bpp_id: str,
+        bpp_uri: str,
+        collector: "CallbackCollector",
+        timeout: float = 15.0,
+    ) -> StatusResponse:
+        """Send /status and await the on_status callback.
+
+        Intended for periodic polling from the UI (30s SLA in Phase 2).
+        Each call uses a fresh message_id but the same transaction_id so
+        the BPP can correlate.
+        """
+        payload = self.adapter.build_status_wire_payload(
+            order_id=order_id,
+            transaction_id=transaction_id,
+            bpp_id=bpp_id,
+            bpp_uri=bpp_uri,
+        )
+
+        collector.register(transaction_id, "on_status")
+        await self._post(self.adapter.caller_action_url("status"), payload)
+        callbacks = await collector.collect(transaction_id, "on_status", timeout=timeout)
+        collector.cleanup(transaction_id, "on_status")
+
+        return self._parse_on_status(transaction_id, order_id, callbacks)
+
+    # ── Callback parsers ──────────────────────────────────────────────────────
+
+    @staticmethod
+    def _parse_on_init(
+        txn_id: str,
+        contract_id: str,
+        callbacks: list,
+    ) -> InitResponse:
+        """Extract payment terms + quote from on_init.
+
+        Supports both camelCase (real Beckn v2) and snake_case (mock) keys.
+        Missing payment block → the proposed terms stand as-is.
+        """
+        if not callbacks:
+            return InitResponse(
+                transaction_id=txn_id,
+                contract_id=contract_id,
+                payment_terms=None,
+                raw_message={},
+            )
+
+        cb = callbacks[0]
+        msg = cb.message
+        contract = msg.get("contract") or {}
+
+        payment_raw = contract.get("payment") or msg.get("payment") or {}
+        payment_terms = None
+        if payment_raw:
+            p_type = payment_raw.get("type") or "ON_FULFILLMENT"
+            if p_type not in ("ON_ORDER", "ON_FULFILLMENT", "POST_FULFILLMENT"):
+                p_type = "ON_FULFILLMENT"
+            payment_terms = PaymentTerms(
+                type=p_type,  # type: ignore[arg-type]
+                collected_by=(
+                    payment_raw.get("collectedBy")
+                    or payment_raw.get("collected_by")
+                    or "BPP"
+                ),
+                currency=payment_raw.get("currency", "INR"),
+                uri=payment_raw.get("uri"),
+                transaction_id=(
+                    payment_raw.get("transactionId")
+                    or payment_raw.get("transaction_id")
+                ),
+                status=payment_raw.get("status", "NOT-PAID"),
+            )
+
+        quote = contract.get("quote") or msg.get("quote") or {}
+        price = quote.get("price") or {}
+
+        return InitResponse(
+            context=cb.context,
+            transaction_id=txn_id,
+            contract_id=contract.get("id") or contract_id,
+            payment_terms=payment_terms,
+            quote_total=price.get("value"),
+            quote_currency=price.get("currency", "INR"),
+            raw_message=msg,
+        )
+
+    @staticmethod
+    def _parse_on_confirm(txn_id: str, callbacks: list) -> ConfirmResponse:
+        """Extract order_id + initial state from on_confirm.
+
+        Raises RuntimeError if the callback never arrived — /confirm with no
+        confirmation is a protocol failure the caller must surface.
+        """
+        if not callbacks:
+            raise RuntimeError(
+                f"/confirm timed out waiting for on_confirm (txn={txn_id})"
+            )
+
+        cb = callbacks[0]
+        msg = cb.message
+        order = msg.get("order") or msg.get("contract") or {}
+
+        order_id = (
+            order.get("id")
+            or order.get("orderId")
+            or msg.get("orderId")
+            or f"order-{txn_id}"
+        )
+        state_raw = (
+            (order.get("status") or {}).get("code")
+            if isinstance(order.get("status"), dict)
+            else order.get("state")
+        ) or "CREATED"
+        try:
+            state = OrderState(state_raw)
+        except ValueError:
+            state = OrderState.CREATED
+
+        eta = (
+            order.get("fulfillmentEta")
+            or order.get("fulfillment_eta")
+            or (order.get("fulfillment") or {}).get("eta")
+        )
+
+        return ConfirmResponse(
+            context=cb.context,
+            transaction_id=txn_id,
+            order_id=str(order_id),
+            state=state,
+            fulfillment_eta=eta,
+            raw_message=msg,
+        )
+
+    @staticmethod
+    def _parse_on_status(
+        txn_id: str,
+        order_id: str,
+        callbacks: list,
+    ) -> StatusResponse:
+        """Extract current state + tracking URL from on_status.
+
+        No callbacks → the order hasn't changed since last poll; return
+        CREATED as a safe default rather than raising so polling loops can
+        keep going.
+        """
+        if not callbacks:
+            return StatusResponse(
+                transaction_id=txn_id,
+                order_id=order_id,
+                state=OrderState.CREATED,
+                raw_message={},
+            )
+
+        cb = callbacks[0]
+        msg = cb.message
+        order = msg.get("order") or {}
+
+        state_raw = (
+            (order.get("status") or {}).get("code")
+            if isinstance(order.get("status"), dict)
+            else order.get("state")
+        ) or "CREATED"
+        try:
+            state = OrderState(state_raw)
+        except ValueError:
+            state = OrderState.CREATED
+
+        fulfillment = order.get("fulfillment") or {}
+
+        return StatusResponse(
+            context=cb.context,
+            transaction_id=txn_id,
+            order_id=str(order.get("id") or order.get("orderId") or order_id),
+            state=state,
+            fulfillment_eta=fulfillment.get("eta") or order.get("fulfillmentEta"),
+            tracking_url=fulfillment.get("trackingUrl") or order.get("trackingUrl"),
+            raw_message=msg,
+        )
 
     # ── Internal ──────────────────────────────────────────────────────────────
 

@@ -23,6 +23,67 @@ class BecknConfig(BaseSettings):
     # Used for async callbacks (on_select, on_init, on_confirm, on_status)
     callback_timeout: float = Field(default=10.0, alias="CALLBACK_TIMEOUT")
 
+    # ── Buyer billing (Phase 2 stub — read by ConfigBillingProvider) ──────────
+    # Swap to DatabaseBillingProvider in providers/__init__.py when the users
+    # table is wired into the runtime. These fields do not need to be touched
+    # in adapter/client/nodes — they only flow through the provider.
+    buyer_name: str = Field(
+        default="Infosys Limited - Procurement Desk",
+        alias="BUYER_NAME",
+    )
+    buyer_email: str = Field(
+        default="procurement@infosys.com",
+        alias="BUYER_EMAIL",
+    )
+    buyer_phone: str = Field(default="+91-80-28520261", alias="BUYER_PHONE")
+    buyer_tax_id: str = Field(default="29AAACI4741L1ZN", alias="BUYER_TAX_ID")
+
+    buyer_address_door: str = Field(default="Tower A", alias="BUYER_ADDRESS_DOOR")
+    buyer_address_building: str = Field(
+        default="Infosys Campus",
+        alias="BUYER_ADDRESS_BUILDING",
+    )
+    buyer_address_street: str = Field(
+        default="Electronic City Phase 1",
+        alias="BUYER_ADDRESS_STREET",
+    )
+    buyer_address_city: str = Field(default="Bangalore", alias="BUYER_ADDRESS_CITY")
+    buyer_address_state: str = Field(default="Karnataka", alias="BUYER_ADDRESS_STATE")
+    buyer_address_country: str = Field(default="IND", alias="BUYER_ADDRESS_COUNTRY")
+    buyer_address_area_code: str = Field(
+        default="560100",
+        alias="BUYER_ADDRESS_AREA_CODE",
+    )
+
+    # ── Default delivery fulfillment (Phase 2 stub) ───────────────────────────
+    # Read by ConfigFulfillmentProvider. By default, delivery goes to the same
+    # address as billing; override with DELIVERY_* env vars for a different
+    # delivery location.
+    delivery_same_as_billing: bool = Field(
+        default=True,
+        alias="DELIVERY_SAME_AS_BILLING",
+    )
+    delivery_contact_name: str = Field(
+        default="",
+        alias="DELIVERY_CONTACT_NAME",
+    )
+    delivery_contact_phone: str = Field(
+        default="",
+        alias="DELIVERY_CONTACT_PHONE",
+    )
+
+    # ── Default payment method (Phase 2 stub) ─────────────────────────────────
+    # Read by CODPaymentProvider. Beckn v2 payment types:
+    #   ON_ORDER | ON_FULFILLMENT (COD) | POST_FULFILLMENT (invoice/NET-30)
+    default_payment_type: str = Field(
+        default="ON_FULFILLMENT",
+        alias="DEFAULT_PAYMENT_TYPE",
+    )
+    default_payment_collector: str = Field(
+        default="BPP",
+        alias="DEFAULT_PAYMENT_COLLECTOR",
+    )
+
     model_config = SettingsConfigDict(
         env_file=str(_ENV_FILE),
         extra="ignore",

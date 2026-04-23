@@ -10,7 +10,6 @@ Requires:
   - .env configured (see .env.example)
 
 Run:
-    python run.py                                       # hardcoded intent
     python run.py "500 reams A4 paper Bangalore"        # NL query (Ollama)
 """
 from __future__ import annotations
@@ -26,7 +25,7 @@ from aiohttp import web
 
 from src.agent import ProcurementAgent
 from src.beckn.adapter import BecknProtocolAdapter
-from src.beckn.models import BecknIntent, BudgetConstraints
+from src.beckn.providers import build_providers
 from src.config import BecknConfig
 from src.server import collector, create_app
 
@@ -54,6 +53,7 @@ async def start_server(port: int = 8000) -> web.AppRunner:
 async def main() -> None:
     config = BecknConfig()
     adapter = BecknProtocolAdapter(config)
+    providers = build_providers(config)
     nl_query = sys.argv[1] if len(sys.argv) > 1 else None
 
     print("\n" + "=" * 60)
@@ -61,6 +61,7 @@ async def main() -> None:
     print("=" * 60)
     print(f"  BAP ID   : {config.bap_id}")
     print(f"  ONIX URL : {config.onix_url}")
+    print(f"  Buyer    : {config.buyer_name}")
     print(f"  Mode     : {'NL query' if nl_query else 'hardcoded intent'}")
 
     runner = await start_server(port=8000)
@@ -69,7 +70,9 @@ async def main() -> None:
         agent = ProcurementAgent(
             adapter=adapter,
             collector=collector,
+            providers=providers,
             discover_timeout=config.callback_timeout,
+            callback_timeout=config.callback_timeout,
         )
 
         print("\n  Running agent...\n")
@@ -77,7 +80,10 @@ async def main() -> None:
         if nl_query:
             result = await agent.arun(nl_query)
         else:
-            sys.exit("No NL query provided. Please run with a query argument, e.g.:\n  python run.py \"500 reams A4 paper Bangalore\"")
+            sys.exit(
+                "No NL query provided. Please run with a query argument, e.g.:\n"
+                "  python run.py \"500 reams A4 paper Bangalore\""
+            )
 
         print("  Reasoning trace:")
         for msg in result["messages"]:
@@ -87,7 +93,27 @@ async def main() -> None:
             print(f"\n  ERROR: {result['error']}")
             sys.exit(1)
 
-        print("\n  Done. Next: /init -> /confirm -> /status")
+        # Phase 2: if we have an order_id, demo a single /status poll
+        order_id = result.get("order_id")
+        if order_id:
+            selected = result.get("selected")
+            print("\n  Polling /status once for demo...")
+            try:
+                status = await agent.get_status(
+                    transaction_id=result["transaction_id"],
+                    order_id=order_id,
+                    bpp_id=selected.bpp_id,
+                    bpp_uri=selected.bpp_uri,
+                )
+                print(
+                    f"    [status] order={status.order_id} "
+                    f"state={status.state.value} "
+                    f"eta={status.fulfillment_eta or '-'}"
+                )
+            except Exception as exc:
+                print(f"    [status] failed: {exc}")
+
+        print("\n  Done.")
         print("=" * 60 + "\n")
 
     finally:

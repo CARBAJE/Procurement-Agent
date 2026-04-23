@@ -34,6 +34,7 @@ from src.beckn.adapter import BecknProtocolAdapter
 from src.beckn.callbacks import CallbackCollector
 from src.beckn.client import BecknClient
 from src.beckn.models import BecknIntent
+from src.beckn.providers import build_providers
 from src.config import BecknConfig
 
 logger = logging.getLogger(__name__)
@@ -251,7 +252,13 @@ async def discover(request: web.Request) -> web.Response:
         raise web.HTTPUnprocessableEntity(reason=f"Invalid BecknIntent: {exc}")
 
     adapter = BecknProtocolAdapter(config)
-    agent = ProcurementAgent(adapter, collector, discover_timeout=10.0)
+    agent = ProcurementAgent(
+        adapter,
+        collector,
+        providers=build_providers(config),
+        discover_timeout=10.0,
+        callback_timeout=10.0,
+    )
 
     try:
         state = await agent.arun_with_intent(intent)
