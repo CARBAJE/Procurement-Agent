@@ -27,6 +27,7 @@ services:
       - ONIX_URL=http://onix-bap:8081
       - BAP_URI=http://beckn-bap-client:8002
       - BAP_ID=bap.example.com
+      - DOMAIN=beckn.one/testnet
       - CALLBACK_TIMEOUT=10.0
     networks:
       - beckn_network
@@ -46,7 +47,8 @@ services:
   orchestrator:
     build: ./services/orchestrator
     ports:
-      - "8004:8004"
+      - "8000:8004"   # matches frontend .env.local BAP_URL/INTENT_PARSER_URL defaults
+      - "8004:8004"   # keep for direct testing
     environment:
       - INTENTION_PARSER_URL=http://intention-parser:8001
       - BECKN_BAP_URL=http://beckn-bap-client:8002

@@ -5,6 +5,9 @@ Single aiohttp server on port 8002 with three route groups:
 Orchestrator-facing:
   POST /discover   BecknIntent JSON → { transaction_id, offerings[] }
   POST /select     selection body  → { ack: "ACK" | "NACK" }
+  POST /init       init body       → { payment_terms, contract_id, ack }
+  POST /confirm    confirm body    → { order_id, order_state, ack }
+  POST /status     status body     → { state, fulfillment_eta, tracking_url }
 
 ONIX callback receiver:
   POST /bap/receiver/{action}   on_discover, on_select, on_init, on_confirm, on_status
@@ -258,6 +261,168 @@ async def _send_local_on_discover(context: dict) -> None:
         logger.error("Failed to send local on_discover: %s", exc)
 
 
+# ── Transactional routes: init / confirm / status ─────────────────────────────
+
+
+async def beckn_init(request: web.Request) -> web.Response:
+    """POST /init — send Beckn /init and await on_init callback.
+
+    Body: {transaction_id, contract_id, bpp_id, bpp_uri,
+           items: [{id, quantity, name, price_value, price_currency}]}
+    Response: {payment_terms, contract_id, ack}
+    """
+    try:
+        body = await request.json()
+    except json.JSONDecodeError:
+        raise web.HTTPBadRequest(reason="Invalid JSON")
+
+    transaction_id = body.get("transaction_id")
+    contract_id = body.get("contract_id")
+    bpp_id = body.get("bpp_id")
+    bpp_uri = body.get("bpp_uri")
+
+    if not all([transaction_id, contract_id, bpp_id, bpp_uri]):
+        raise web.HTTPBadRequest(reason="transaction_id, contract_id, bpp_id, bpp_uri are required")
+
+    try:
+        items = [SelectedItem(**i) for i in body.get("items", [])]
+    except Exception as exc:
+        raise web.HTTPUnprocessableEntity(reason=f"Invalid items: {exc}")
+
+    try:
+        adapter = BecknProtocolAdapter(config)
+        async with BecknClient(adapter) as client:
+            result = await client.init(
+                contract_id=contract_id,
+                items=items,
+                transaction_id=transaction_id,
+                bpp_id=bpp_id,
+                bpp_uri=bpp_uri,
+                collector=collector,
+                timeout=config.callback_timeout,
+            )
+        return web.json_response({
+            "payment_terms": result["payment_terms"],
+            "contract_id": contract_id,
+            "ack": "ACK",
+        })
+    except Exception as exc:
+        logger.error("/init failed: %s", exc)
+        raise web.HTTPInternalServerError(reason=f"/init failed: {exc}")
+
+
+async def beckn_confirm(request: web.Request) -> web.Response:
+    """POST /confirm — send Beckn /confirm and await on_confirm callback.
+
+    Body: {transaction_id, contract_id, bpp_id, bpp_uri, items, payment_terms?}
+    Response: {order_id, order_state, ack}
+
+    On callback timeout returns 200 with ack:"NACK" and order_id:null so the
+    orchestrator can build a mock response rather than receiving a 5xx.
+    """
+    try:
+        body = await request.json()
+    except json.JSONDecodeError:
+        raise web.HTTPBadRequest(reason="Invalid JSON")
+
+    transaction_id = body.get("transaction_id")
+    contract_id = body.get("contract_id")
+    bpp_id = body.get("bpp_id")
+    bpp_uri = body.get("bpp_uri")
+
+    if not all([transaction_id, contract_id, bpp_id, bpp_uri]):
+        raise web.HTTPBadRequest(reason="transaction_id, contract_id, bpp_id, bpp_uri are required")
+
+    payment_terms = body.get("payment_terms") or {
+        "type": "ON_FULFILLMENT",
+        "collected_by": "BPP",
+        "currency": "INR",
+        "status": "NOT-PAID",
+    }
+
+    try:
+        items = [SelectedItem(**i) for i in body.get("items", [])]
+    except Exception as exc:
+        raise web.HTTPUnprocessableEntity(reason=f"Invalid items: {exc}")
+
+    try:
+        adapter = BecknProtocolAdapter(config)
+        async with BecknClient(adapter) as client:
+            result = await client.confirm(
+                contract_id=contract_id,
+                items=items,
+                payment=payment_terms,
+                transaction_id=transaction_id,
+                bpp_id=bpp_id,
+                bpp_uri=bpp_uri,
+                collector=collector,
+                timeout=config.callback_timeout,
+            )
+        return web.json_response({
+            "order_id": result["order_id"],
+            "order_state": result["order_state"],
+            "ack": "ACK",
+        })
+    except RuntimeError:
+        # Callback timed out — return NACK so orchestrator falls back to mock
+        return web.json_response({
+            "order_id": None,
+            "order_state": "CREATED",
+            "ack": "NACK",
+        })
+    except Exception as exc:
+        logger.error("/confirm failed: %s", exc)
+        raise web.HTTPInternalServerError(reason=f"/confirm failed: {exc}")
+
+
+async def beckn_status(request: web.Request) -> web.Response:
+    """POST /status — send Beckn /status and await on_status callback.
+
+    Body: {transaction_id, order_id, bpp_id, bpp_uri, items}
+    Response: {state, fulfillment_eta, tracking_url}
+
+    Never returns 5xx — status polling must be resilient to failures.
+    """
+    try:
+        body = await request.json()
+    except json.JSONDecodeError:
+        raise web.HTTPBadRequest(reason="Invalid JSON")
+
+    transaction_id = body.get("transaction_id")
+    order_id = body.get("order_id")
+    bpp_id = body.get("bpp_id")
+    bpp_uri = body.get("bpp_uri")
+
+    if not all([transaction_id, order_id, bpp_id, bpp_uri]):
+        raise web.HTTPBadRequest(reason="transaction_id, order_id, bpp_id, bpp_uri are required")
+
+    try:
+        items = [SelectedItem(**i) for i in body.get("items", [])]
+    except Exception:
+        items = []
+
+    try:
+        adapter = BecknProtocolAdapter(config)
+        async with BecknClient(adapter) as client:
+            result = await client.status(
+                order_id=order_id,
+                items=items,
+                transaction_id=transaction_id,
+                bpp_id=bpp_id,
+                bpp_uri=bpp_uri,
+                collector=collector,
+                timeout=config.callback_timeout,
+            )
+        return web.json_response(result)
+    except Exception as exc:
+        logger.error("/status failed: %s", exc)
+        return web.json_response({
+            "state": "CREATED",
+            "fulfillment_eta": None,
+            "tracking_url": None,
+        })
+
+
 # ── App factory ───────────────────────────────────────────────────────────────
 
 
@@ -266,6 +431,10 @@ def create_app() -> web.Application:
     app.router.add_get("/health",                health)
     app.router.add_post("/discover",             discover)
     app.router.add_post("/select",               select)
+    # Transactional routes must be registered before the /{action} wildcard
+    app.router.add_post("/init",                 beckn_init)
+    app.router.add_post("/confirm",              beckn_confirm)
+    app.router.add_post("/status",               beckn_status)
     app.router.add_post("/bap/receiver/{action}", bap_receiver)
     app.router.add_post("/bpp/discover",         bpp_discover)   # ONIX discover routing target
     app.router.add_post("/{action}",             bap_receiver)   # real Beckn network callbacks
