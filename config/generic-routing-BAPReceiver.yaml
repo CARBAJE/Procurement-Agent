@@ -1,0 +1,22 @@
+# BAP Receiver Routing — inbound on_* callbacks from BPPs to the beckn-bap-client service
+#
+# All on_* callbacks are forwarded to the beckn-bap-client container (Lambda 2).
+# Both services share the beckn_network so the container name resolves directly.
+
+routingRules:
+  - domain: "beckn.one/testnet"
+    version: "2.0.0"
+    targetType: "url"
+    target:
+      url: "http://beckn-bap-client:8002/bap/receiver"
+    endpoints:
+      - on_discover
+      - on_select
+      - on_init
+      - on_confirm
+      - on_status
+      - on_track
+      - on_update
+      - on_cancel
+      - on_rate
+      - on_support

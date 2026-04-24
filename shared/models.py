@@ -65,3 +65,23 @@ class BecknIntent(BaseModel):
         if v is not None and v <= 0:
             raise ValueError("delivery_timeline must be positive (hours)")
         return v
+
+
+class DiscoverOffering(BaseModel):
+    """A single offering returned by the Discovery Service.
+
+    Shared across all microservices — single source of truth.
+    """
+
+    bpp_id: str
+    bpp_uri: str
+    provider_id: str
+    provider_name: str
+    item_id: str
+    item_name: str
+    price_value: str
+    price_currency: str = "INR"
+    available_quantity: Optional[int] = None
+    rating: Optional[str] = None
+    specifications: list[str] = Field(default_factory=list)
+    fulfillment_hours: Optional[int] = None
