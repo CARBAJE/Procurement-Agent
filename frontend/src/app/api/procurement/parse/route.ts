@@ -18,20 +18,23 @@ export async function POST(req: NextRequest) {
     const { data } = await axios.post(`${intentParserUrl}/parse`, { query })
     return NextResponse.json(data)
   } catch (err) {
+    // Surface the upstream failure verbatim — no silent mock fallback. The
+    // UI must show the user that NLP parsing failed rather than proceed
+    // with a fabricated intent (e.g., quantity=1, default coords) that
+    // doesn't reflect the query.
     console.error("[parse proxy] IntentParser error:", err)
-    return NextResponse.json({
-      intent: "procurement",
-      confidence: 0.95,
-      beckn_intent: {
-        item: query,
-        descriptions: [],
-        quantity: 1,
-        unit: "unit",
-        location_coordinates: "12.9716,77.5946",
-        delivery_timeline: 72,
-        budget_constraints: { max: 1000 },
+    if (axios.isAxiosError(err) && err.response) {
+      return NextResponse.json(
+        err.response.data ?? { error: "Intent parsing failed" },
+        { status: err.response.status },
+      )
+    }
+    return NextResponse.json(
+      {
+        error: "IntentParser unreachable",
+        detail: "Start the BAP server: python -m src.server (from Bap-1/)",
       },
-      routed_to: "mock (IntentParser offline)",
-    })
+      { status: 502 },
+    )
   }
 }

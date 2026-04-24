@@ -9,25 +9,36 @@ import pytest
 from aioresponses import aioresponses
 
 from src.beckn.client import BecknClient
-from src.beckn.models import OrderState, StatusResponse
+from src.beckn.models import OrderState, SelectedItem, StatusResponse
 
 ACK = {"message": {"ack": {"status": "ACK"}}}
 STATUS_URL = "http://mock-onix.test/bap/caller/status"
 
 
+@pytest.fixture
+def sample_items():
+    return [SelectedItem(id="item-a4", quantity=500, name="A4 Paper",
+                         price_value="189.00", price_currency="INR")]
+
+
 # ── Adapter: payload builder ──────────────────────────────────────────────────
 
 
-def test_build_status_wire_payload_action(adapter):
+def test_build_status_wire_payload_action(adapter, sample_items):
     payload = adapter.build_status_wire_payload(
         order_id="order-123",
+        items=sample_items,
         transaction_id="txn-1",
         bpp_id="bpp-1",
         bpp_uri="http://bpp.test",
     )
     assert payload["context"]["action"] == "status"
     assert payload["context"]["transactionId"] == "txn-1"
-    assert payload["message"]["orderId"] == "order-123"
+    # v2.1 wraps the order id inside contract.id (not a bare orderId field).
+    assert payload["message"]["contract"]["id"] == "order-123"
+    # /status inherits Contract.required=[commitments], so commitments must
+    # be replayed on every poll.
+    assert len(payload["message"]["contract"]["commitments"]) == 1
 
 
 def test_status_url_points_to_onix(adapter):
@@ -72,7 +83,7 @@ def _on_status_payload(order_id: str, state: str, eta: str | None = None) -> dic
     ],
 )
 async def test_status_parses_every_lifecycle_state(
-    adapter, collector, raw_state, expected,
+    adapter, collector, sample_items, raw_state, expected,
 ):
     payload = _on_status_payload("order-abc", raw_state, eta="2026-04-26T10:00:00Z")
 
@@ -86,6 +97,7 @@ async def test_status_parses_every_lifecycle_state(
             task = asyncio.create_task(_task())
             resp = await client.status(
                 order_id="order-abc",
+                items=sample_items,
                 transaction_id="txn-status-1",
                 bpp_id="bpp-1",
                 bpp_uri="http://bpp.test",
@@ -101,7 +113,7 @@ async def test_status_parses_every_lifecycle_state(
     assert resp.tracking_url == "http://track/order-abc"
 
 
-async def test_status_unknown_state_defaults_to_created(adapter, collector):
+async def test_status_unknown_state_defaults_to_created(adapter, collector, sample_items):
     """Unknown state strings should degrade safely, not crash the polling loop."""
     payload = _on_status_payload("order-abc", "WEIRD_VALUE")
 
@@ -115,6 +127,7 @@ async def test_status_unknown_state_defaults_to_created(adapter, collector):
             task = asyncio.create_task(_task())
             resp = await client.status(
                 order_id="order-abc",
+                items=sample_items,
                 transaction_id="txn-status-1",
                 bpp_id="bpp-1",
                 bpp_uri="http://bpp.test",
@@ -126,13 +139,14 @@ async def test_status_unknown_state_defaults_to_created(adapter, collector):
     assert resp.state == OrderState.CREATED
 
 
-async def test_status_no_callback_returns_created(adapter, collector):
+async def test_status_no_callback_returns_created(adapter, collector, sample_items):
     """A silent BPP should not raise — polling loops must keep going."""
     with aioresponses() as mock:
         mock.post(STATUS_URL, payload=ACK)
         async with BecknClient(adapter) as client:
             resp = await client.status(
                 order_id="order-abc",
+                items=sample_items,
                 transaction_id="txn-silent",
                 bpp_id="bpp-1",
                 bpp_uri="http://bpp.test",
@@ -144,13 +158,14 @@ async def test_status_no_callback_returns_created(adapter, collector):
     assert resp.order_id == "order-abc"
 
 
-async def test_status_raises_on_onix_error(adapter, collector):
+async def test_status_raises_on_onix_error(adapter, collector, sample_items):
     with aioresponses() as mock:
         mock.post(STATUS_URL, status=503)
         async with BecknClient(adapter) as client:
             with pytest.raises(Exception):
                 await client.status(
                     order_id="order-abc",
+                    items=sample_items,
                     transaction_id="txn-err",
                     bpp_id="bpp-1",
                     bpp_uri="http://bpp.test",

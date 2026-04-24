@@ -252,6 +252,7 @@ class BecknClient:
         self,
         *,
         contract_id: str,
+        items: list[SelectedItem],
         payment: PaymentTerms,
         transaction_id: str,
         bpp_id: str,
@@ -263,9 +264,13 @@ class BecknClient:
 
         On success the BPP returns an order_id that drives all subsequent
         /status polling. Failure to get a callback within `timeout` raises.
+
+        Items are re-included in the payload because the Beckn v2.1 Contract
+        schema requires `commitments` on every message that carries a Contract.
         """
         payload = self.adapter.build_confirm_wire_payload(
             contract_id=contract_id,
+            items=items,
             payment=payment,
             transaction_id=transaction_id,
             bpp_id=bpp_id,
@@ -283,6 +288,7 @@ class BecknClient:
         self,
         *,
         order_id: str,
+        items: list[SelectedItem],
         transaction_id: str,
         bpp_id: str,
         bpp_uri: str,
@@ -294,9 +300,13 @@ class BecknClient:
         Intended for periodic polling from the UI (30s SLA in Phase 2).
         Each call uses a fresh message_id but the same transaction_id so
         the BPP can correlate.
+
+        Items must be replayed because the v2.1 /status action inherits
+        Contract's required `commitments` field.
         """
         payload = self.adapter.build_status_wire_payload(
             order_id=order_id,
+            items=items,
             transaction_id=transaction_id,
             bpp_id=bpp_id,
             bpp_uri=bpp_uri,
@@ -319,8 +329,9 @@ class BecknClient:
     ) -> InitResponse:
         """Extract payment terms + quote from on_init.
 
-        Supports both camelCase (real Beckn v2) and snake_case (mock) keys.
-        Missing payment block → the proposed terms stand as-is.
+        In v2.1 the BPP returns payment as `contract.settlements[0]`. We also
+        accept the legacy `contract.payment` shape so older fixtures (and mock
+        servers) keep working. Missing payment block → the proposed terms stand.
         """
         if not callbacks:
             return InitResponse(
@@ -334,7 +345,11 @@ class BecknClient:
         msg = cb.message
         contract = msg.get("contract") or {}
 
-        payment_raw = contract.get("payment") or msg.get("payment") or {}
+        # v2.1: contract.settlements[0]; legacy: contract.payment or msg.payment.
+        settlements = contract.get("settlements") or []
+        settlement = settlements[0] if settlements else {}
+        payment_raw = settlement or contract.get("payment") or msg.get("payment") or {}
+
         payment_terms = None
         if payment_raw:
             p_type = payment_raw.get("type") or "ON_FULFILLMENT"
@@ -356,8 +371,12 @@ class BecknClient:
                 status=payment_raw.get("status", "NOT-PAID"),
             )
 
+        # Quote: v2.1 prefers consideration[0].price; legacy uses contract.quote.
+        considerations = contract.get("consideration") or []
+        consid_price = (considerations[0].get("price") if considerations else None) or {}
         quote = contract.get("quote") or msg.get("quote") or {}
-        price = quote.get("price") or {}
+        legacy_price = quote.get("price") or {}
+        price = consid_price or legacy_price
 
         return InitResponse(
             context=cb.context,
@@ -373,8 +392,10 @@ class BecknClient:
     def _parse_on_confirm(txn_id: str, callbacks: list) -> ConfirmResponse:
         """Extract order_id + initial state from on_confirm.
 
-        Raises RuntimeError if the callback never arrived — /confirm with no
-        confirmation is a protocol failure the caller must surface.
+        In v2.1 the BPP response is `message.contract.{id, status.code,
+        performance[0]...}`. We also accept the legacy `message.order` shape
+        so older fixtures keep working. No callback → RuntimeError (a protocol
+        failure the caller must surface).
         """
         if not callbacks:
             raise RuntimeError(
@@ -383,7 +404,8 @@ class BecknClient:
 
         cb = callbacks[0]
         msg = cb.message
-        order = msg.get("order") or msg.get("contract") or {}
+        # v2.1: the order IS the contract. Legacy fixtures nested it under `order`.
+        order = msg.get("contract") or msg.get("order") or {}
 
         order_id = (
             order.get("id")
@@ -401,9 +423,13 @@ class BecknClient:
         except ValueError:
             state = OrderState.CREATED
 
+        # v2.1: ETA lives in performance[0].performanceAttributes.eta (best effort).
+        performance = order.get("performance") or []
+        perf_attrs = (performance[0].get("performanceAttributes") if performance else None) or {}
         eta = (
             order.get("fulfillmentEta")
             or order.get("fulfillment_eta")
+            or perf_attrs.get("eta")
             or (order.get("fulfillment") or {}).get("eta")
         )
 
@@ -424,9 +450,10 @@ class BecknClient:
     ) -> StatusResponse:
         """Extract current state + tracking URL from on_status.
 
-        No callbacks → the order hasn't changed since last poll; return
-        CREATED as a safe default rather than raising so polling loops can
-        keep going.
+        v2.1 shape: `message.contract.{id, status, performance[0]}`.
+        Legacy: `message.order.{id, state, fulfillment}`.
+
+        No callbacks → return CREATED so polling loops can keep running.
         """
         if not callbacks:
             return StatusResponse(
@@ -438,7 +465,7 @@ class BecknClient:
 
         cb = callbacks[0]
         msg = cb.message
-        order = msg.get("order") or {}
+        order = msg.get("contract") or msg.get("order") or {}
 
         state_raw = (
             (order.get("status") or {}).get("code")
@@ -450,15 +477,29 @@ class BecknClient:
         except ValueError:
             state = OrderState.CREATED
 
-        fulfillment = order.get("fulfillment") or {}
+        # v2.1: tracking + ETA live in performance[0].performanceAttributes.
+        performance = order.get("performance") or []
+        perf_attrs = (performance[0].get("performanceAttributes") if performance else None) or {}
+        legacy_fulfillment = order.get("fulfillment") or {}
+
+        eta = (
+            perf_attrs.get("eta")
+            or legacy_fulfillment.get("eta")
+            or order.get("fulfillmentEta")
+        )
+        tracking_url = (
+            perf_attrs.get("trackingUrl")
+            or legacy_fulfillment.get("trackingUrl")
+            or order.get("trackingUrl")
+        )
 
         return StatusResponse(
             context=cb.context,
             transaction_id=txn_id,
             order_id=str(order.get("id") or order.get("orderId") or order_id),
             state=state,
-            fulfillment_eta=fulfillment.get("eta") or order.get("fulfillmentEta"),
-            tracking_url=fulfillment.get("trackingUrl") or order.get("trackingUrl"),
+            fulfillment_eta=eta,
+            tracking_url=tracking_url,
             raw_message=msg,
         )
 

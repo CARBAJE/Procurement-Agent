@@ -36,6 +36,17 @@ python -m src.server       # NOT python src/server.py (import resolution breaks)
 
 This is a **Beckn Protocol v2 BAP (Buyer Application Platform)** — the buyer side of an open commerce network. The Python layer never talks directly to BPPs (sellers); all traffic routes through a **beckn-onix adapter** (Go service, port 8081) which handles ED25519 signing and network routing.
 
+### Frontend-facing HTTP API (split two-step flow — Milestone 2)
+
+| Route | Purpose |
+|---|---|
+| `POST /parse` | NL → `BecknIntent` via IntentParser (Ollama) |
+| `POST /compare` | Run `arun_compare()` (discover + rank only), store state under `transaction_id`, return offerings + scoring + reasoning_steps |
+| `POST /commit` | Load session by `transaction_id`, override `selected` with user's `chosen_item_id`, run `arun_commit()` (select + init + confirm), return `order_id` + `order_state` + payment terms |
+| `GET /status/{txn_id}/{order_id}` | Poll order lifecycle; `bpp_id`/`bpp_uri` are recovered from the session if omitted |
+
+All four fall back to a mock response (`status: "mock"`) when the ONIX Docker stack is offline, so the frontend works standalone. Session state is held in `src/agent/session.py::TransactionSessionStore` (in-memory, TTL 1800s) — swap to `PostgresBackend` via the `StateBackend` Protocol when DB persistence lands.
+
 ### Two-phase flow
 
 **Discovery (async):** BAP sends `POST /bap/caller/discover` to ONIX adapter → adapter routes to the local catalog endpoint (`/bpp/discover` on `src/server.py`) → server ACKs immediately and fires an async `on_discover` callback back to `/bap/receiver/on_discover` → `CallbackCollector` wakes up `discover_async()`.
@@ -52,7 +63,11 @@ This is a **Beckn Protocol v2 BAP (Buyer Application Platform)** — the buyer s
 
 - **`src/beckn/callbacks.py`** — `CallbackCollector` uses one `asyncio.Queue` per `(transaction_id, action)` tuple. This is how the async callbacks are correlated back to the code that sent the request. Always `register()` before sending the action, `cleanup()` after `collect()`.
 
-- **`src/server.py`** — aiohttp server on port 8000. Two routes: `POST /bap/receiver/{action}` receives all inbound callbacks and dispatches to `CallbackCollector`; `POST /bpp/discover` acts as the local catalog service (receives discover from `onix-bap`, fires async `on_discover` back). A module-level `collector` singleton is shared between `server.py` and `run.py`.
+- **`src/agent/session.py`** — `TransactionSessionStore` with `InMemoryBackend` (TTL 1800s, background sweeper). Holds `ProcurementState` between `/compare` and `/commit`. Implements a `StateBackend` Protocol so a future `PostgresBackend` is a one-line swap in `server.py::create_app`.
+
+- **`src/agent/graph.py`** — three graph factories sharing the same nodes: `build_graph` (full flow, used by `run.py`), `build_compare_graph` (stops after `rank_and_select`), `build_commit_graph` (starts at `send_select`). `ProcurementAgent` wraps all three.
+
+- **`src/server.py`** — aiohttp server on port 8000. Frontend routes: `/parse`, `/compare`, `/commit`, `/status/{txn}/{order}`. Protocol routes: `POST /bap/receiver/{action}` for callbacks, `POST /bpp/discover` as local catalog (6 offerings with diverse price / rating / ETA / stock). Helper `_build_scoring()` produces a multi-criterion-ready payload (currently a single `price` criterion) — swap for a `ScoringStrategy` when the Comparison Engine lands. Module-level `collector` + `session_store` are shared with `run.py`.
 
 - **`mock_onix.py`** — Legacy mock of the Go beckn-onix adapter. Used only by unit tests (via `aioresponses`). Not used for local dev — the real `onix-bap` Docker container replaces it.
 
@@ -77,3 +92,30 @@ Implemented as a **Facade** over the standalone `IntentParser/` module (one leve
 - Beckn v2.0.0 `/select` uses `{ contract: { commitments, consideration } }` — **not** `{ order: ... }`. The ONIX adapter validates against the official spec and rejects `order`.
 - `SelectedItem` carries optional `name`, `price_value`, `price_currency` fields used to build the `contract` wire payload. Always pass these from the `DiscoverOffering` when calling `client.select()`.
 - The ONIX adapter appends the action name to the routing target URL — e.g. target `http://host:8000/bpp` + action `discover` → `http://host:8000/bpp/discover`. Never include the action name in the target URL inside routing config files.
+
+## Beckn v2.1 wire shape — hard-won gotchas
+
+These were discovered the hard way by validating the full `/discover → /select → /init → /confirm → /status` flow against the live ONIX Go validator. The unit tests mock HTTP and would not have caught these. If you're about to change anything in `src/beckn/adapter.py` or `src/beckn/client.py` parsers, read these first:
+
+1. **`Contract` has `additionalProperties: false`.** Only these keys pass: `id, commitments, consideration, participants, performance, settlements, status, descriptor, contractAttributes`. **Billing and fulfillment DO NOT go inline** — buyer info goes in `participants[role=buyer]` (permissive), fulfillment info in `performance[]` (strict envelope), payment in `settlements[]` (permissive).
+2. **`Contract.commitments` is required everywhere a Contract appears** — `/init`, `/confirm`, and even `/status` (which inherits via `allOf: [Contract, {required: [id]}]`). `send_confirm` and `send_status` replay items each time to rebuild commitments. Don't "optimize" that away.
+3. **`Contract.status.code` enum: `DRAFT | ACTIVE | CANCELLED | COMPLETE`.** `/select` uses DRAFT, `/confirm` uses ACTIVE. Do NOT use "CONFIRMED" — the validator rejects it.
+4. **Performance envelope is strict** (`{id, status, commitmentIds, performanceAttributes}`), but `performanceAttributes` is typed as `Attributes` — a JSON-LD container that REQUIRES `@context` (a URI) and `@type` (an IRI). The ONIX validator will then HTTP-GET that URI as a schema; if 404, validation fails. **Today we omit `performanceAttributes` entirely** to dodge this — see `TODO(beckn-v2.1-context)` and `Bap-1/docs/ARCHITECTURE.md §7.1 #1` for the full story and unblock options.
+5. **`/status` wire payload is `{message: {contract: {id, commitments}}}`** — NOT `{message: {orderId: ...}}`. The order id goes inside `contract.id`, and commitments must be replayed (see #2).
+6. **The Beckn schemas are compiled inside `/app/plugins/schemav2validator.so` in the ONIX container** and are not in any JSON file. To discover a sub-schema, probe with a deliberately bogus field — the error message echoes the full schema inline. Example: `curl -X POST http://localhost:8081/bap/caller/init -d '{"message":{"contract":{"commitments":[...],"performance":[{"bogusField":"x"}]}}}'` then read `docker logs onix-bap | grep 'Schema validation failed'`.
+7. **`{participants, settlements}` entry objects are permissive** (no `additionalProperties: false`) but `performance` entries are strict. Probe first before assuming.
+8. **Every message carrying a Contract** (init, confirm, status) **requires `items` passed down from state** — `send_init`, `send_confirm`, `send_status` nodes all pull `selected + intent.quantity` to rebuild `SelectedItem` lists. If you add a new action, follow the same pattern.
+
+## Production blockers (what's stubbed / deliberately deferred)
+
+Full catalog in `Bap-1/docs/ARCHITECTURE.md §7` with 14 items grouped by category (protocol, data, security, ops). Each has a grep-able TODO marker in the code pointing back to its row in §7. Quick index:
+
+| TODO marker | Grep | Section |
+|---|---|---|
+| `TODO(beckn-v2.1-context)` | `adapter.py::_performance_dict` | §7.1 #1 |
+| `TODO(persistence)` | `session.py`, `server.py`, `frontend/src/lib/session-store.ts` | §7.2 #6 |
+| `TODO(comparison-engine)` | `nodes.py::rank_and_select`, `server.py::_build_scoring` | §7.2 #7 |
+| `TODO(approval-workflow)` | `server.py::commit`, `ConfirmCommitDialog.tsx` | §7.3 #10 |
+| `TODO(realtime-ws)` | `server.py::status`, `StatusPoller.tsx` | §7.4 #11 |
+
+Before implementing any of these, read §7 — it documents the unblock options, the owner (some are assigned to other teammates, not Eduardo), and the extension points that are already in place so the swap is a one-line change.

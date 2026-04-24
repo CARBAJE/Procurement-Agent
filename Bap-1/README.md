@@ -1,7 +1,7 @@
 # BAP-1 — Beckn Buyer Application Platform
 
-> Week 1 milestone: Core API Flows (`/discover`, `/select`)  
-> **Beckn Protocol v2**
+> Phase 2 milestones delivered (Eduardo): Full Transaction Flow ✅ · Comparison UI ✅
+> **Beckn Protocol v2.1** (validated live against the sandbox ONIX stack)
 
 ---
 
@@ -11,9 +11,10 @@ This is the **BAP (Buyer Application Platform)** — the buyer-side client of th
 
 When the AI agent wants to buy something, it uses this library to:
 
-1. **Discover** sellers — send intent to the ONIX adapter, wait for `on_discover` callback with catalog
-2. **Select** the best offer and signal intent to the chosen seller (`/select`)
-3. **Complete** the order lifecycle: init → confirm → status *(Phase 2)*
+1. **Discover** sellers — send intent to the ONIX adapter, wait for `on_discover` callback with catalog.
+2. **Compare** offerings side-by-side with multi-criterion-ready scoring (today: price only, Comparison Engine plugs in later).
+3. **Commit** the chosen order through `/select` → `/init` → `/confirm`, splitting state between a `/compare` (discover + rank) and `/commit` (the transactional tail) so the UI can show alternatives before the order is final.
+4. **Track** order state via `/status` polling (30 s SLA; swap-ready for WebSocket push).
 
 ---
 
@@ -59,23 +60,39 @@ The Python BAP never talks directly to BPPs. All traffic goes through the **beck
 
 bap-1/
 ├── src/
-│   ├── config.py               # BecknConfig (env-driven settings)
-│   ├── server.py               # aiohttp server on port 8000:
-│   │                           #   POST /bap/receiver/{action}  — async callbacks
-│   │                           #   POST /bpp/discover           — local catalog endpoint
+│   ├── config.py                  # BecknConfig (env-driven settings)
+│   ├── server.py                  # aiohttp :8000 — frontend API + callback receiver:
+│   │                              #   POST /parse                       NL → BecknIntent
+│   │                              #   POST /compare                     discover + rank only
+│   │                              #   POST /commit                      select + init + confirm
+│   │                              #   GET  /status/{txn}/{order}        poll order state
+│   │                              #   POST /bap/receiver/{action}       async callbacks from ONIX
+│   │                              #   POST /bpp/discover                local catalog endpoint
 │   ├── nlp/
-│   │   ├── __init__.py         # re-exports parse_nl_to_intent
-│   │   └── intent_parser_facade.py  # Facade over IntentParser NLP module
+│   │   └── intent_parser_facade.py
+│   ├── agent/
+│   │   ├── state.py               # ProcurementState TypedDict (17 fields, reasoning_steps)
+│   │   ├── nodes.py               # 8 async nodes: parse_intent, discover, rank_and_select,
+│   │   │                          # send_select, send_init, send_confirm, send_status, present_results
+│   │   ├── graph.py               # build_graph / build_compare_graph / build_commit_graph
+│   │   │                          # + ProcurementAgent (arun, arun_compare, arun_commit, get_status)
+│   │   └── session.py             # TransactionSessionStore + StateBackend Protocol (swap to Postgres)
 │   └── beckn/
-│       ├── models.py           # Pydantic v2 protocol models; re-exports BecknIntent from shared/
-│       ├── adapter.py          # Protocol adapter (context building, wire payloads, URLs)
-│       ├── client.py           # Async HTTP client (aiohttp)
-│       └── callbacks.py        # CallbackCollector for on_discover/on_select/etc.
+│       ├── models.py              # Pydantic v2 protocol models; BecknIntent from shared/
+│       ├── adapter.py             # v2.1 payload builders + URL helpers
+│       ├── client.py              # Async aiohttp client (discover/select/init/confirm/status)
+│       ├── callbacks.py           # CallbackCollector — asyncio.Queue per (txn_id, action)
+│       └── providers/             # Provider Pattern for billing/fulfillment/payment (swap point)
 ├── tests/
-│   ├── conftest.py             # Shared pytest fixtures
-│   ├── test_discover.py        # /discover flow tests
-│   ├── test_select.py          # /select flow tests
-│   └── test_intent_parser.py   # NL parser facade unit + integration tests
+│   ├── conftest.py                # Shared pytest fixtures
+│   ├── test_discover.py, test_select.py,
+│   │   test_init.py, test_confirm.py, test_status.py   # per-action flow tests (v2.1 wire shape)
+│   ├── test_agent.py              # Full graph via AsyncMock client
+│   ├── test_compare_commit.py     # Compare/commit partial graphs
+│   ├── test_session_store.py      # TransactionSessionStore unit tests
+│   ├── test_scoring_builder.py    # _build_scoring helper
+│   ├── test_server_endpoints.py   # HTTP routing + JSON shape via aiohttp.test_utils
+│   └── test_intent_parser.py      # NL parser facade (unit + opt-in integration)
 ├── starter-kit/
 │   └── generic-devkit/
 │       ├── config/
@@ -180,14 +197,35 @@ async with BecknClient(adapter) as client:
     # Discover — async, waits for on_discover callback
     discover_resp = await client.discover_async(intent, collector, timeout=15.0)
 
-    # Select — sends contract, waits for on_select callback separately
+    # Select — sends contract, awaits on_select (fire-and-forget in practice)
     ack = await client.select(order, txn_id, bpp_id, bpp_uri)
+
+    # Init — sends buyer+fulfillment, awaits on_init with payment terms
+    init_resp = await client.init(
+        contract_id=..., items=..., billing=..., fulfillment=...,
+        transaction_id=..., bpp_id=..., bpp_uri=..., collector=collector,
+    )
+
+    # Confirm — commits with payment, awaits on_confirm with order_id
+    confirm_resp = await client.confirm(
+        contract_id=..., items=..., payment=..., transaction_id=...,
+        bpp_id=..., bpp_uri=..., collector=collector,
+    )
+
+    # Status — polls lifecycle state; items replayed for v2.1 commitments requirement
+    status_resp = await client.status(
+        order_id=..., items=..., transaction_id=...,
+        bpp_id=..., bpp_uri=..., collector=collector,
+    )
 ```
 
 | Method | Sends to | Returns |
 |---|---|---|
-| `discover_async(intent, collector)` | `onix-bap /bap/caller/discover` | `DiscoverResponse` (via callback) |
-| `select(order, txn_id, bpp_id, bpp_uri)` | `onix-bap /bap/caller/select` | ACK dict |
+| `discover_async(intent, collector)` | `/bap/caller/discover` | `DiscoverResponse` via callback |
+| `select(order, txn_id, bpp_id, bpp_uri)` | `/bap/caller/select` | ACK dict |
+| `init(...)` | `/bap/caller/init` | `InitResponse` with payment terms |
+| `confirm(...)` | `/bap/caller/confirm` | `ConfirmResponse` with order_id |
+| `status(...)` | `/bap/caller/status` | `StatusResponse` with current state |
 
 ---
 
@@ -206,13 +244,25 @@ collector.cleanup(txn_id, "on_select")
 
 ### `src/server.py`
 
-`aiohttp` server on port 8000 with two responsibilities:
+`aiohttp` server on port 8000 with two groups of responsibilities:
 
-**Callback receiver** — `POST /bap/receiver/{action}`  
-Receives `on_discover`, `on_select`, `on_init`, `on_confirm`, `on_status` from onix-bap and routes them to `CallbackCollector`.
+**Frontend-facing HTTP API** (consumed by the Next.js proxies in `frontend/src/app/api/procurement/`):
 
-**Local catalog endpoint** — `POST /bpp/discover`  
-Acts as the local Catalog Discovery Service. onix-bap routes discover requests here (via `BAPCaller.yaml`). Returns the hardcoded A4 paper catalog as an async `on_discover` callback.
+| Route | Purpose |
+|---|---|
+| `POST /parse` | NL → BecknIntent (Ollama via IntentParser). Errors propagate — no silent mock. |
+| `POST /compare` | Runs `ProcurementAgent.arun_compare()` (discover + rank only); stores state in `TransactionSessionStore`; returns offerings + scoring + reasoning trace. |
+| `POST /commit` | Loads session, overrides `selected` with user's pick, runs `arun_commit()` (select + init + confirm); returns order_id + state. |
+| `GET  /status/{txn_id}/{order_id}` | Polls order state; rebuilds `items` from session to satisfy v2.1's Contract.commitments requirement. |
+
+**Protocol layer** (speaks to the ONIX Go adapter):
+
+| Route | Purpose |
+|---|---|
+| `POST /bap/receiver/{action}` | Receives async callbacks `on_discover`, `on_select`, `on_init`, `on_confirm`, `on_status` and routes them to `CallbackCollector`. |
+| `POST /bpp/discover` | Local Catalog Discovery Service stub. onix-bap routes discover requests here (via `BAPCaller.yaml`). Returns the 6-item local catalog as an async `on_discover` callback. |
+
+All four frontend-facing routes fall back to mock data (`status: "mock"`) when the ONIX stack is unavailable — so the UI works standalone for demos without Docker.
 
 ---
 
@@ -260,35 +310,7 @@ python run.py
 python run.py "500 reams A4 paper 80gsm Bangalore, 3 days, max 200 INR"
 ```
 
-Expected output:
-```
-============================================================
-  Real BAP -- Beckn Protocol v2
-============================================================
-  BAP ID     : bap.example.com
-  ONIX URL   : http://localhost:8081
-  Item       : A4 paper 80gsm
-  Quantity   : 500
-  Budget max : Rs. 200.0
-
-  Discovering ...
-
-  3 offering(s) found:
-
-    [bpp.example.com     ]  OfficeWorld Supplies            Rs. 195.00  *4.8
-    [bpp.example.com     ]  PaperDirect India               Rs. 189.00  *4.5
-    [bpp.example.com     ]  Stationery Hub                  Rs. 201.00  *4.9
-
-  Selected : PaperDirect India
-  Price    : Rs. 189.00
-  BPP      : bpp.example.com
-
-  Selecting PaperDirect India ...
-  on_select: RECEIVED
-
-  Done. Next: /init -> /confirm -> /status
-============================================================
-```
+Expected output: the NL query is parsed, discover returns 6 offerings, the cheapest (Budget Paper Co at ₹165) is selected, `/select` → `/init` → `/confirm` round-trip completes, and a final `order_id` is assigned by the BPP. The trace ends with "Order CONFIRMED — <provider> | <item> × <qty> | ₹<price> INR | order=<id> state=CREATED".
 
 ### Stopping the stack
 
@@ -300,13 +322,16 @@ docker compose -f docker-compose-my-bap.yml down
 
 ## Running Tests
 
-Tests use `aioresponses` to mock all HTTP calls — no Docker needed.
+129 tests across 12 files. All HTTP is mocked with `aioresponses` — no Docker needed for tests. Ollama integration tests are opt-in.
 
 ```bash
-pytest tests/ -v
-pytest tests/test_discover.py -v
-pytest tests/test_select.py -v
+pytest tests/ -v                                                # full suite
+pytest tests/ -v --deselect tests/test_intent_parser.py::test_integration_parse_nl_to_intent   # skip Ollama
+pytest tests/test_init.py -v                                    # one flow
+pytest tests/test_compare_commit.py::test_compare_recommends_cheapest -v  # one test
 ```
+
+Breakdown: agent 21 · callbacks 10 · discover 17 · init 8 · confirm 8 · status 11 · select 9 · intent_parser 10 · session_store 10 · compare_commit 11 · scoring_builder 7 · server_endpoints 10.
 
 ---
 
@@ -324,12 +349,14 @@ pytest tests/test_select.py -v
 
 ## Roadmap
 
-| Phase | Weeks | Milestone |
-|---|---|---|
-| **1 — Foundation** | 1–4 | Core API flows (v2) ✅, NL Intent Parser ✅, Agent Framework, Data Models |
-| **2 — Intelligence** | 5–8 | `/init`, `/confirm`, `/status`, Catalog Normalizer, Comparison Engine |
-| **3 — Advanced** | 9–12 | Negotiation Engine, Agent Memory (Vector DB), Audit Trail, ERP Integration |
-| **4 — Production** | 13–16 | Performance, Security Hardening, CI/CD, Evaluation Suite |
+| Phase | Weeks | Milestone | Status |
+|---|---|---|---|
+| **1 — Foundation** | 1–4 | Core API flows (v2), NL Intent Parser, Agent Framework, Data Models | ✅ Complete |
+| **2 — Intelligence** | 5–8 | Eduardo: Full Transaction Flow (`/init`, `/confirm`, `/status`) + Comparison UI. Others: Catalog Normalizer, Comparison Engine, Approval Workflow, Real-time Tracking, DB persistence | ✅ Eduardo · ⏳ Others |
+| **3 — Advanced** | 9–12 | Negotiation Engine, Agent Memory (Vector DB), Audit Trail, ERP Integration | ⏳ |
+| **4 — Production** | 13–16 | Performance, Security Hardening, CI/CD, Evaluation Suite, JSON-LD context resolution | ⏳ |
+
+**What's stubbed and why** — see `docs/ARCHITECTURE.md §7` for the full inventory of 14 production blockers, their TODO markers in the code, and the recommended unblock options.
 
 ---
 
@@ -339,9 +366,19 @@ pytest tests/test_select.py -v
 |---|---|
 | Protocol Models | Pydantic v2 |
 | Async HTTP | aiohttp |
-| Configuration | pydantic-settings |
+| Agent Framework | LangGraph (three partial graphs reusing the same nodes: full / compare / commit) |
+| NL Intent Parser | Ollama (qwen3:8b / qwen3:1.7b) via `instructor` + OpenAI SDK — called from the `IntentParser/` module one level up |
+| Session store | In-memory dict with 30 min TTL + async sweeper; `StateBackend` Protocol ready for Postgres |
+| Configuration | pydantic-settings (.env) |
 | Testing | pytest + pytest-asyncio + aioresponses |
 | Beckn Adapters | beckn-onix (`fidedocker/onix-adapter`) via Docker |
-| Mock BPP | `fidedocker/sandbox-2.0` via Docker |
-| Agent Framework | LangChain / LangGraph *(Phase 1, Week 3)* |
-| LLM | Claude Sonnet *(Phase 1, Week 3)* |
+| Sandbox BPP | `fidedocker/sandbox-2.0` via Docker (template echo — not a real seller) |
+
+---
+
+## Related docs
+
+- `docs/ARCHITECTURE.md` — full architecture, two-step flow diagrams, production blockers (§7).
+- `CLAUDE.md` — Claude Code guidance + Beckn v2.1 wire-shape gotchas (the hard-won lessons from live validation).
+- `../frontend/README.md` — UI layer overview.
+- `../KnowledgeBase/project_scaffold/milestones/phase*.md` — original 16-week roadmap per phase.

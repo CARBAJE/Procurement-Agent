@@ -3,8 +3,15 @@
 Each node receives the full state and returns a partial dict with only the
 fields it modifies. LangGraph merges the partials automatically.
 
-The `messages` field uses an append-only reducer (operator.add) so every node
-can return only its new log lines without reading the existing list.
+The `messages` and `reasoning_steps` fields use an append-only reducer
+(operator.add) so every node can return only its new entries without reading
+the existing list.
+
+`messages` is human-readable log lines (kept for back-compat with the current
+frontend parsing).
+`reasoning_steps` is the machine-readable parallel trace consumed by the new
+Comparison UI: each step carries node name, ReAct role, summary, details dict
+and timestamp.
 """
 from __future__ import annotations
 
@@ -23,6 +30,20 @@ from ..beckn.models import (
     PaymentTerms,
     StatusResponse,
 )
+
+
+class ReasoningStep(TypedDict, total=False):
+    """Structured trace entry emitted by each graph node.
+
+    role is one of "reason" | "act" | "observe" (ReAct loop role).
+    details is an optional free-form payload for UI rendering.
+    """
+
+    node: str
+    role: str
+    summary: str
+    details: dict
+    timestamp: str
 
 
 class ProcurementState(TypedDict, total=False):
@@ -55,5 +76,6 @@ class ProcurementState(TypedDict, total=False):
     order_state:    Optional[OrderState]             # last observed lifecycle state
 
     # ── Observability ─────────────────────────────────────────────────────────
-    messages:       Annotated[list[str], operator.add]  # append-only reasoning trace
-    error:          Optional[str]                    # first failure; subsequent nodes skip
+    messages:        Annotated[list[str], operator.add]             # human-readable trace
+    reasoning_steps: Annotated[list[ReasoningStep], operator.add]   # structured trace
+    error:           Optional[str]                                  # first failure

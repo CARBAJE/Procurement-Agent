@@ -2,15 +2,25 @@
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
+import axios from "axios"
 import { Loader2, ArrowRight, ArrowLeft, Search, Send } from "lucide-react"
 import { Button }   from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { Label }    from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import IntentPreview from "@/components/procurement/IntentPreview"
-import AgentResults  from "@/components/procurement/AgentResults"
-import { parseIntent } from "@/lib/api"
-import type { ParseResult, DiscoverResult } from "@/lib/types"
+import { compareOfferings, parseIntent } from "@/lib/api"
+import { saveSession } from "@/lib/session-store"
+import type { ParseResult } from "@/lib/types"
+
+function extractServerError(err: unknown, fallback: string): string {
+  if (axios.isAxiosError(err) && err.response?.data) {
+    const data = err.response.data as { error?: string; detail?: string }
+    if (data.detail) return `${data.error ?? "Server error"}: ${data.detail}`
+    if (data.error)  return data.error
+  }
+  return fallback
+}
 
 const EXAMPLES = [
   "500 reams A4 paper 80gsm white, delivery in Bangalore, 3 days, max budget ₹200 per ream",
@@ -18,16 +28,15 @@ const EXAMPLES = [
   "URGENT: 50 medical oxygen cylinders, Anita Hospital Delhi, 6 hours",
 ]
 
-type Step = "input" | "preview" | "submitted"
+type Step = "input" | "preview"
 
 export default function ProcurementForm() {
   const router = useRouter()
-  const [query,          setQuery]          = useState("")
-  const [step,           setStep]           = useState<Step>("input")
-  const [parseResult,    setParseResult]    = useState<ParseResult | null>(null)
-  const [discoverResult, setDiscoverResult] = useState<DiscoverResult | null>(null)
-  const [loading,        setLoading]        = useState(false)
-  const [error,          setError]          = useState("")
+  const [query,       setQuery]       = useState("")
+  const [step,        setStep]        = useState<Step>("input")
+  const [parseResult, setParseResult] = useState<ParseResult | null>(null)
+  const [loading,     setLoading]     = useState(false)
+  const [error,       setError]       = useState("")
 
   async function handleParse(e: React.FormEvent) {
     e.preventDefault()
@@ -38,8 +47,11 @@ export default function ProcurementForm() {
       const result = await parseIntent(query)
       setParseResult(result)
       setStep("preview")
-    } catch {
-      setError("Could not connect to the server. Make sure it is running on :8000.")
+    } catch (err) {
+      setError(extractServerError(
+        err,
+        "Could not connect to the server. Make sure it is running on :8000.",
+      ))
     } finally {
       setLoading(false)
     }
@@ -50,55 +62,33 @@ export default function ProcurementForm() {
     setError("")
     setLoading(true)
     try {
-      const res = await fetch("/api/procurement/discover", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(parseResult.beckn_intent),
+      const comparison = await compareOfferings(parseResult.beckn_intent)
+      // Persist intent + comparison under the transaction id. CompareView
+      // will overwrite with the user's pick and the commit result.
+      saveSession(comparison.transaction_id, {
+        intent: parseResult.beckn_intent,
+        comparison,
+        chosenItemId: comparison.recommended_item_id,
+        commit: null,
       })
-      const data: DiscoverResult = await res.json()
-      setDiscoverResult(data)
-      setStep("submitted")
-    } catch {
-      setError("Error contacting the BAP backend. Make sure it is running on :8000.")
+      router.push(`/request/${encodeURIComponent(comparison.transaction_id)}/compare`)
+    } catch (err) {
+      setError(extractServerError(
+        err,
+        "Error contacting the BAP backend. Make sure it is running on :8000.",
+      ))
     } finally {
       setLoading(false)
     }
   }
 
-  function reset() {
-    setStep("input")
-    setQuery("")
-    setParseResult(null)
-    setDiscoverResult(null)
-    setError("")
-  }
-
-  // ── Step 3: submitted ──────────────────────────────────────────────────────
-  if (step === "submitted" && discoverResult) {
-    return (
-      <div className="space-y-6">
-        <div className="mb-2">
-          <h1 className="text-3xl font-bold">New Request</h1>
-          <p className="text-muted-foreground">Describe in natural language what you need to purchase</p>
-        </div>
-        <AgentResults result={discoverResult} />
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={() => router.push("/dashboard")}>
-            Go to Dashboard
-          </Button>
-          <Button onClick={reset}>New Request</Button>
-        </div>
-      </div>
-    )
-  }
-
-  // ── Step 1 & 2: input / preview ────────────────────────────────────────────
   return (
     <div className="space-y-6 max-w-2xl mx-auto">
       <div className="mb-2">
         <h1 className="text-3xl font-bold">New Request</h1>
         <p className="text-muted-foreground">Describe in natural language what you need to purchase</p>
       </div>
+
       {step === "input" && (
         <Card>
           <CardHeader>
@@ -166,7 +156,7 @@ export default function ProcurementForm() {
             >
               {loading
                 ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Searching providers…</>
-                : <><Send className="mr-2 h-4 w-4" />Confirm and search</>
+                : <><Send className="mr-2 h-4 w-4" />Compare offers</>
               }
             </Button>
           </div>

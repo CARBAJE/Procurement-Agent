@@ -87,9 +87,10 @@ def test_build_init_wire_payload_action(
     assert payload["context"]["bppId"] == "bpp-1"
 
 
-def test_build_init_wire_payload_carries_billing(
+def test_build_init_wire_payload_carries_billing_in_participants(
     adapter, sample_items, sample_billing, sample_fulfillment,
 ):
+    """v2.1: buyer billing info lives inside contract.participants[role=buyer]."""
     payload = adapter.build_init_wire_payload(
         contract_id="contract-1",
         items=sample_items,
@@ -99,17 +100,27 @@ def test_build_init_wire_payload_carries_billing(
         bpp_id="bpp-1",
         bpp_uri="http://bpp.test",
     )
-    billing = payload["message"]["contract"]["billing"]
-    assert billing["name"] == "Test Buyer"
-    assert billing["email"] == "test@example.com"
-    assert billing["address"]["city"] == "Bangalore"
-    assert billing["address"]["areaCode"] == "560100"
-    assert billing["taxId"] == "TESTTAXID"
+    participants = payload["message"]["contract"]["participants"]
+    assert len(participants) == 1
+    buyer = participants[0]
+    assert buyer["descriptor"]["code"] == "buyer"
+    assert buyer["descriptor"]["name"] == "Test Buyer"
+    assert buyer["contact"]["name"] == "Test Buyer"
+    assert buyer["contact"]["email"] == "test@example.com"
+    assert buyer["contact"]["phone"] == "+91-0000000000"
+    assert buyer["address"]["city"] == "Bangalore"
+    assert buyer["address"]["areaCode"] == "560100"
+    assert buyer["taxId"] == "TESTTAXID"
+    # v2.1 Contract schema has additionalProperties: false — no inline billing.
+    assert "billing" not in payload["message"]["contract"]
 
 
-def test_build_init_wire_payload_carries_fulfillment(
+def test_build_init_wire_payload_emits_minimal_performance(
     adapter, sample_items, sample_billing, sample_fulfillment,
 ):
+    """v2.1: a minimal Performance entry referencing the commitment — no
+    performanceAttributes (would trigger JSON-LD extended validation that
+    requires a resolvable @context URI we don't have)."""
     payload = adapter.build_init_wire_payload(
         contract_id="contract-1",
         items=sample_items,
@@ -119,11 +130,15 @@ def test_build_init_wire_payload_carries_fulfillment(
         bpp_id="bpp-1",
         bpp_uri="http://bpp.test",
     )
-    fulfillment = payload["message"]["contract"]["fulfillment"]
-    assert fulfillment["type"] == "Delivery"
-    assert fulfillment["end"]["location"]["gps"] == "12.9716,77.5946"
-    assert fulfillment["end"]["contact"]["name"] == "Test Buyer"
-    assert fulfillment["deliveryTimelineHours"] == 72
+    performance = payload["message"]["contract"]["performance"]
+    assert len(performance) == 1
+    perf = performance[0]
+    # Only envelope fields — no @context-bearing attributes bag.
+    assert set(perf.keys()) == {"id", "status", "commitmentIds"}
+    assert perf["status"]["code"] == "PENDING"
+    assert perf["commitmentIds"] == ["commitment-001"]
+    # v2.1 Contract schema rejects inline fulfillment.
+    assert "fulfillment" not in payload["message"]["contract"]
 
 
 def test_build_init_wire_payload_has_commitments_and_consideration(

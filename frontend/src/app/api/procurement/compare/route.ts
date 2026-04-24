@@ -10,14 +10,16 @@ export async function POST(req: NextRequest) {
   const body = await req.json()
   const bapUrl = process.env.BAP_URL ?? "http://localhost:8000"
   try {
-    const { data } = await axios.post(`${bapUrl}/discover`, body)
+    const { data } = await axios.post(`${bapUrl}/compare`, body)
     return NextResponse.json(data)
-  } catch {
-    return NextResponse.json({
-      transaction_id: "mock-txn-" + Date.now(),
-      offerings: [],
-      status: "mock",
-      error: "BAP backend unavailable (python -m src.server not running)",
-    })
+  } catch (err) {
+    console.error("[compare proxy] BAP error:", err)
+    return NextResponse.json(
+      {
+        error: "BAP backend unavailable",
+        detail: "Start it with: python -m src.server (from Bap-1/)",
+      },
+      { status: 502 },
+    )
   }
 }
