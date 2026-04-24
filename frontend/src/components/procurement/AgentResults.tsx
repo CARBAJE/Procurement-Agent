@@ -229,7 +229,8 @@ export default function AgentResults({ result }: { result: DiscoverResult }) {
           <CardHeader className="pb-4">
             <CardTitle className="text-base flex items-center gap-2">
               <Brain className="h-4 w-4 text-muted-foreground" />
-              Agent Reasoning
+              Pipeline Trace
+              <span className="text-xs font-normal text-muted-foreground">(without LangGraph)</span>
             </CardTitle>
           </CardHeader>
           <CardContent>

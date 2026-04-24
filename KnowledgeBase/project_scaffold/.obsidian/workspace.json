@@ -214,10 +214,10 @@
   },
   "active": "5a0845e96356f9e2",
   "lastOpenFiles": [
-    "milestones/phase1_foundation_protocol_integration.md",
     "tests/phase2_microservices.md",
-    "tests/phase1_bap_monolith.md",
     "milestones/phase2_core_intelligence_transaction_flow.md",
+    "milestones/phase1_foundation_protocol_integration.md",
+    "tests/phase1_bap_monolith.md",
     "components/microservices_architecture.md",
     "components/agent_react_framework.md",
     "tests",
