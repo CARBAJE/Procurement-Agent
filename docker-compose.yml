@@ -61,7 +61,7 @@ services:
     ports:
       - "8003:8003"
     volumes:
-      - ./ComparativeEngine:/app/ComparativeEngine   # repo module mounted at runtime
+      - ./ComparativeScoring:/app/ComparativeScoring   # repo module mounted at runtime
     networks:
       - beckn_network
 
