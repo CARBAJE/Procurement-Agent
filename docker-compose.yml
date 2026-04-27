@@ -60,6 +60,8 @@ services:
     build: ./services/comparative-scoring
     ports:
       - "8003:8003"
+    volumes:
+      - ./ComparativeEngine:/app/ComparativeEngine   # repo module mounted at runtime
     networks:
       - beckn_network
 
