@@ -38,6 +38,32 @@ related: ["[[comparison_scoring_engine]]", "[[beckn_bap_client]]", "[[approval_w
 > - [[approval_workflow|Approval routing]] enforced for all role combinations.
 > - [[real_time_tracking|Real-time dashboard]] live with 30-second SLA.
 
+## Completed Implementation — Catalog Normalizer
+
+> [!done] Delivered
+> The **Catalog Normalizer** has been implemented as `src/normalizer/` inside the `Bap-1` project.
+
+### What was built
+
+| Component | File | Responsibility |
+|---|---|---|
+| `FormatVariant` | `src/normalizer/formats.py` | IntEnum with 5 variants + detection predicates |
+| `FormatDetector` | `src/normalizer/detector.py` | Detects the raw catalog format — no IO, no LLM |
+| `SchemaMapper` | `src/normalizer/schema_mapper.py` | Deterministic mapping for variants 1–4 |
+| `LLMFallbackNormalizer` | `src/normalizer/llm_fallback.py` | LLM fallback via instructor + Ollama for variant 5 |
+| `CatalogNormalizer` | `src/normalizer/normalizer.py` | Public facade that orchestrates the 3-step pipeline |
+
+### Design decisions
+- The logic of `_parse_on_discover()` was **moved verbatim** into `SchemaMapper` for Formats A and B — no behavioral regressions.
+- The LLM fallback follows the same pattern as `IntentParser/core.py` (instructor + Ollama) for consistency across the project.
+- `CatalogNormalizer` is a module-level singleton in `client.py` — no changes required in the LangGraph graph or its nodes.
+- Detection rule ordering: ONDC (variant 4) is checked **before** LEGACY (variant 2) because ONDC catalogs also contain `providers[].items[]`.
+- On LLM error: returns an empty list instead of propagating the exception — the graph handles `offerings=[]` gracefully (routes directly to `present_results`).
+
+### Tests
+- 17 unit tests in `tests/test_normalizer.py` — all pass without Ollama running.
+- Existing tests in `tests/test_discover.py` and `tests/test_agent.py` continue passing without changes (77 tests total, all green).
+
 *Preceded by → [[phase1_foundation_protocol_integration]] | Continues in → [[phase3_advanced_intelligence_enterprise_features]]*
 
 ---

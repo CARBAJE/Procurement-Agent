@@ -8,17 +8,31 @@
         "type": "tabs",
         "children": [
           {
+            "id": "1fb9aa6ceb57d842",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "milestones/phase2_core_intelligence_transaction_flow.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "phase2_core_intelligence_transaction_flow"
+            }
+          },
+          {
             "id": "eaa95b6b8bf93ed6",
             "type": "leaf",
             "state": {
               "type": "markdown",
               "state": {
-                "file": "tests/phase2_microservices.md",
+                "file": "components/catalog_normalizer.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "phase2_microservices"
+              "title": "catalog_normalizer"
             }
           },
           {
@@ -214,17 +228,17 @@
   },
   "active": "5a0845e96356f9e2",
   "lastOpenFiles": [
-    "tests/phase2_microservices.md",
+    "components/catalog_normalizer.md",
     "milestones/phase2_core_intelligence_transaction_flow.md",
+    "components/agent_react_framework.md",
+    "components/beckn_bap_client.md",
     "milestones/phase1_foundation_protocol_integration.md",
+    "tests/phase2_microservices.md",
     "tests/phase1_bap_monolith.md",
     "components/microservices_architecture.md",
-    "components/agent_react_framework.md",
     "tests",
     "README.md",
     "system_architecture_diagram.md",
-    "components/catalog_normalizer.md",
-    "components/beckn_bap_client.md",
     "architecture/Architecture.md",
     "architecture/Architecture.jpeg",
     "architecture",
@@ -245,6 +259,11 @@
     "components/erp_integration.md",
     "components/comparison_scoring_engine.md",
     "components/audit_trail_system.md",
-    "Captura de pantalla 2026-04-14 a la(s) 4.16.56 p.m..png"
+    "components/analytics_dashboard.md",
+    "components/agent_memory_learning.md",
+    "Captura de pantalla 2026-04-14 a la(s) 4.16.56 p.m..png",
+    "infrastructure/data_pipeline_architecture.md",
+    "technologies/event_streaming_kafka.md",
+    "deep-research-report.md"
   ]
 }
