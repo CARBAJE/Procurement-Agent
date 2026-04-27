@@ -8,21 +8,7 @@
         "type": "tabs",
         "children": [
           {
-            "id": "1fb9aa6ceb57d842",
-            "type": "leaf",
-            "state": {
-              "type": "markdown",
-              "state": {
-                "file": "milestones/phase2_core_intelligence_transaction_flow.md",
-                "mode": "source",
-                "source": false
-              },
-              "icon": "lucide-file",
-              "title": "phase2_core_intelligence_transaction_flow"
-            }
-          },
-          {
-            "id": "eaa95b6b8bf93ed6",
+            "id": "5a0845e96356f9e2",
             "type": "leaf",
             "state": {
               "type": "markdown",
@@ -34,37 +20,8 @@
               "icon": "lucide-file",
               "title": "catalog_normalizer"
             }
-          },
-          {
-            "id": "5a0845e96356f9e2",
-            "type": "leaf",
-            "state": {
-              "type": "markdown",
-              "state": {
-                "file": "milestones/phase2_core_intelligence_transaction_flow.md",
-                "mode": "source",
-                "source": false
-              },
-              "icon": "lucide-file",
-              "title": "phase2_core_intelligence_transaction_flow"
-            }
-          },
-          {
-            "id": "17e55abc0e8fdefa",
-            "type": "leaf",
-            "state": {
-              "type": "markdown",
-              "state": {
-                "file": "tests/phase1_bap_monolith.md",
-                "mode": "source",
-                "source": false
-              },
-              "icon": "lucide-file",
-              "title": "phase1_bap_monolith"
-            }
           }
-        ],
-        "currentTab": 1
+        ]
       }
     ],
     "direction": "vertical"
@@ -121,7 +78,7 @@
       }
     ],
     "direction": "horizontal",
-    "width": 300
+    "width": 212.50247192382812
   },
   "right": {
     "id": "707d49ecd1b271f3",
@@ -228,20 +185,24 @@
   },
   "active": "5a0845e96356f9e2",
   "lastOpenFiles": [
-    "components/catalog_normalizer.md",
-    "milestones/phase2_core_intelligence_transaction_flow.md",
-    "components/agent_react_framework.md",
-    "components/beckn_bap_client.md",
-    "milestones/phase1_foundation_protocol_integration.md",
     "tests/phase2_microservices.md",
     "tests/phase1_bap_monolith.md",
-    "components/microservices_architecture.md",
     "tests",
-    "README.md",
+    "components/microservices_architecture.md",
+    "system_architecture_diagram_en.md",
     "system_architecture_diagram.md",
+    "milestones/phase1_foundation_protocol_integration.md",
+    "milestones/phase2_core_intelligence_transaction_flow.md",
+    "components/beckn_bap_client.md",
+    "components/nl_intent_parser.md",
+    "technologies/beckn_client.md",
+    "components/catalog_normalizer.md",
+    "technologies/embedding_models.md",
     "architecture/Architecture.md",
     "architecture/Architecture.jpeg",
     "architecture",
+    "components/agent_react_framework.md",
+    "README.md",
     "Architecture/Architecture.jpeg",
     "Architecture/Architecture.md",
     "Architecture",
@@ -250,20 +211,10 @@
     "components/approval_workflow.md",
     "milestones/phase4_hardening_testing_production.md",
     "milestones/phase3_advanced_intelligence_enterprise_features.md",
-    "system_architecture_diagram_en.md",
     "infrastructure/postgresql_local_setup.md",
-    "technologies/beckn_client.md",
     "technologies/agent_framework_langchain_langgraph.md",
-    "components/nl_intent_parser.md",
     "components/negotiation_engine.md",
     "components/erp_integration.md",
-    "components/comparison_scoring_engine.md",
-    "components/audit_trail_system.md",
-    "components/analytics_dashboard.md",
-    "components/agent_memory_learning.md",
-    "Captura de pantalla 2026-04-14 a la(s) 4.16.56 p.m..png",
-    "infrastructure/data_pipeline_architecture.md",
-    "technologies/event_streaming_kafka.md",
-    "deep-research-report.md"
+    "Captura de pantalla 2026-04-14 a la(s) 4.16.56 p.m..png"
   ]
 }

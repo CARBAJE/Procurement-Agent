@@ -23,6 +23,11 @@ class BecknConfig(BaseSettings):
     # Used for async callbacks (on_select, on_init, on_confirm, on_status)
     callback_timeout: float = Field(default=10.0, alias="CALLBACK_TIMEOUT")
 
+    catalog_normalizer_url: str = Field(
+        default="http://localhost:8005",
+        alias="CATALOG_NORMALIZER_URL",
+    )
+
     model_config = SettingsConfigDict(
         env_file=str(_ENV_FILE),
         extra="ignore",

@@ -12,7 +12,7 @@ import instructor
 from openai import OpenAI
 from pydantic import BaseModel, Field
 
-from ..beckn.models import DiscoverOffering
+from shared.models import DiscoverOffering
 
 logger = logging.getLogger(__name__)
 

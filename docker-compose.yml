@@ -29,11 +29,28 @@ services:
       - BAP_ID=bap.example.com
       - DOMAIN=beckn.one/testnet
       - CALLBACK_TIMEOUT=10.0
+      - CATALOG_NORMALIZER_URL=http://catalog-normalizer:8005
     networks:
       - beckn_network
     depends_on:
       redis:
         condition: service_healthy
+      catalog-normalizer:
+        condition: service_started
+
+  # ── Lambda 4: Catalog Normalizer ───────────────────────────────────────────
+  catalog-normalizer:
+    build:
+      context: .
+      dockerfile: ./services/catalog-normalizer/Dockerfile
+    ports:
+      - "8005:8005"
+    environment:
+      - OLLAMA_URL=http://host.docker.internal:11434/v1
+      - NORMALIZER_MODEL=qwen3:1.7b
+      - PYTHONPATH=/app
+    networks:
+      - beckn_network
 
   # ── Lambda 3: Comparative & Scoring ────────────────────────────────────────
   comparative-scoring:

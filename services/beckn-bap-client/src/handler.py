@@ -103,7 +103,7 @@ async def discover(request: web.Request) -> web.Response:
     adapter = BecknProtocolAdapter(config)
 
     try:
-        async with BecknClient(adapter) as client:
+        async with BecknClient(adapter, catalog_normalizer_url=config.catalog_normalizer_url) as client:
             resp = await client.discover_async(
                 intent,
                 collector,

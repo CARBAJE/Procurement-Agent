@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import re
 
-from ..beckn.models import DiscoverOffering
+from shared.models import DiscoverOffering
 from .formats import FormatVariant
 
 
