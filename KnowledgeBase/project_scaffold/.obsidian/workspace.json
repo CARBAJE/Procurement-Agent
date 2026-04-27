@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "components/catalog_normalizer.md",
+                "file": "components/microservices_architecture.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "catalog_normalizer"
+              "title": "microservices_architecture"
             }
           }
         ]
@@ -78,7 +78,8 @@
       }
     ],
     "direction": "horizontal",
-    "width": 212.50247192382812
+    "width": 212.50247192382812,
+    "collapsed": true
   },
   "right": {
     "id": "707d49ecd1b271f3",
@@ -185,6 +186,7 @@
   },
   "active": "5a0845e96356f9e2",
   "lastOpenFiles": [
+    "components/catalog_normalizer.md",
     "tests/phase2_microservices.md",
     "tests/phase1_bap_monolith.md",
     "tests",
@@ -196,7 +198,6 @@
     "components/beckn_bap_client.md",
     "components/nl_intent_parser.md",
     "technologies/beckn_client.md",
-    "components/catalog_normalizer.md",
     "technologies/embedding_models.md",
     "architecture/Architecture.md",
     "architecture/Architecture.jpeg",

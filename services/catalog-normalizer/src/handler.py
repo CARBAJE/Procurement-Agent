@@ -16,7 +16,7 @@ sys.path.insert(0, "/app")
 
 from aiohttp import web
 
-from src.normalizer import CatalogNormalizer
+from CatalogNormalizer import CatalogNormalizer  # type: ignore[import]
 
 logger = logging.getLogger(__name__)
 

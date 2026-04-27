@@ -45,6 +45,9 @@ services:
       dockerfile: ./services/catalog-normalizer/Dockerfile
     ports:
       - "8005:8005"
+    volumes:
+      - ./CatalogNormalizer:/app/CatalogNormalizer   # repo module mounted at runtime
+      - ./shared:/app/shared                          # shared models
     environment:
       - OLLAMA_URL=http://host.docker.internal:11434/v1
       - NORMALIZER_MODEL=qwen3:1.7b
