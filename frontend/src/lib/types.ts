@@ -111,7 +111,7 @@ export interface PaymentTerms {
 
 export interface CommitResult {
   transaction_id: string
-  order_id: string
+  order_id: string | null
   order_state: OrderState | null
   payment_terms: PaymentTerms | null
   fulfillment_eta: string | null

@@ -120,14 +120,16 @@ export default function OrderView({ txnId }: OrderViewProps) {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-6">
           <OrderSummaryCard commit={commit} offering={offering} quantity={intent.quantity} />
-          <StatusPoller
-            transactionId={commit.transaction_id}
-            orderId={commit.order_id}
-            bppId={commit.bpp_id}
-            bppUri={commit.bpp_uri}
-            initialState={state}
-            onUpdate={onUpdate}
-          />
+          {commit.order_id != null && (
+            <StatusPoller
+              transactionId={commit.transaction_id}
+              orderId={commit.order_id}
+              bppId={commit.bpp_id}
+              bppUri={commit.bpp_uri}
+              initialState={state}
+              onUpdate={onUpdate}
+            />
+          )}
           <ReasoningPanel
             steps={commit.reasoning_steps}
             messages={commit.messages}

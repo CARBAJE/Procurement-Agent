@@ -50,7 +50,7 @@ export default function ProcurementForm() {
     } catch (err) {
       setError(extractServerError(
         err,
-        "Could not connect to the server. Make sure it is running on :8000.",
+        "Could not connect to the server. Make sure the backend services are running (ports 8001 and 8004).",
       ))
     } finally {
       setLoading(false)
