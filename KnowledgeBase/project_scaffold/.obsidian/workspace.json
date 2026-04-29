@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "tests/phase2_microservices.md",
+                "file": "components/data_normalizer.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "phase2_microservices"
+              "title": "data_normalizer"
             }
           }
         ]
@@ -185,12 +185,12 @@
   },
   "active": "5a0845e96356f9e2",
   "lastOpenFiles": [
+    "tests/phase2_microservices.md",
+    "tests/phase1_bap_monolith.md",
     "components/data_normalizer.md",
     "milestones/phase2_core_intelligence_transaction_flow.md",
     "README.md",
     "infrastructure/postgresql_local_setup.md",
-    "tests/phase2_microservices.md",
-    "tests/phase1_bap_monolith.md",
     "tests",
     "components/microservices_architecture.md",
     "components/catalog_normalizer.md",
