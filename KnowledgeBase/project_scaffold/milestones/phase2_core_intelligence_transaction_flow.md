@@ -38,4 +38,66 @@ related: ["[[comparison_scoring_engine]]", "[[beckn_bap_client]]", "[[approval_w
 > - [[approval_workflow|Approval routing]] enforced for all role combinations.
 > - [[real_time_tracking|Real-time dashboard]] live with 30-second SLA.
 
+## Completed Implementation — Catalog Normalizer
+
+> [!done] Delivered
+> The **Catalog Normalizer** has been implemented as `src/normalizer/` inside the `Bap-1` project.
+
+### What was built
+
+| Component | File | Responsibility |
+|---|---|---|
+| `FormatVariant` | `src/normalizer/formats.py` | IntEnum with 5 variants + detection predicates |
+| `FormatDetector` | `src/normalizer/detector.py` | Detects the raw catalog format — no IO, no LLM |
+| `SchemaMapper` | `src/normalizer/schema_mapper.py` | Deterministic mapping for variants 1–4 |
+| `LLMFallbackNormalizer` | `src/normalizer/llm_fallback.py` | LLM fallback via instructor + Ollama for variant 5 |
+| `CatalogNormalizer` | `src/normalizer/normalizer.py` | Public facade that orchestrates the 3-step pipeline |
+
+### Design decisions
+- The logic of `_parse_on_discover()` was **moved verbatim** into `SchemaMapper` for Formats A and B — no behavioral regressions.
+- The LLM fallback follows the same pattern as `IntentParser/core.py` (instructor + Ollama) for consistency across the project.
+- `CatalogNormalizer` is a module-level singleton in `client.py` — no changes required in the LangGraph graph or its nodes.
+- Detection rule ordering: ONDC (variant 4) is checked **before** LEGACY (variant 2) because ONDC catalogs also contain `providers[].items[]`.
+- On LLM error: returns an empty list instead of propagating the exception — the graph handles `offerings=[]` gracefully (routes directly to `present_results`).
+
+### Tests
+- 17 unit tests in `tests/test_normalizer.py` — all pass without Ollama running.
+- Existing tests in `tests/test_discover.py` and `tests/test_agent.py` continue passing without changes (77 tests total, all green).
+
 *Preceded by → [[phase1_foundation_protocol_integration]] | Continues in → [[phase3_advanced_intelligence_enterprise_features]]*
+
+---
+
+## Architecture Migration — Microservices
+
+> [!milestone] Completed: Bap-1 Monolith → Microservices (AWS Step Functions)
+
+The Bap-1 monolith has been decomposed into 4 services under `services/` following the `architecture/Architecture.md` Step Functions model. See [[microservices_architecture]] for full detail.
+
+### Services Delivered
+
+| Service               | Port | Lambda Equivalent                | Status |
+| --------------------- | ---- | -------------------------------- | ------ |
+| `intention-parser`    | 8001 | Lambda 1 — Intention Parser      | ✅      |
+| `beckn-bap-client`    | 8002 | Lambda 2 — Beckn BAP Client      | ✅      |
+| `comparative-scoring` | 8003 | Lambda 3 — Comparative & Scoring | ✅      |
+| `orchestrator`        | 8004 | Step Functions simulator         | ✅      |
+
+### Agent Stack Placement
+
+| Agent | Lambda | Location |
+|-------|--------|----------|
+| Parser Agent | Lambda 1 | `services/intention-parser/` via `IntentParser/` |
+| Normalizer Agent | Lambda 2 | `services/beckn-bap-client/src/normalizer/` |
+| Negotiator Agent | Lambda 4 (future) | `services/negotiation-engine/` |
+
+### State
+
+JSON payload passed between services via HTTP POST. No shared memory. Each Lambda is stateless. The orchestrator assembles the final result from each step's response.
+
+### Skipped Lambdas (not yet implemented)
+
+- Lambda 4 — Negotiation Engine
+- Lambda 5 — Approval Engine
+
+These will become services under `services/negotiation-engine/` and `services/approval-engine/` in a future phase.

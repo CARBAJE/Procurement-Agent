@@ -31,14 +31,34 @@ sequenceDiagram
     PF-->>U: Muestra IntentPreview (Paso 2)
 
     U->>PF: Confirma intent
-    PF->>NX: POST /api/procurement/discover { beckn_intent }
-    NX->>BAP: POST /discover { BecknIntent }
+    PF->>NX: POST /api/procurement/compare { beckn_intent }
+    NX->>BAP: POST /compare
+    BAP->>BAP: arun_compare() → store state by txn_id
     BAP->>ONIX: POST /bap/caller/discover
-    ONIX-->>BAP: ACK
-    ONIX->>BAP: POST /bap/receiver/on_discover (callback)
-    BAP-->>NX: { transaction_id, offerings, status }
-    NX-->>PF: Offerings
-    PF-->>U: Muestra proveedores encontrados
+    ONIX-->>BAP: on_discover callback
+    BAP-->>NX: { txn_id, offerings, scoring, reasoning_steps }
+    NX-->>PF: ComparisonResult
+    PF->>PF: router.push(/request/[txn]/compare)
+    PF-->>U: Muestra tabla comparativa
+
+    U->>PF: Selecciona oferta y click "Proceder"
+    PF->>NX: POST /api/procurement/commit { txn_id, chosen_item_id }
+    NX->>BAP: POST /commit
+    BAP->>BAP: arun_commit() → select + init + confirm
+    BAP->>ONIX: POST /bap/caller/{select,init,confirm}
+    ONIX-->>BAP: on_select, on_init, on_confirm
+    BAP-->>NX: { order_id, order_state, payment_terms }
+    NX-->>PF: CommitResult
+    PF->>PF: router.push(/request/[txn]/order)
+    PF-->>U: Muestra orden confirmada + timeline
+
+    loop every 30 s
+        PF->>NX: GET /api/procurement/status/{txn}/{order}
+        NX->>BAP: GET /status/{txn}/{order}
+        BAP->>ONIX: POST /bap/caller/status
+        ONIX-->>BAP: on_status { state }
+        BAP-->>PF: StatusSnapshot { state, observed_at }
+    end
 ```
 
 ---
@@ -100,7 +120,7 @@ sequenceDiagram
     PR->>PR: getServerSession(authOptions)<br/>Verifica sesión activa
 
     alt Sesión válida
-        PR->>IP: axios.POST http://127.0.0.1:8001/parse<br/>{ query }
+        PR->>IP: axios.POST http://127.0.0.1:8000/parse<br/>{ query }
         IP->>IP: Clasifica complejidad<br/>(len > 120 o ≥ 2 números → qwen3:8b)
         IP->>OL: Prompt con query
         OL-->>IP: JSON estructurado
@@ -110,91 +130,179 @@ sequenceDiagram
         PF->>PF: setParseResult(result)<br/>setStep("preview")
         PF->>IV: Renderiza IntentPreview
         IV-->>U: Muestra intent interpretado<br/>con % confianza
-    else IntentParser no disponible
-        PR-->>API: Mock { item: query, confidence: 0.95 }
-        API-->>PF: Mock ParseResult
-        PF-->>U: Muestra preview con datos mock
+    else IntentParser 5xx (Ollama OOM, etc.)
+        IP-->>PR: HTTP 500 { error, detail }
+        PR-->>API: forwarded 500 (no silent mock)
+        API-->>PF: axios throws
+        PF->>PF: setError(detail)
+        PF-->>U: Muestra error real en UI<br/>(p.ej. "memory layout cannot be allocated")
+    else BAP server caído
+        PR-->>API: 502 { error: "IntentParser unreachable" }
+        API-->>PF: axios throws
+        PF-->>U: Muestra "Start the BAP server..."
     end
 ```
 
 ---
 
-## 4. Discovery — Con ONIX (Red Beckn Real)
+## 4. Compare — Con ONIX (Red Beckn Real)
 
-Flujo completo cuando el Docker stack está corriendo. Usa callbacks async de Beckn v2.
+Flujo de comparación cuando el Docker stack está corriendo. El endpoint `/compare` ejecuta `arun_compare()` (parse_intent + discover + rank_and_select), guarda el estado en `TransactionSessionStore`, y devuelve las offerings con scoring + reasoning trace.
 
 ```mermaid
 sequenceDiagram
     actor U as Usuario
     participant PF as ProcurementForm.tsx
-    participant DR as discover/route.ts<br/>(Next.js API)
+    participant CR as compare/route.ts<br/>(Next.js API)
     participant BAP as BAP server.py<br/>(:8000)
+    participant AG as ProcurementAgent
+    participant SS as TransactionSessionStore
     participant BC as BecknClient
     participant CC as CallbackCollector
     participant ONIX as ONIX Adapter<br/>(Go :8081)
-    participant BPP as /bpp/discover<br/>(server.py local)
 
-    U->>PF: Click "Confirmar y buscar"
+    U->>PF: Click "Compare offers"
     PF->>PF: handleConfirm()<br/>Toma beckn_intent del parseResult
-    PF->>DR: fetch /api/procurement/discover<br/>{ BecknIntent }
+    PF->>CR: POST /api/procurement/compare<br/>{ BecknIntent }
+    CR->>CR: getServerSession() — verifica auth
+    CR->>BAP: axios.POST http://127.0.0.1:8000/compare
 
-    DR->>DR: getServerSession() — verifica auth
-    DR->>BAP: axios.POST http://127.0.0.1:8000/discover<br/>{ BecknIntent }
+    BAP->>AG: arun_compare(intent)
+    Note over AG: build_compare_graph:<br/>parse_intent → discover →<br/>rank_and_select → present_results
+    AG->>BC: discover_async(intent, collector)
+    BC->>CC: register(txn_id, "on_discover")
+    BC->>ONIX: POST /bap/caller/discover
+    ONIX-->>BC: ACK
+    ONIX->>BAP: POST /bap/receiver/on_discover<br/>{ catalogs: [...6 offerings] }
+    BC->>CC: collect → DiscoverResponse
+    AG->>AG: rank_and_select: min(price)
+    AG-->>BAP: state { offerings, selected, reasoning_steps }
+    BAP->>SS: session_store.put(txn_id, state)
+    BAP-->>CR: { txn_id, offerings, scoring, reasoning_steps, status: "live" }
+    CR-->>PF: ComparisonResult
 
-    BAP->>BAP: discover()<br/>Construye BecknIntent desde body
-    BAP->>BC: discover_async(intent, collector)
-    BC->>CC: collector.register(txn_id, "on_discover")
-    BC->>ONIX: POST /bap/caller/discover<br/>{ context, message.intent }
-    ONIX-->>BC: ACK { status: "ACK" }
-
-    ONIX->>BPP: POST /bpp/discover<br/>(ruteo local)
-    BPP->>BPP: asyncio.create_task(<br/>_send_local_on_discover)
-    BPP-->>ONIX: ACK
-
-    Note over BPP: 100ms delay (async)
-
-    BPP->>BAP: POST /bap/receiver/on_discover<br/>{ catalogs: [_LOCAL_CATALOG] }
-    BAP->>CC: collector.handle_callback("on_discover", payload)
-    CC->>BC: Queue recibe callback
-    BC->>BC: collector.collect() despierta<br/>_parse_on_discover()
-    BC-->>BAP: DiscoverResponse { offerings: [...] }
-    BAP-->>DR: { transaction_id, offerings, status: "live" }
-    DR-->>PF: Offerings
-    PF->>PF: setDiscoverResult(data)<br/>setStep("submitted")
-    PF-->>U: Muestra 3 proveedores con<br/>precio, rating, proveedor
+    PF->>PF: saveSession(txn_id, { intent, comparison })<br/>router.push(/request/[txn]/compare)
+    PF-->>U: Redirige a CompareView<br/>(tabla comparativa + scoring panel)
 ```
 
 ---
 
-## 5. Discovery — Sin ONIX (Fallback a Catálogo Local)
+## 5. Commit — Usuario confirma y se ejecuta la transacción
 
-Cuando ONIX no está corriendo. El BAP captura el timeout y responde con el catálogo hardcodeado.
+Después de la comparación, el usuario elige una oferta y hace `/commit`. El BAP ejecuta `arun_commit()` (send_select + send_init + send_confirm) y devuelve el `order_id` real del BPP.
 
 ```mermaid
 sequenceDiagram
     actor U as Usuario
-    participant PF as ProcurementForm.tsx
-    participant DR as discover/route.ts
+    participant CV as CompareView.tsx
+    participant DLG as ConfirmCommitDialog
+    participant CM as commit/route.ts
+    participant BAP as BAP server.py
+    participant AG as ProcurementAgent
+    participant SS as TransactionSessionStore
+    participant BC as BecknClient
+    participant ONIX as ONIX Adapter
+
+    U->>CV: Click "Proceed with selection"
+    alt Elige la oferta recomendada
+        CV->>CM: POST /api/procurement/commit<br/>{ txn_id, chosen_item_id }
+    else Elige una alternativa
+        CV->>DLG: Abre dialog con diff<br/>(precio / ETA / rating)
+        U->>DLG: Click "Confirm order"
+        DLG->>CM: POST /api/procurement/commit<br/>{ txn_id, chosen_item_id }
+    end
+
+    CM->>BAP: axios.POST /commit
+    BAP->>SS: session_store.get(txn_id)
+    Note over BAP: state["selected"] = chosen offering
+    BAP->>AG: arun_commit(state)
+
+    Note over AG: build_commit_graph:<br/>send_select → send_init →<br/>send_confirm → present_results
+
+    AG->>BC: select(items, txn, bpp)
+    BC->>ONIX: POST /bap/caller/select (v2.1 Contract)
+    ONIX-->>BC: ACK
+    ONIX->>BAP: on_select callback
+
+    AG->>BC: init(items, billing, fulfillment, ...)
+    BC->>ONIX: POST /bap/caller/init<br/>(participants[buyer] + performance[])
+    ONIX-->>BC: ACK
+    ONIX->>BAP: on_init { settlements, consideration }
+    BC-->>AG: InitResponse { payment_terms, quote_total }
+
+    AG->>BC: confirm(items, payment_terms, ...)
+    BC->>ONIX: POST /bap/caller/confirm<br/>(settlements + status.code=ACTIVE)
+    ONIX-->>BC: ACK
+    ONIX->>BAP: on_confirm { contract.id, status }
+    BC-->>AG: ConfirmResponse { order_id, state=CREATED }
+
+    AG-->>BAP: final state { order_id, order_state, payment_terms }
+    BAP->>SS: session_store.put(txn_id, final_state)
+    BAP-->>CM: { order_id, order_state, payment_terms, reasoning_steps }
+    CM-->>CV: CommitResult
+    CV->>CV: patchSession(txn_id, { commit: result })<br/>router.push(/request/[txn]/order)
+    CV-->>U: Redirige a OrderView<br/>(summary + timeline + status poller)
+```
+
+---
+
+## 6. Status polling — Después de la orden confirmada
+
+El `StatusPoller.tsx` hace un GET cada 30s. El servidor reconstruye `items` desde la sesión (la v2.1 Contract schema requiere `commitments` en todos los mensajes, también `/status`).
+
+```mermaid
+sequenceDiagram
+    participant SP as StatusPoller.tsx
+    participant ST as status/route.ts
+    participant BAP as BAP server.py
+    participant SS as TransactionSessionStore
+    participant AG as ProcurementAgent
+    participant ONIX as ONIX Adapter
+
+    loop every 30 s<br/>(until state ∈ {DELIVERED, CANCELLED})
+        SP->>ST: GET /api/procurement/status/{txn}/{order}
+        ST->>BAP: GET /status/{txn}/{order}
+
+        BAP->>SS: session_store.get(txn) → { selected, intent }
+        Note over BAP: Rebuild SelectedItem from<br/>session to satisfy v2.1<br/>Contract.commitments requirement
+
+        BAP->>AG: get_status(txn, order_id, bpp_id, bpp_uri, items)
+        AG->>ONIX: POST /bap/caller/status<br/>{ message.contract: { id, commitments } }
+        ONIX-->>AG: ACK
+        ONIX->>BAP: on_status { contract.status.code }
+        AG-->>BAP: StatusResponse { state, fulfillment_eta, tracking_url }
+        BAP-->>ST: StatusSnapshot { state, observed_at, status: "live" }
+        ST-->>SP: StatusSnapshot
+        SP->>SP: onUpdate(snapshot)<br/>setState(snap.state)
+    end
+```
+
+---
+
+## 7. Fallback — ONIX / Docker offline
+
+Todos los endpoints `/compare`, `/commit`, `/status` caen a mock fallback si ONIX falla — así la UI funciona standalone para demos. Badge en la UI: "Local Catalog" en vez de "Live Beckn Network".
+
+```mermaid
+sequenceDiagram
+    participant CV as Frontend
     participant BAP as BAP server.py
     participant BC as BecknClient
-    participant ONIX as ONIX Adapter<br/>(no disponible)
+    participant ONIX as ONIX<br/>(down)
 
-    U->>PF: Click "Confirmar y buscar"
-    PF->>DR: fetch /api/procurement/discover<br/>{ BecknIntent }
-    DR->>BAP: axios.POST /discover
-
-    BAP->>BC: discover_async(intent, collector, timeout=10s)
+    CV->>BAP: POST /compare
+    BAP->>BC: discover_async(intent, timeout=10s)
     BC->>ONIX: POST /bap/caller/discover
-    ONIX--xBC: ECONNREFUSED (no corre)
+    ONIX--xBC: ECONNREFUSED
 
-    Note over BC,BAP: asyncio.wait_for expira (12s)
+    Note over BC,BAP: Exception captured
 
-    BC-->>BAP: Exception (timeout / connection error)
-    BAP->>BAP: except → logger.warning(...)<br/>_local_catalog_as_offerings()
-    BAP-->>DR: {<br/>  transaction_id: uuid4(),<br/>  offerings: [OfficeWorld, PaperDirect,<br/>              Stationery Hub],<br/>  status: "mock"<br/>}
-    DR-->>PF: Offerings (mock)
-    PF-->>U: Muestra proveedores<br/>Badge "Catálogo local"
+    BAP->>BAP: _mock_compare_response()<br/>• 6 offerings del _LOCAL_CATALOG<br/>• synthetic reasoning_steps<br/>• recommended = min(price)
+    BAP-->>CV: { offerings, scoring, status: "mock" }
+    CV-->>CV: Badge azul → gris<br/>("Local Catalog")
 ```
+
+El mismo patrón aplica a `/commit` (`_mock_commit_response` → genera `mock-order-<hex>`) y `/status` (echo del último estado almacenado).
 
 ---
 

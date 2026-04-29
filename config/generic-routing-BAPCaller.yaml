@@ -1,0 +1,37 @@
+# BAP Caller Routing — outbound requests from BAP to BPPs / CDS
+#
+# Transaction & fulfillment actions: routed directly to onix-bpp (bypasses DeDi
+# registry lookup — bpp.example.com is a local sandbox, not registered externally).
+# Discovery: routed to the beckn-bap-client's local catalog endpoint (/bpp/discover).
+# Both services share the beckn_network so the container name resolves directly.
+
+routingRules:
+  # Transaction & fulfillment actions: routed directly to onix-bpp BPP receiver.
+  # ONIX appends the action name: http://onix-bpp:8082/bpp/receiver + /init, etc.
+  # onix-bpp BPP Receiver then forwards to sandbox-bpp:3002/api/webhook.
+  - domain: "beckn.one/testnet"
+    version: "2.0.0"
+    targetType: "url"
+    target:
+      url: "http://onix-bpp:8082/bpp/receiver"
+    endpoints:
+      - select
+      - init
+      - confirm
+      - status
+      - track
+      - update
+      - cancel
+      - rate
+      - support
+
+  # Discovery: routed to beckn-bap-client's local BPP catalog endpoint.
+  # ONIX appends the action name: http://beckn-bap-client:8002/bpp + /discover
+  # beckn-bap-client returns the local A4 paper catalog as an on_discover callback.
+  - domain: "beckn.one/testnet"
+    version: "2.0.0"
+    targetType: "url"
+    target:
+      url: "http://beckn-bap-client:8002/bpp"
+    endpoints:
+      - discover

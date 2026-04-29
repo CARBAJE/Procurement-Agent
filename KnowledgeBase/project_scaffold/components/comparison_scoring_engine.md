@@ -1,45 +1,58 @@
 ---
-tags: [component, ai, scoring, comparison, explainability, react-loop, hybrid-model, multi-criteria]
+tags: [component, ai, scoring, comparison, microservice, lambda, step-functions]
 cssclasses: [procurement-doc, component-doc]
-status: "#processed"
-related: ["[[beckn_bap_client]]", "[[llm_providers]]", "[[agent_memory_learning]]", "[[approval_workflow]]", "[[audit_trail_system]]", "[[phase2_core_intelligence_transaction_flow]]", "[[comparison_scoring_model]]", "[[story2_high_value_it_equipment]]"]
+status: "#implemented"
+related: ["[[beckn_bap_client]]", "[[microservices_architecture]]", "[[agent_react_framework]]", "[[approval_workflow]]", "[[phase2_core_intelligence_transaction_flow]]"]
 ---
 
-# Component: AI Comparison & Scoring Engine
+# Component: Comparative & Scoring Engine
 
 > [!architecture] Role in the System
-> After the [[beckn_bap_client|BAP Client]] collects and normalizes seller responses, the Comparison & Scoring Engine evaluates all offers in parallel and produces a **ranked, explained recommendation**. It operates as a hybrid system: deterministic Python functions handle quantifiable metrics (price, delivery time), while [[llm_providers|GPT-4o in a ReAct loop]] handles qualitative assessment (compliance fit, holistic TCO reasoning). Every score is accompanied by a human-readable explanation — critical for [[audit_trail_system|audit compliance]] and user trust.
+> `services/comparative-scoring/` is **Lambda 3** in the Step Functions state machine. It is a standalone aiohttp microservice on port 8003. Called by the orchestrator as Step 3 after discovery. Receives all offerings, returns the single best one.
 
-## Scoring Dimensions
+## HTTP Interface
 
-| Dimension | Method | Notes |
-|---|---|---|
-| Price | Deterministic (Python) | Weighted by volume discounts and total cost of ownership (TCO) |
-| Delivery reliability | Deterministic | Historical fulfillment rate + ETA (from [[agent_memory_learning\|vector memory]]) |
-| Quality indicators | Hybrid | Ratings, certifications, return rates |
-| Compliance | Hybrid | Enterprise-specific requirements (ISO certs, sustainability, geographic restrictions) |
+```
+POST /score
+Body:     { "offerings": [DiscoverOffering…] }
+Response: { "selected": DiscoverOffering } | { "selected": null }
 
-> [!tech-stack] Why Hybrid Architecture
-> A purely LLM-based scorer would be non-deterministic and expensive for high-volume use. A purely rule-based scorer cannot handle qualitative compliance assessment ("does this supplier's sustainability certification actually meet our ESG policy?"). The **hybrid approach** uses Python functions where determinism matters and LLM reasoning where judgment is required — giving the best of both. See full specification in [[comparison_scoring_model]].
+GET /health
+Response: { "status": "ok", "service": "comparative-scoring" }
+```
 
-## Explainability
+`DiscoverOffering` fields in the body are plain JSON dicts — no import of `shared.models` required.
 
-Every recommendation includes a plain-language explanation from the ReAct loop. Example:
-> *"Seller C recommended despite 4% higher unit price. Superior warranty (5-year vs. 3-year) and bulk discount at 200+ units produce 8% lower TCO over the contract period. Seller C also holds ISO 27001 certification required by your IT procurement policy."*
+## Phase 1 — Cheapest Wins (Implemented)
 
-This explainability is captured in the [[audit_trail_system|Kafka audit event]] and displayed in the [[frontend_react_nextjs|comparison UI]].
+```python
+selected = min(offerings, key=lambda o: float(o["price_value"]))
+```
 
-## Weight Calibration
+Deterministic. Returns `null` if `offerings` is empty.
 
-- Initial weights set from historical procurement data (from [[agent_memory_learning|Vector DB]]).
-- User override data (captured via [[audit_trail_system]]) feeds back into calibration over time.
+## Phase 2 — Multi-Criteria Scoring (Planned)
 
-> [!milestone] Phase 2 Acceptance (Weeks 5–8)
-> From [[phase2_core_intelligence_transaction_flow|Phase 2 Comparison Engine milestone]]:
-> - Ranks sellers correctly for **10+ test scenarios**.
-> - Clear, human-readable explanations provided for each ranking.
-> - Comparison UI (in [[frontend_react_nextjs]]) shows side-by-side view with reasoning visible.
+To be implemented inside this service (no other service changes needed):
+- Price weight (deterministic)
+- Delivery reliability (from memory/history)
+- Quality indicators (hybrid LLM + rules)
+- Compliance fit (LLM ReAct reasoning)
+- Human-readable explanation per recommendation
 
-> [!guardrail] Accuracy & Override Monitoring
-> Comparison quality target: **≥ 85% agreement** with human expert ranking (blind comparison test, per [[technical_performance_metrics]]).
-> User override rate tracked via [[observability_stack]]: if > 30% of agent recommendations are overridden, [[model_governance_monitoring|scoring calibration review]] is triggered automatically.
+## Called By
+
+The orchestrator calls this service as **Step 3**:
+```python
+score_result = POST http://comparative-scoring:8003/score  { "offerings": offerings }
+selected = score_result["selected"]
+```
+
+## Internal Structure
+
+```
+services/comparative-scoring/
+├── src/handler.py    aiohttp server — POST /score with cheapest-wins logic
+├── Dockerfile
+└── requirements.txt  (aiohttp only — no LLM deps in Phase 1)
+```

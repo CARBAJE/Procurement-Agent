@@ -14,7 +14,8 @@ and the Beckn Protocol. All fields are canonical machine-processable form:
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Optional
+from enum import Enum
+from typing import Literal, Optional
 from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -168,3 +169,147 @@ class AckMessage(BaseModel):
 class AckResponse(BaseModel):
     message: AckMessage
     error: Optional[dict] = None
+
+
+# ── /init, /confirm, /status (Phase 2 — order lifecycle) ─────────────────────
+# Reference: KnowledgeBase/project_scaffold/components/beckn_bap_client.md
+#   init    — initialize the order (buyer sends billing + fulfillment)
+#   confirm — commit the order with agreed payment terms
+#   status  — poll for current fulfillment state
+
+
+class Address(BaseModel):
+    """Postal address — used by BillingInfo and FulfillmentInfo."""
+
+    door: Optional[str] = None
+    building: Optional[str] = None
+    street: Optional[str] = None
+    city: str
+    state: Optional[str] = None
+    country: str = "IND"
+    area_code: str
+
+
+class BillingInfo(BaseModel):
+    """Buyer billing details sent in /init.
+
+    Produced by a BillingProvider — never built inline by adapter/nodes so
+    the source (config/session/DB) can be swapped without touching wire code.
+    """
+
+    name: str
+    email: str
+    phone: str
+    address: Address
+    tax_id: Optional[str] = None
+
+
+class FulfillmentInfo(BaseModel):
+    """Delivery details sent in /init.
+
+    `end_location` is the drop-off point (GPS + address). `delivery_timeline`
+    mirrors BecknIntent.delivery_timeline (hours) so the BPP can bind the SLA.
+    """
+
+    type: str = "Delivery"
+    end_location: str  # "lat,lon" decimal string
+    end_address: Address
+    contact_name: str
+    contact_phone: str
+    delivery_timeline: Optional[int] = None  # hours, same semantics as BecknIntent
+
+
+# Beckn v2 payment types (spec §Payment):
+#   ON_ORDER        — pre-pay before fulfillment (UPI/card)
+#   ON_FULFILLMENT  — COD, BPP collects at delivery
+#   POST_FULFILLMENT — invoice / NET-30 / NET-60
+PaymentType = Literal["ON_ORDER", "ON_FULFILLMENT", "POST_FULFILLMENT"]
+
+
+class PaymentTerms(BaseModel):
+    """Payment terms negotiated in /init and committed in /confirm.
+
+    Produced by a PaymentProvider. Phase 2 stub uses COD (ON_FULFILLMENT).
+    Real implementations will populate uri/transaction_id from a payment
+    gateway (Razorpay, UPI, etc.).
+    """
+
+    type: PaymentType = "ON_FULFILLMENT"
+    collected_by: str = "BPP"   # "BAP" for pre-pay, "BPP" for COD
+    currency: str = "INR"
+    uri: Optional[str] = None            # payment gateway URL (ON_ORDER)
+    transaction_id: Optional[str] = None  # gateway reference (ON_ORDER / POST)
+    status: str = "NOT-PAID"             # NOT-PAID | PAID
+
+
+class OrderState(str, Enum):
+    """Canonical order lifecycle states — aligned with Beckn v2 spec.
+
+    Not every BPP emits every state. Missing transitions are fine: the UI
+    and status node treat absent states as "no update".
+    """
+
+    CREATED = "CREATED"
+    ACCEPTED = "ACCEPTED"
+    PACKED = "PACKED"
+    SHIPPED = "SHIPPED"
+    OUT_FOR_DELIVERY = "OUT_FOR_DELIVERY"
+    DELIVERED = "DELIVERED"
+    CANCELLED = "CANCELLED"
+
+
+# ── /init ─────────────────────────────────────────────────────────────────────
+
+
+class InitResponse(BaseModel):
+    """Parsed on_init callback — payment terms drafted by the BPP.
+
+    The BPP may adjust the payment terms we proposed (e.g., reject COD, offer
+    only ON_ORDER). /confirm must use these final terms, not the originals.
+    """
+
+    context: Optional[BecknContext] = None
+    transaction_id: str
+    contract_id: str
+    payment_terms: Optional[PaymentTerms] = None
+    quote_total: Optional[str] = None   # final price (currency-stringed)
+    quote_currency: str = "INR"
+    raw_message: dict = Field(default_factory=dict)  # full on_init payload
+
+
+# ── /confirm ──────────────────────────────────────────────────────────────────
+
+
+class ConfirmResponse(BaseModel):
+    """Parsed on_confirm callback — order is now committed.
+
+    `order_id` is the BPP-assigned identifier used for all subsequent /status
+    queries. `state` will typically be CREATED or ACCEPTED at this point.
+    """
+
+    context: Optional[BecknContext] = None
+    transaction_id: str
+    order_id: str
+    state: OrderState = OrderState.CREATED
+    fulfillment_eta: Optional[str] = None   # RFC 3339 timestamp
+    raw_message: dict = Field(default_factory=dict)
+
+
+# ── /status ───────────────────────────────────────────────────────────────────
+
+
+class StatusResponse(BaseModel):
+    """Parsed on_status callback — current fulfillment state.
+
+    Polled periodically from the UI (Phase 2 SLA: within 30s of any change).
+    Only the state and optional ETA/tracking_url are surfaced; the raw message
+    is kept for audit.
+    """
+
+    context: Optional[BecknContext] = None
+    transaction_id: str
+    order_id: str
+    state: OrderState
+    fulfillment_eta: Optional[str] = None
+    tracking_url: Optional[str] = None
+    raw_message: dict = Field(default_factory=dict)
