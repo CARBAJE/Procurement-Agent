@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "components/microservices_architecture.md",
+                "file": "tests/phase2_microservices.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "microservices_architecture"
+              "title": "phase2_microservices"
             }
           }
         ]
@@ -78,8 +78,7 @@
       }
     ],
     "direction": "horizontal",
-    "width": 212.50247192382812,
-    "collapsed": true
+    "width": 212.50247192382812
   },
   "right": {
     "id": "707d49ecd1b271f3",
@@ -186,15 +185,22 @@
   },
   "active": "5a0845e96356f9e2",
   "lastOpenFiles": [
-    "components/catalog_normalizer.md",
+    "components/data_normalizer.md",
+    "milestones/phase2_core_intelligence_transaction_flow.md",
+    "README.md",
+    "infrastructure/postgresql_local_setup.md",
     "tests/phase2_microservices.md",
     "tests/phase1_bap_monolith.md",
     "tests",
     "components/microservices_architecture.md",
+    "components/catalog_normalizer.md",
     "system_architecture_diagram_en.md",
     "system_architecture_diagram.md",
+    "components/erp_integration.md",
+    "components/comparison_scoring_engine.md",
     "milestones/phase1_foundation_protocol_integration.md",
-    "milestones/phase2_core_intelligence_transaction_flow.md",
+    "milestones/phase4_hardening_testing_production.md",
+    "milestones/phase3_advanced_intelligence_enterprise_features.md",
     "components/beckn_bap_client.md",
     "components/nl_intent_parser.md",
     "technologies/beckn_client.md",
@@ -203,19 +209,13 @@
     "architecture/Architecture.jpeg",
     "architecture",
     "components/agent_react_framework.md",
-    "README.md",
     "Architecture/Architecture.jpeg",
     "Architecture/Architecture.md",
     "Architecture",
     "technologies/frontend_react_nextjs.md",
     "data_dictionary_er_model.md",
     "components/approval_workflow.md",
-    "milestones/phase4_hardening_testing_production.md",
-    "milestones/phase3_advanced_intelligence_enterprise_features.md",
-    "infrastructure/postgresql_local_setup.md",
     "technologies/agent_framework_langchain_langgraph.md",
-    "components/negotiation_engine.md",
-    "components/erp_integration.md",
     "Captura de pantalla 2026-04-14 a la(s) 4.16.56 p.m..png"
   ]
 }

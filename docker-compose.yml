@@ -65,6 +65,26 @@ services:
     networks:
       - beckn_network
 
+  # ── Lambda 5: Data Normalizer — persistence bridge ─────────────────────────
+  data-normalizer:
+    build:
+      context: .
+      dockerfile: ./services/data-normalizer/Dockerfile
+    ports:
+      - "8006:8006"
+    volumes:
+      - ./DataNormalizer:/app/DataNormalizer   # repo module mounted at runtime
+      - ./shared:/app/shared                   # shared models
+    environment:
+      - DB_HOST=host.docker.internal
+      - DB_PORT=5432
+      - DB_NAME=procurement_agent
+      - DB_USER=cristianmontiel
+      - DB_PASSWORD=
+      - PYTHONPATH=/app
+    networks:
+      - beckn_network
+
   # ── Orchestrator: Step Functions local simulator ───────────────────────────
   orchestrator:
     build: ./services/orchestrator
@@ -75,12 +95,14 @@ services:
       - INTENTION_PARSER_URL=http://intention-parser:8001
       - BECKN_BAP_URL=http://beckn-bap-client:8002
       - COMPARATIVE_SCORING_URL=http://comparative-scoring:8003
+      - DATA_NORMALIZER_URL=http://data-normalizer:8006
     networks:
       - beckn_network
     depends_on:
       - intention-parser
       - beckn-bap-client
       - comparative-scoring
+      - data-normalizer
 
   # ── Redis — shared cache for ONIX adapters ─────────────────────────────────
   redis:

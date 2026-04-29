@@ -1,0 +1,4 @@
+aiohttp>=3.9
+asyncpg>=0.29
+pydantic>=2.0
+pydantic-settings>=2.0

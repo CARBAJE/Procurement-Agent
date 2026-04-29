@@ -37,6 +37,7 @@ logger = logging.getLogger(__name__)
 INTENTION_PARSER_URL     = os.getenv("INTENTION_PARSER_URL",     "http://localhost:8001")
 BECKN_BAP_URL            = os.getenv("BECKN_BAP_URL",            "http://localhost:8002")
 COMPARATIVE_SCORING_URL  = os.getenv("COMPARATIVE_SCORING_URL",  "http://localhost:8003")
+DATA_NORMALIZER_URL      = os.getenv("DATA_NORMALIZER_URL",      "http://localhost:8006")
 
 # ── Session store (in-memory, 30-minute TTL, lazy expiry) ────────────────────
 
@@ -246,7 +247,37 @@ async def _post(session: aiohttp.ClientSession, url: str, body: dict) -> dict:
         return await resp.json()
 
 
-async def run_pipeline_from_intent(beckn_intent: dict) -> dict:
+async def _persist(session: aiohttp.ClientSession, path: str, body: dict) -> dict:
+    """Fire-and-forget POST to Data Normalizer. Never raises — logs on failure."""
+    if not DATA_NORMALIZER_URL:
+        return {}
+    try:
+        async with session.post(
+            f"{DATA_NORMALIZER_URL}{path}", json=body, timeout=aiohttp.ClientTimeout(total=5)
+        ) as resp:
+            if resp.status < 300:
+                return await resp.json()
+    except Exception as exc:
+        logger.debug("[data-normalizer] %s skipped: %s", path, exc)
+    return {}
+
+
+async def _persist_status(session: aiohttp.ClientSession, request_id: str, status: str) -> None:
+    """PATCH /normalize/status — update procurement lifecycle."""
+    if not DATA_NORMALIZER_URL or not request_id:
+        return
+    try:
+        async with session.patch(
+            f"{DATA_NORMALIZER_URL}/normalize/status",
+            json={"request_id": request_id, "status": status},
+            timeout=aiohttp.ClientTimeout(total=5),
+        ) as resp:
+            pass
+    except Exception as exc:
+        logger.debug("[data-normalizer] status update skipped: %s", exc)
+
+
+async def run_pipeline_from_intent(beckn_intent: dict, request_id: str | None = None) -> dict:
     """Execute Steps 2→3→4 of the state machine with a pre-parsed BecknIntent.
 
     Used by POST /discover (frontend-compatible endpoint) when the NL parse
@@ -260,6 +291,27 @@ async def run_pipeline_from_intent(beckn_intent: dict) -> dict:
         headers={"Content-Type": "application/json"}
     ) as session:
 
+        # ── Persist: create request record if not already created ─────────────
+        if not request_id:
+            nr = await _persist(session, "/normalize/request", {
+                "raw_input_text": str(beckn_intent.get("item", "direct-intent")),
+                "channel": "web",
+            })
+            request_id = nr.get("request_id", "")
+
+        # ── Persist: normalize intent (pre-parsed — no NL classification) ─────
+        beckn_intent_id = ""
+        if request_id:
+            ir = await _persist(session, "/normalize/intent", {
+                "request_id":   request_id,
+                "intent_class": "procurement",
+                "confidence":   1.0,
+                "model_version": "direct",
+                "beckn_intent": beckn_intent,
+            })
+            beckn_intent_id = ir.get("beckn_intent_id", "")
+            await _persist_status(session, request_id, "discovering")
+
         # ── Step 2: Beckn BAP Client Lambda (discover) ───────────────────────
         logger.info("Step 2 — Beckn BAP Client /discover (from pre-parsed intent)")
         discover_result = await _post(
@@ -271,6 +323,22 @@ async def run_pipeline_from_intent(beckn_intent: dict) -> dict:
             f"[beckn-bap-client] txn={transaction_id} "
             f"found {len(offerings)} offering(s)"
         )
+
+        # ── Persist: discovery ────────────────────────────────────────────────
+        query_id = ""
+        offering_ids_map: dict[str, str] = {}
+        if beckn_intent_id and offerings:
+            dr = await _persist(session, "/normalize/discovery", {
+                "beckn_intent_id": beckn_intent_id,
+                "network_id": discover_result.get("network_id", "beckn-default"),
+                "offerings": offerings,
+            })
+            query_id = dr.get("query_id", "")
+            offering_ids_map = {
+                o["item_id"]: o["offering_id"]
+                for o in dr.get("offering_ids", [])
+            }
+            await _persist_status(session, request_id, "scoring")
 
         if not offerings:
             return {
@@ -294,6 +362,39 @@ async def run_pipeline_from_intent(beckn_intent: dict) -> dict:
             )
         else:
             messages.append("[comparative-scoring] no offering selected")
+
+        # ── Persist: scoring ──────────────────────────────────────────────────
+        score_ids_map: dict[str, str] = {}
+        if query_id and offering_ids_map:
+            scoring_data = _build_scoring(
+                offerings,
+                selected.get("item_id") if selected else None,
+            )
+            scores_payload = []
+            for rank_item in scoring_data.get("ranking", []):
+                item_id = rank_item["item_id"]
+                offering_id = offering_ids_map.get(item_id)
+                if not offering_id:
+                    continue
+                price_val = next(
+                    (o["price_value"] for o in offerings if o["item_id"] == item_id),
+                    "0",
+                )
+                scores_payload.append({
+                    "offering_id":    offering_id,
+                    "rank":           rank_item["rank"],
+                    "composite_score": rank_item["composite_score"],
+                    "price_value":    price_val,
+                })
+            sr = await _persist(session, "/normalize/scoring", {
+                "query_id": query_id,
+                "scores":   scores_payload,
+            })
+            score_ids_map = {
+                s["offering_id"]: s["score_id"]
+                for s in sr.get("score_ids", [])
+            }
+            await _persist_status(session, request_id, "negotiating")
 
         if not selected:
             return {
@@ -334,11 +435,18 @@ async def run_pipeline_from_intent(beckn_intent: dict) -> dict:
         messages.append(f"[orchestrator] {summary}")
 
         return {
-            "transaction_id": transaction_id,
-            "offerings":      offerings,
-            "selected":       selected,
-            "messages":       messages,
-            "status":         "live",
+            "transaction_id":  transaction_id,
+            "offerings":       offerings,
+            "selected":        selected,
+            "messages":        messages,
+            "status":          "live",
+            "_persist": {
+                "request_id":       request_id,
+                "beckn_intent_id":  beckn_intent_id,
+                "query_id":         query_id,
+                "offering_ids_map": offering_ids_map,
+                "score_ids_map":    score_ids_map,
+            },
         }
 
 
@@ -354,8 +462,17 @@ async def run_pipeline(query: str) -> dict:
         headers={"Content-Type": "application/json"}
     ) as session:
 
+        # ── Persist: create request record ────────────────────────────────────
+        request_id = ""
+        nr = await _persist(session, "/normalize/request", {
+            "raw_input_text": query,
+            "channel": "web",
+        })
+        request_id = nr.get("request_id", "")
+
         # ── Step 1: Intention Parser Lambda ──────────────────────────────────
         logger.info("Step 1 — Intention Parser")
+        await _persist_status(session, request_id, "parsing")
         parse_result = await _post(
             session, f"{INTENTION_PARSER_URL}/parse", {"query": query}
         )
@@ -366,6 +483,7 @@ async def run_pipeline(query: str) -> dict:
         )
 
         if parse_result.get("intent") != "procurement":
+            await _persist_status(session, request_id, "cancelled")
             return {
                 "error": f"Query not recognised as procurement: {query!r}",
                 "messages": messages,
@@ -374,11 +492,25 @@ async def run_pipeline(query: str) -> dict:
 
         beckn_intent = parse_result.get("beckn_intent")
         if not beckn_intent:
+            await _persist_status(session, request_id, "cancelled")
             return {
                 "error": "Intent parser returned no beckn_intent",
                 "messages": messages,
                 "parse_result": parse_result,
             }
+
+        # ── Persist: normalize intent ─────────────────────────────────────────
+        beckn_intent_id = ""
+        if request_id:
+            ir = await _persist(session, "/normalize/intent", {
+                "request_id":    request_id,
+                "intent_class":  parse_result.get("intent", "procurement"),
+                "confidence":    float(parse_result.get("confidence", 1.0)),
+                "model_version": parse_result.get("model_version", "1.0"),
+                "beckn_intent":  beckn_intent,
+            })
+            beckn_intent_id = ir.get("beckn_intent_id", "")
+            await _persist_status(session, request_id, "discovering")
 
         # ── Step 2: Beckn BAP Client Lambda (discover) ───────────────────────
         logger.info("Step 2 — Beckn BAP Client /discover")
@@ -391,6 +523,22 @@ async def run_pipeline(query: str) -> dict:
             f"[beckn-bap-client] txn={transaction_id} "
             f"found {len(offerings)} offering(s)"
         )
+
+        # ── Persist: discovery ────────────────────────────────────────────────
+        query_id = ""
+        offering_ids_map: dict[str, str] = {}
+        if beckn_intent_id and offerings:
+            dr = await _persist(session, "/normalize/discovery", {
+                "beckn_intent_id": beckn_intent_id,
+                "network_id": discover_result.get("network_id", "beckn-default"),
+                "offerings": offerings,
+            })
+            query_id = dr.get("query_id", "")
+            offering_ids_map = {
+                o["item_id"]: o["offering_id"]
+                for o in dr.get("offering_ids", [])
+            }
+            await _persist_status(session, request_id, "scoring")
 
         if not offerings:
             return {
@@ -415,6 +563,39 @@ async def run_pipeline(query: str) -> dict:
             )
         else:
             messages.append("[comparative-scoring] no offering selected")
+
+        # ── Persist: scoring ──────────────────────────────────────────────────
+        score_ids_map: dict[str, str] = {}
+        if query_id and offering_ids_map:
+            scoring_data = _build_scoring(
+                offerings,
+                selected.get("item_id") if selected else None,
+            )
+            scores_payload = []
+            for rank_item in scoring_data.get("ranking", []):
+                item_id = rank_item["item_id"]
+                offering_id = offering_ids_map.get(item_id)
+                if not offering_id:
+                    continue
+                price_val = next(
+                    (o["price_value"] for o in offerings if o["item_id"] == item_id),
+                    "0",
+                )
+                scores_payload.append({
+                    "offering_id":     offering_id,
+                    "rank":            rank_item["rank"],
+                    "composite_score": rank_item["composite_score"],
+                    "price_value":     price_val,
+                })
+            sr = await _persist(session, "/normalize/scoring", {
+                "query_id": query_id,
+                "scores":   scores_payload,
+            })
+            score_ids_map = {
+                s["offering_id"]: s["score_id"]
+                for s in sr.get("score_ids", [])
+            }
+            await _persist_status(session, request_id, "negotiating")
 
         if not selected:
             return {
@@ -458,14 +639,21 @@ async def run_pipeline(query: str) -> dict:
         messages.append(f"[orchestrator] {summary}")
 
         return {
-            "transaction_id": transaction_id,
-            "offerings":      offerings,
-            "selected":       selected,
-            "messages":       messages,
-            "parse_result":   parse_result,
+            "transaction_id":  transaction_id,
+            "offerings":       offerings,
+            "selected":        selected,
+            "messages":        messages,
+            "parse_result":    parse_result,
             "discover_result": discover_result,
-            "score_result":   score_result,
-            "select_result":  select_result,
+            "score_result":    score_result,
+            "select_result":   select_result,
+            "_persist": {
+                "request_id":       request_id,
+                "beckn_intent_id":  beckn_intent_id,
+                "query_id":         query_id,
+                "offering_ids_map": offering_ids_map,
+                "score_ids_map":    score_ids_map,
+            },
         }
 
 
@@ -593,11 +781,80 @@ async def compare(request: web.Request) -> web.Response:
                 "timestamp": _now_iso(),
             })
 
+        # ── Persist: request + intent + discovery + scoring ──────────────────
+        request_id = ""
+        beckn_intent_id = ""
+        query_id = ""
+        offering_ids_map: dict[str, str] = {}
+        score_ids_map: dict[str, str] = {}
+
+        nr = await _persist(session, "/normalize/request", {
+            "raw_input_text": body.get("item", "compare-request"),
+            "channel": "web",
+        })
+        request_id = nr.get("request_id", "")
+        if request_id:
+            ir = await _persist(session, "/normalize/intent", {
+                "request_id":    request_id,
+                "intent_class":  "procurement",
+                "confidence":    1.0,
+                "model_version": "direct",
+                "beckn_intent":  body,
+            })
+            beckn_intent_id = ir.get("beckn_intent_id", "")
+            await _persist_status(session, request_id, "discovering")
+
+        if beckn_intent_id and offerings:
+            dr = await _persist(session, "/normalize/discovery", {
+                "beckn_intent_id": beckn_intent_id,
+                "network_id": "beckn-default",
+                "offerings": offerings,
+            })
+            query_id = dr.get("query_id", "")
+            offering_ids_map = {
+                o["item_id"]: o["offering_id"]
+                for o in dr.get("offering_ids", [])
+            }
+            await _persist_status(session, request_id, "scoring")
+
+        if query_id and offering_ids_map:
+            local_scoring = _build_scoring(offerings, recommended_item_id)
+            scores_payload = []
+            for rank_item in local_scoring.get("ranking", []):
+                item_id = rank_item["item_id"]
+                offering_id = offering_ids_map.get(item_id)
+                if not offering_id:
+                    continue
+                price_val = next(
+                    (o["price_value"] for o in offerings if o["item_id"] == item_id),
+                    "0",
+                )
+                scores_payload.append({
+                    "offering_id":     offering_id,
+                    "rank":            rank_item["rank"],
+                    "composite_score": rank_item["composite_score"],
+                    "price_value":     price_val,
+                })
+            sr = await _persist(session, "/normalize/scoring", {
+                "query_id": query_id,
+                "scores":   scores_payload,
+            })
+            score_ids_map = {
+                s["offering_id"]: s["score_id"]
+                for s in sr.get("score_ids", [])
+            }
+            await _persist_status(session, request_id, "negotiating")
+
         _session_put(transaction_id, {
-            "transaction_id": transaction_id,
-            "offerings": offerings,
-            "selected": selected,
-            "intent": body,
+            "transaction_id":  transaction_id,
+            "offerings":       offerings,
+            "selected":        selected,
+            "intent":          body,
+            "request_id":      request_id,
+            "beckn_intent_id": beckn_intent_id,
+            "query_id":        query_id,
+            "offering_ids_map": offering_ids_map,
+            "score_ids_map":   score_ids_map,
         })
 
         return web.json_response({
@@ -741,6 +998,26 @@ async def commit(request: web.Request) -> web.Response:
             order_state = confirm_resp.get("order_state") or "CREATED"
             messages.append(f"[send_confirm] order_id={order_id} state={order_state}")
 
+            # ── Persist: order ────────────────────────────────────────────────
+            state_score_ids_map: dict[str, str] = state.get("score_ids_map", {})
+            state_offering_ids_map: dict[str, str] = state.get("offering_ids_map", {})
+            chosen_offering_id = state_offering_ids_map.get(chosen_item_id, "")
+            chosen_score_id = state_score_ids_map.get(chosen_offering_id, "")
+            if chosen_score_id:
+                await _persist(session, "/normalize/order", {
+                    "score_id":          chosen_score_id,
+                    "bpp_uri":           bpp_uri,
+                    "item_id":           chosen["item_id"],
+                    "quantity":          quantity,
+                    "agreed_price":      float(chosen.get("price_value", "0")),
+                    "beckn_confirm_ref": order_id,
+                    "delivery_terms":    "Standard delivery",
+                    "currency":          chosen.get("price_currency", "INR"),
+                })
+                await _persist_status(
+                    session, state.get("request_id", ""), "confirmed"
+                )
+
         reasoning_steps = [
             {
                 "node": "send_select",
@@ -798,6 +1075,8 @@ async def commit(request: web.Request) -> web.Response:
             "bpp_uri":       bpp_uri,
             "items":         items,
             "contract_id":   contract_id,
+            "score_ids_map":    state.get("score_ids_map", {}),
+            "offering_ids_map": state.get("offering_ids_map", {}),
         })
 
         return web.json_response({
