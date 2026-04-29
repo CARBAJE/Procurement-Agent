@@ -22,6 +22,18 @@ sudo pacman -S postgresql
 
 This creates a system user named `postgres` and installs the binaries, but does **not** start the service or create any data files yet.
 
+**To macOS:**
+```bash
+brew install postgresql@17
+
+# Iniciar el servicio
+brew services start postgresql@17
+
+# Conectarte
+psql postgres
+```
+
+
 ---
 
 ## 2. Initialize the Database Cluster
@@ -38,6 +50,8 @@ sudo -u postgres initdb -D /var/lib/postgres/data
 | Flag | Meaning |
 |------|---------|
 | `-D /var/lib/postgres/data` | Path to the data directory — the default location for Arch-based systems |
+**To macOS:**
+It doesn't apply for macOS with Homebrew. Homebrew already initialized it automatically.
 
 ---
 
@@ -59,6 +73,14 @@ Verify the service is running:
 sudo systemctl status postgresql
 ```
 
+**To macOS:**
+It doesn't apply for macOS with Homebrew as well. Homebrew already initialized it automatically.
+
+```bash
+# Check if the server is running
+brew services list | grep postgresql
+```
+
 > [!check] Expected output
 > The status command should show `Active: active (running)`. If you see `failed`, the most likely cause is a missing or corrupted data directory — go back to Step 2.
 
@@ -73,6 +95,9 @@ sudo systemctl status postgresql
 
 ```bash
 sudo -u postgres psql
+
+# macOS
+psql postgres
 ```
 
 **Inside the shell, run the following SQL commands:**

@@ -8,45 +8,17 @@
         "type": "tabs",
         "children": [
           {
-            "id": "1fb9aa6ceb57d842",
-            "type": "leaf",
-            "state": {
-              "type": "markdown",
-              "state": {
-                "file": "system_architecture_diagram.md",
-                "mode": "source",
-                "source": false
-              },
-              "icon": "lucide-file",
-              "title": "system_architecture_diagram"
-            }
-          },
-          {
-            "id": "eaa95b6b8bf93ed6",
-            "type": "leaf",
-            "state": {
-              "type": "markdown",
-              "state": {
-                "file": "components/beckn_bap_client.md",
-                "mode": "source",
-                "source": false
-              },
-              "icon": "lucide-file",
-              "title": "beckn_bap_client"
-            }
-          },
-          {
             "id": "5a0845e96356f9e2",
             "type": "leaf",
             "state": {
               "type": "markdown",
               "state": {
-                "file": "components/agent_react_framework.md",
+                "file": "infrastructure/postgresql_local_setup.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "agent_react_framework"
+              "title": "postgresql_local_setup"
             }
           }
         ]
@@ -106,7 +78,7 @@
       }
     ],
     "direction": "horizontal",
-    "width": 300
+    "width": 212.50247192382812
   },
   "right": {
     "id": "707d49ecd1b271f3",
@@ -211,34 +183,39 @@
       "bases:Crear nueva base": false
     }
   },
-  "active": "1fb9aa6ceb57d842",
+  "active": "5a0845e96356f9e2",
   "lastOpenFiles": [
-    "components/beckn_bap_client.md",
-    "components/agent_react_framework.md",
-    "technologies/frontend_react_nextjs.md",
-    "milestones/phase1_foundation_protocol_integration.md",
-    "system_architecture_diagram.md",
-    "milestones/phase2_core_intelligence_transaction_flow.md",
-    "data_dictionary_er_model.md",
-    "components/approval_workflow.md",
-    "milestones/phase4_hardening_testing_production.md",
-    "milestones/phase3_advanced_intelligence_enterprise_features.md",
     "system_architecture_diagram_en.md",
-    "infrastructure/postgresql_local_setup.md",
-    "technologies/beckn_client.md",
-    "README.md",
-    "technologies/agent_framework_langchain_langgraph.md",
-    "components/nl_intent_parser.md",
-    "components/negotiation_engine.md",
+    "system_architecture_diagram.md",
+    "components/microservices_architecture.md",
     "components/erp_integration.md",
     "components/comparison_scoring_engine.md",
-    "components/audit_trail_system.md",
-    "components/analytics_dashboard.md",
-    "components/agent_memory_learning.md",
-    "Captura de pantalla 2026-04-14 a la(s) 4.16.56 p.m..png",
-    "infrastructure/data_pipeline_architecture.md",
-    "technologies/event_streaming_kafka.md",
-    "deep-research-report.md",
-    "ai_models/heuristic_routing_theory/complexity_routing_theory.md"
+    "milestones/phase2_core_intelligence_transaction_flow.md",
+    "tests/phase2_microservices.md",
+    "tests/phase1_bap_monolith.md",
+    "tests",
+    "components/catalog_normalizer.md",
+    "milestones/phase1_foundation_protocol_integration.md",
+    "milestones/phase4_hardening_testing_production.md",
+    "milestones/phase3_advanced_intelligence_enterprise_features.md",
+    "components/beckn_bap_client.md",
+    "components/nl_intent_parser.md",
+    "technologies/beckn_client.md",
+    "technologies/embedding_models.md",
+    "architecture/Architecture.md",
+    "architecture/Architecture.jpeg",
+    "architecture",
+    "components/agent_react_framework.md",
+    "README.md",
+    "Architecture/Architecture.jpeg",
+    "Architecture/Architecture.md",
+    "Architecture",
+    "technologies/frontend_react_nextjs.md",
+    "data_dictionary_er_model.md",
+    "components/approval_workflow.md",
+    "infrastructure/postgresql_local_setup.md",
+    "technologies/agent_framework_langchain_langgraph.md",
+    "components/negotiation_engine.md",
+    "Captura de pantalla 2026-04-14 a la(s) 4.16.56 p.m..png"
   ]
 }
