@@ -31,7 +31,14 @@ from aiohttp import web
 from .beckn.adapter import BecknProtocolAdapter
 from .beckn.callbacks import CallbackCollector
 from .beckn.client import BecknClient
-from .beckn.models import BecknIntent, SelectOrder, SelectProvider, SelectedItem
+from .beckn.models import (
+    BecknIntent,
+    BillingInfo,
+    FulfillmentInfo,
+    SelectOrder,
+    SelectProvider,
+    SelectedItem,
+)
 from .config import BecknConfig
 
 logger = logging.getLogger(__name__)
@@ -268,7 +275,9 @@ async def beckn_init(request: web.Request) -> web.Response:
     """POST /init — send Beckn /init and await on_init callback.
 
     Body: {transaction_id, contract_id, bpp_id, bpp_uri,
-           items: [{id, quantity, name, price_value, price_currency}]}
+           items: [{id, quantity, name, price_value, price_currency}],
+           billing?: {name, email, phone, address: {city, area_code, ...}, tax_id?},
+           fulfillment?: {end_location, end_address, contact_name, contact_phone, delivery_timeline?}}
     Response: {payment_terms, contract_id, ack}
     """
     try:
@@ -289,6 +298,20 @@ async def beckn_init(request: web.Request) -> web.Response:
     except Exception as exc:
         raise web.HTTPUnprocessableEntity(reason=f"Invalid items: {exc}")
 
+    billing: BillingInfo | None = None
+    if body.get("billing"):
+        try:
+            billing = BillingInfo(**body["billing"])
+        except Exception as exc:
+            raise web.HTTPUnprocessableEntity(reason=f"Invalid billing: {exc}")
+
+    fulfillment: FulfillmentInfo | None = None
+    if body.get("fulfillment"):
+        try:
+            fulfillment = FulfillmentInfo(**body["fulfillment"])
+        except Exception as exc:
+            raise web.HTTPUnprocessableEntity(reason=f"Invalid fulfillment: {exc}")
+
     try:
         adapter = BecknProtocolAdapter(config)
         async with BecknClient(adapter) as client:
@@ -300,10 +323,12 @@ async def beckn_init(request: web.Request) -> web.Response:
                 bpp_uri=bpp_uri,
                 collector=collector,
                 timeout=config.callback_timeout,
+                billing=billing,
+                fulfillment=fulfillment,
             )
         return web.json_response({
-            "payment_terms": result["payment_terms"],
-            "contract_id": contract_id,
+            "payment_terms": result.payment_terms.model_dump() if result.payment_terms else None,
+            "contract_id": result.contract_id,
             "ack": "ACK",
         })
     except Exception as exc:
@@ -359,8 +384,8 @@ async def beckn_confirm(request: web.Request) -> web.Response:
                 timeout=config.callback_timeout,
             )
         return web.json_response({
-            "order_id": result["order_id"],
-            "order_state": result["order_state"],
+            "order_id": result.order_id,
+            "order_state": result.state.value,
             "ack": "ACK",
         })
     except RuntimeError:
@@ -413,7 +438,11 @@ async def beckn_status(request: web.Request) -> web.Response:
                 collector=collector,
                 timeout=config.callback_timeout,
             )
-        return web.json_response(result)
+        return web.json_response({
+            "state": result.state.value,
+            "fulfillment_eta": result.fulfillment_eta,
+            "tracking_url": result.tracking_url,
+        })
     except Exception as exc:
         logger.error("/status failed: %s", exc)
         return web.json_response({

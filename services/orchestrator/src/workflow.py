@@ -38,6 +38,17 @@ INTENTION_PARSER_URL     = os.getenv("INTENTION_PARSER_URL",     "http://localho
 BECKN_BAP_URL            = os.getenv("BECKN_BAP_URL",            "http://localhost:8002")
 COMPARATIVE_SCORING_URL  = os.getenv("COMPARATIVE_SCORING_URL",  "http://localhost:8003")
 
+# ── Buyer billing config (mirrors Bap-1's ConfigBillingProvider) ─────────────
+
+BUYER_NAME              = os.getenv("BUYER_NAME",              "Procurement Agent")
+BUYER_EMAIL             = os.getenv("BUYER_EMAIL",             "procurement@example.com")
+BUYER_PHONE             = os.getenv("BUYER_PHONE",             "+91-0000000000")
+BUYER_ADDRESS_STREET    = os.getenv("BUYER_ADDRESS_STREET",    "")
+BUYER_ADDRESS_CITY      = os.getenv("BUYER_ADDRESS_CITY",      "Bangalore")
+BUYER_ADDRESS_STATE     = os.getenv("BUYER_ADDRESS_STATE",     "Karnataka")
+BUYER_ADDRESS_AREA_CODE = os.getenv("BUYER_ADDRESS_AREA_CODE", "560100")
+BUYER_ADDRESS_COUNTRY   = os.getenv("BUYER_ADDRESS_COUNTRY",   "IND")
+
 # ── Session store (in-memory, 30-minute TTL, lazy expiry) ────────────────────
 
 _sessions: dict[str, dict] = {}
@@ -65,6 +76,57 @@ def _session_get(txn_id: str) -> dict | None:
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+
+
+def _build_billing_info() -> dict:
+    """Build billing dict from BUYER_* env vars (mirrors Bap-1's ConfigBillingProvider).
+
+    Returns a plain dict — beckn-bap-client deserialises it into BillingInfo.
+    """
+    address: dict = {
+        "city":      BUYER_ADDRESS_CITY,
+        "area_code": BUYER_ADDRESS_AREA_CODE,
+        "country":   BUYER_ADDRESS_COUNTRY,
+    }
+    if BUYER_ADDRESS_STREET:
+        address["street"] = BUYER_ADDRESS_STREET
+    if BUYER_ADDRESS_STATE:
+        address["state"] = BUYER_ADDRESS_STATE
+    return {
+        "name":    BUYER_NAME,
+        "email":   BUYER_EMAIL,
+        "phone":   BUYER_PHONE,
+        "address": address,
+    }
+
+
+def _build_fulfillment_info(intent: dict) -> dict:
+    """Derive fulfillment dict from the session's BecknIntent (mirrors Bap-1's ConfigFulfillmentProvider).
+
+    end_location: intent.location_coordinates or default Bangalore coords.
+    end_address:  same as billing address (delivery to buyer's office).
+    delivery_timeline: from intent (hours).
+    """
+    end_location = intent.get("location_coordinates") or "12.9716,77.5946"
+    end_address: dict = {
+        "city":      BUYER_ADDRESS_CITY,
+        "area_code": BUYER_ADDRESS_AREA_CODE,
+        "country":   BUYER_ADDRESS_COUNTRY,
+    }
+    if BUYER_ADDRESS_STREET:
+        end_address["street"] = BUYER_ADDRESS_STREET
+    if BUYER_ADDRESS_STATE:
+        end_address["state"] = BUYER_ADDRESS_STATE
+    out: dict = {
+        "type":          "Delivery",
+        "end_location":  end_location,
+        "end_address":   end_address,
+        "contact_name":  BUYER_NAME,
+        "contact_phone": BUYER_PHONE,
+    }
+    if intent.get("delivery_timeline"):
+        out["delivery_timeline"] = intent["delivery_timeline"]
+    return out
 
 
 def _build_scoring(offerings: list[dict], recommended_item_id: str | None) -> dict:
@@ -711,12 +773,15 @@ async def commit(request: web.Request) -> web.Response:
             messages.append(f"[send_select] ACK={select_ack}")
 
             # Step 4b: /init
+            intent: dict = state.get("intent") or {}
             init_body = {
                 "transaction_id": txn_id,
                 "contract_id":    contract_id,
                 "bpp_id":         bpp_id,
                 "bpp_uri":        bpp_uri,
                 "items":          items,
+                "billing":        _build_billing_info(),
+                "fulfillment":    _build_fulfillment_info(intent),
             }
             init_resp = await _post(session, f"{BECKN_BAP_URL}/init", init_body)
             payment_terms = init_resp.get("payment_terms") or {

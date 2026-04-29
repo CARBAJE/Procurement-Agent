@@ -75,6 +75,15 @@ services:
       - INTENTION_PARSER_URL=http://intention-parser:8001
       - BECKN_BAP_URL=http://beckn-bap-client:8002
       - COMPARATIVE_SCORING_URL=http://comparative-scoring:8003
+      # Buyer billing — read by _build_billing_info() in workflow.py
+      - BUYER_NAME=Infosys Limited - Procurement Desk
+      - BUYER_EMAIL=procurement@infosys.com
+      - BUYER_PHONE=+91-80-28520261
+      - BUYER_ADDRESS_STREET=Electronic City Phase 1
+      - BUYER_ADDRESS_CITY=Bangalore
+      - BUYER_ADDRESS_STATE=Karnataka
+      - BUYER_ADDRESS_AREA_CODE=560100
+      - BUYER_ADDRESS_COUNTRY=IND
     networks:
       - beckn_network
     depends_on:

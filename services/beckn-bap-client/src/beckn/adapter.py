@@ -26,7 +26,9 @@ from ..config import BecknConfig
 from .models import (
     BecknContext,
     BecknIntent,
+    BillingInfo,
     DiscoverRequest,
+    FulfillmentInfo,
     SelectMessage,
     SelectOrder,
     SelectRequest,
@@ -153,14 +155,53 @@ class BecknProtocolAdapter:
 
         return commitments, considerations, commitment_ids
 
-    def _performance_dict(self, commitment_ids: list[str]) -> dict:
+    @staticmethod
+    def _address_dict(address: "Address") -> dict:
+        """Address model → camelCase wire dict, dropping None values."""
+        raw = {
+            "door":     address.door,
+            "building": address.building,
+            "street":   address.street,
+            "city":     address.city,
+            "state":    address.state,
+            "country":  address.country,
+            "areaCode": address.area_code,
+        }
+        return {k: v for k, v in raw.items() if v is not None}
+
+    def _buyer_participant_dict(self, billing: "BillingInfo") -> dict:
+        """BillingInfo → a Participant entry with role code 'buyer'.
+
+        participants[] is permissive (no additionalProperties: false), so
+        contact + address + taxId sit at the top level of the participant object.
+        """
+        out: dict = {
+            "id": self.config.bap_id,
+            "descriptor": {"code": "buyer", "name": billing.name},
+            "contact": {
+                "name":  billing.name,
+                "email": billing.email,
+                "phone": billing.phone,
+            },
+            "address": self._address_dict(billing.address),
+        }
+        if billing.tax_id:
+            out["taxId"] = billing.tax_id
+        return out
+
+    def _performance_dict(
+        self,
+        commitment_ids: list[str],
+        fulfillment: "FulfillmentInfo | None" = None,
+    ) -> dict:
         """Minimal performance entry referencing commitment_ids.
 
-        performanceAttributes is intentionally omitted — it would require a
-        resolvable JSON-LD @context URI which the sandbox does not host.
-        Omitting it bypasses the ONIX validator's extended schema check.
+        `fulfillment` is accepted for forward-compat but not serialised —
+        performanceAttributes would require a resolvable JSON-LD @context URI
+        which the sandbox does not host.
         TODO(beckn-v2.1-context): reinstate when a resolvable context exists.
         """
+        _ = fulfillment  # intentionally unused until a resolvable context exists
         return {
             "id": f"performance-{uuid4().hex[:8]}",
             "status": {"code": "PENDING"},
@@ -280,31 +321,37 @@ class BecknProtocolAdapter:
         transaction_id: str,
         bpp_id: str,
         bpp_uri: str,
+        *,
+        billing: "BillingInfo | None" = None,
+        fulfillment: "FulfillmentInfo | None" = None,
     ) -> dict:
         """Build /init payload in Beckn v2.1 Contract shape.
 
         Extends the /select contract with a buyer Participant (billing) and a
-        Performance entry (fulfillment). Uses hardcoded mock buyer info — swap
-        for a real BillingProvider when buyer identity management lands.
+        Performance entry (fulfillment). When billing is provided, real buyer
+        info is serialised; otherwise falls back to mock defaults (backward compat).
         """
         context = self._wire_context("init", transaction_id=transaction_id, bpp_id=bpp_id, bpp_uri=bpp_uri)
         commitments, considerations, commitment_ids = self._build_commitments(items)
 
-        buyer_participant = {
-            "id": self.config.bap_id,
-            "descriptor": {"code": "buyer", "name": "Procurement Agent"},
-            "contact": {
-                "name": "Procurement Agent",
-                "email": "procurement@example.com",
-                "phone": "+91-0000000000",
-            },
-        }
+        if billing is not None:
+            buyer_participant = self._buyer_participant_dict(billing)
+        else:
+            buyer_participant = {
+                "id": self.config.bap_id,
+                "descriptor": {"code": "buyer", "name": "Procurement Agent"},
+                "contact": {
+                    "name":  "Procurement Agent",
+                    "email": "procurement@example.com",
+                    "phone": "+91-0000000000",
+                },
+            }
 
         contract: dict = {
             "id": contract_id,
             "participants": [buyer_participant],
             "commitments": commitments,
-            "performance": [self._performance_dict(commitment_ids)],
+            "performance": [self._performance_dict(commitment_ids, fulfillment)],
         }
         if considerations:
             contract["consideration"] = considerations

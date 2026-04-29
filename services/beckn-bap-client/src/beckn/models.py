@@ -14,7 +14,8 @@ and the Beckn Protocol. All fields are canonical machine-processable form:
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Optional
+from enum import Enum
+from typing import Literal, Optional
 from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -168,3 +169,119 @@ class AckMessage(BaseModel):
 class AckResponse(BaseModel):
     message: AckMessage
     error: Optional[dict] = None
+
+
+# ── /init billing + fulfillment (restored from Bap-1) ────────────────────────
+
+
+class Address(BaseModel):
+    door: Optional[str] = None
+    building: Optional[str] = None
+    street: Optional[str] = None
+    city: str
+    state: Optional[str] = None
+    country: str = "IND"
+    area_code: str
+
+
+class BillingInfo(BaseModel):
+    """Buyer billing details sent in /init.
+
+    Deserialised from the orchestrator's request body. Falls back to mock
+    defaults in handler.py if the orchestrator omits the field (backward compat).
+    """
+
+    name: str
+    email: str
+    phone: str
+    address: Address
+    tax_id: Optional[str] = None
+
+
+class FulfillmentInfo(BaseModel):
+    """Delivery details sent in /init.
+
+    `end_location` is the drop-off GPS "lat,lon".
+    `delivery_timeline` mirrors BecknIntent.delivery_timeline (hours).
+    `performanceAttributes` is intentionally NOT serialised to the wire —
+    the JSON-LD @context blocker is preserved exactly as in Bap-1.
+    TODO(beckn-v2.1-context): reinstate when a resolvable context exists.
+    """
+
+    type: str = "Delivery"
+    end_location: str  # "lat,lon" decimal string
+    end_address: Address
+    contact_name: str
+    contact_phone: str
+    delivery_timeline: Optional[int] = None  # hours
+
+
+# ── /init, /confirm, /status response models ──────────────────────────────────
+
+# Beckn v2 payment types (spec §Payment):
+#   ON_ORDER        — pre-pay before fulfillment (UPI/card)
+#   ON_FULFILLMENT  — COD, BPP collects at delivery
+#   POST_FULFILLMENT — invoice / NET-30 / NET-60
+PaymentType = Literal["ON_ORDER", "ON_FULFILLMENT", "POST_FULFILLMENT"]
+
+
+class PaymentTerms(BaseModel):
+    """Payment terms negotiated in /init and committed in /confirm."""
+
+    type: PaymentType = "ON_FULFILLMENT"
+    collected_by: str = "BPP"
+    currency: str = "INR"
+    uri: Optional[str] = None
+    transaction_id: Optional[str] = None
+    status: str = "NOT-PAID"
+
+
+class OrderState(str, Enum):
+    """Canonical order lifecycle states — aligned with Beckn v2 spec.
+
+    Not every BPP emits every state. Missing transitions are fine: the UI
+    and status polling treat absent states as "no update".
+    """
+
+    CREATED = "CREATED"
+    ACCEPTED = "ACCEPTED"
+    PACKED = "PACKED"
+    SHIPPED = "SHIPPED"
+    OUT_FOR_DELIVERY = "OUT_FOR_DELIVERY"
+    DELIVERED = "DELIVERED"
+    CANCELLED = "CANCELLED"
+
+
+class InitResponse(BaseModel):
+    """Parsed on_init callback — payment terms drafted by the BPP."""
+
+    context: Optional[BecknContext] = None
+    transaction_id: str
+    contract_id: str
+    payment_terms: Optional[PaymentTerms] = None
+    quote_total: Optional[str] = None
+    quote_currency: str = "INR"
+    raw_message: dict = Field(default_factory=dict)
+
+
+class ConfirmResponse(BaseModel):
+    """Parsed on_confirm callback — order is now committed."""
+
+    context: Optional[BecknContext] = None
+    transaction_id: str
+    order_id: str
+    state: OrderState = OrderState.CREATED
+    fulfillment_eta: Optional[str] = None
+    raw_message: dict = Field(default_factory=dict)
+
+
+class StatusResponse(BaseModel):
+    """Parsed on_status callback — current fulfillment state."""
+
+    context: Optional[BecknContext] = None
+    transaction_id: str
+    order_id: str
+    state: OrderState
+    fulfillment_eta: Optional[str] = None
+    tracking_url: Optional[str] = None
+    raw_message: dict = Field(default_factory=dict)

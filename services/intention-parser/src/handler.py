@@ -55,7 +55,12 @@ async def parse(request: web.Request) -> web.Response:
         })
     except Exception as exc:
         logger.error("Intent parsing failed: %s", exc)
-        raise web.HTTPInternalServerError(reason=f"Intent parsing failed: {exc}")
+        safe_reason = str(exc).replace("\r", " ").replace("\n", " ")[:200]
+        raise web.HTTPInternalServerError(
+            reason=f"Intent parsing failed: {safe_reason}",
+            text=json.dumps({"detail": f"Intent parsing failed: {safe_reason}"}),
+            content_type="application/json",
+        )
 
 
 def create_app() -> web.Application:
