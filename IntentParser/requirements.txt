@@ -1,5 +1,11 @@
-instructor
-openai
-pydantic
-fastapi
+instructor>=1.15
+openai>=1.0
+pydantic>=2.0
+fastapi>=0.100
 uvicorn[standard]
+aiohttp>=3.9
+asyncpg>=0.29
+pgvector>=0.3
+sentence-transformers>=2.6
+numpy
+anthropic>=0.20
