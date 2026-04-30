@@ -26,7 +26,10 @@ import uuid
 sys.path.insert(0, "/app")
 
 import aiohttp
+import redis.asyncio as aioredis
 from aiohttp import web
+
+REDIS_URL: str = os.getenv("REDIS_URL", "redis://localhost:6379")
 
 from .beckn.adapter import BecknProtocolAdapter
 from .beckn.callbacks import CallbackCollector
@@ -95,12 +98,18 @@ async def discover(request: web.Request) -> web.Response:
     """POST /discover — run Beckn discovery and return offerings.
 
     Body: BecknIntent JSON fields (item, quantity, location_coordinates, …)
+          plus optional "transaction_id" string (passed by the MCP sidecar so
+          the on_discover Redis channel uses the same ID it subscribed to).
     Response: { "transaction_id": str, "offerings": [DiscoverOffering…] }
     """
     try:
         body = await request.json()
     except json.JSONDecodeError:
         raise web.HTTPBadRequest(reason="Invalid JSON")
+
+    # Extract caller-supplied transaction_id before BecknIntent parsing.
+    # BecknIntent has no such field; pop avoids any "extra fields" warning.
+    txn_id: str | None = body.pop("transaction_id", None)
 
     try:
         intent = BecknIntent(**body)
@@ -114,6 +123,7 @@ async def discover(request: web.Request) -> web.Response:
             resp = await client.discover_async(
                 intent,
                 collector,
+                transaction_id=txn_id,   # propagate into Beckn context
                 timeout=config.callback_timeout,
             )
 
@@ -175,6 +185,47 @@ async def select(request: web.Request) -> web.Response:
         raise web.HTTPInternalServerError(reason=f"/select failed: {exc}")
 
 
+# ── Dedicated on_discover webhook (Redis Pub/Sub path) ───────────────────────
+
+
+async def on_discover(request: web.Request) -> web.Response:
+    """POST /on_discover — Beckn async on_discover callback from ONIX adapter.
+
+    Dual responsibility:
+    1. Publishes the full payload to Redis channel ``beckn_results:{txn_id}``
+       so the MCP sidecar's probe_bap_network receives results without being
+       blocked on the HTTP response.
+    2. Feeds the module-level CallbackCollector so the orchestrator's
+       synchronous discover flow (discover_async → collect) keeps working
+       unchanged.
+
+    Returns an immediate HTTP 200 ACK to satisfy the Beckn protocol contract —
+    the ONIX adapter must not wait for downstream processing.
+    """
+    try:
+        payload = await request.json()
+    except json.JSONDecodeError:
+        raise web.HTTPBadRequest(reason="Invalid JSON")
+
+    ctx = payload.get("context", {})
+    txn_id: str = ctx.get("transactionId") or ctx.get("transaction_id", "")
+    logger.debug("on_discover received | txn=%s", txn_id)
+
+    if txn_id:
+        try:
+            async with aioredis.from_url(REDIS_URL) as r:
+                await r.publish(f"beckn_results:{txn_id}", json.dumps(payload))
+            logger.debug("Published on_discover to Redis | txn=%s", txn_id)
+        except Exception as exc:
+            # Non-fatal: log and continue so CallbackCollector path still works
+            logger.warning("Redis publish failed (txn=%s): %s", txn_id, exc)
+
+    # Keep the CallbackCollector path alive for orchestrator's discover flow
+    await collector.handle_callback("on_discover", payload)
+
+    return web.json_response({"message": {"ack": {"status": "ACK"}}})
+
+
 # ── ONIX callback receiver ────────────────────────────────────────────────────
 
 
@@ -205,13 +256,14 @@ async def bpp_discover(request: web.Request) -> web.Response:
 
     onix-bap routes discover here (via generic-routing-BAPCaller.yaml) instead
     of an external Discover Service. Immediately ACKs and fires an async
-    on_discover callback back to our own /bap/receiver/on_discover route.
+    on_discover callback back to our own /on_discover route, which publishes to
+    Redis and feeds the CallbackCollector.
 
         orchestrator → beckn-bap-client /discover
           → BecknClient.discover_async() → onix-bap
             → POST /bpp/discover (here)
-              → async POST /bap/receiver/on_discover (here, via asyncio task)
-                → CallbackCollector → discover_async() wakes up
+              → async POST /on_discover (here, via asyncio task)
+                → Redis publish + CallbackCollector → discover_async() wakes up
     """
     try:
         payload = await request.json()
@@ -254,7 +306,7 @@ async def _send_local_on_discover(context: dict) -> None:
     }
 
     port = int(os.getenv("PORT", "8002"))
-    callback_url = f"http://localhost:{port}/bap/receiver/on_discover"
+    callback_url = f"http://localhost:{port}/on_discover"
 
     try:
         async with aiohttp.ClientSession() as session:
@@ -464,6 +516,7 @@ def create_app() -> web.Application:
     app.router.add_post("/init",                 beckn_init)
     app.router.add_post("/confirm",              beckn_confirm)
     app.router.add_post("/status",               beckn_status)
+    app.router.add_post("/on_discover",           on_discover)    # MCP sidecar Redis Pub/Sub path
     app.router.add_post("/bap/receiver/{action}", bap_receiver)
     app.router.add_post("/bpp/discover",         bpp_discover)   # ONIX discover routing target
     app.router.add_post("/{action}",             bap_receiver)   # real Beckn network callbacks

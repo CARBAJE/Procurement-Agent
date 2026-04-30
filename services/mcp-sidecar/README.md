@@ -16,11 +16,13 @@ SSE stream        → "message" event carries the JSON-RPC response
 
 ### Key design properties
 
-**Stateless.** The sidecar holds no cache and no session state between requests. Every `search_bpp_catalog` call results in a live `POST /discover` request to the BAP Client. Semantic caching is exclusively owned by the IntentParser's Stage 3 `pgvector` database — adding a second cache here would create a "Two Sources of Truth" anti-pattern.
+**Stateless.** The sidecar holds no cache and no session state between requests. Every `search_bpp_catalog` call results in a live probe of the Beckn network. Semantic caching is exclusively owned by the IntentParser's Stage 3 `pgvector` database — adding a second cache here would create a "Two Sources of Truth" anti-pattern.
 
-**"Never Throw" contract.** The tool handler wraps its entire body in a `try/except`. No matter what fails — BAP Client timeout, connection refused, malformed ONIX response, or an unexpected runtime error — the sidecar always returns a clean JSON object to the caller. It never emits a JSON-RPC `error` response. Failures surface as `{"found": false, "items": [], "probe_latency_ms": <elapsed>}`.
+**"Never Throw" contract.** The tool handler wraps its entire body in a `try/except`. No matter what fails — Redis unavailable, BAP Client timeout, connection refused, malformed ONIX response, or any unexpected runtime error — the sidecar always returns a clean JSON object to the caller. It never emits a JSON-RPC `error` response. Failures surface as `{"found": false, "items": [], "probe_latency_ms": <elapsed>}`.
 
-**Local semantic ranking.** After a successful BAP response, results are ranked by cosine similarity between the buyer's `item_name` and each ONIX catalog descriptor name, using `all-MiniLM-L6-v2` (384-dimensional, the same model as IntentParser Stage 3). Items scoring below `RANKING_MIN_SIMILARITY` are filtered out. Business-logic ranking (price, rating, delivery SLA) is out of scope and belongs to the downstream Comparison Engine.
+**Async-safe via Redis Pub/Sub.** Beckn v2.0.0 returns only an ACK to `POST /discover`; catalog results arrive later as a webhook callback. Rather than blocking on the HTTP response (which caused deadlocks), `bap_client.py` subscribes to a Redis channel **before** firing the request and awaits the async result there. See [ADR-0001](../../docs/architecture/decisions/0001-use-redis-pubsub-for-async-beckn-responses.md).
+
+**Local semantic ranking.** After a successful probe, results are ranked by cosine similarity between the buyer's `item_name` and each ONIX catalog descriptor name, using `all-MiniLM-L6-v2` (384-dimensional, the same model as IntentParser Stage 3). Items scoring below `RANKING_MIN_SIMILARITY` are filtered out. Business-logic ranking (price, rating, delivery SLA) is out of scope and belongs to the downstream Comparison Engine.
 
 ### Architecture position
 
@@ -32,12 +34,16 @@ IntentParser (Python :8001)
         ▼
 MCP Sidecar (Python :3000)   ← this service
         │
-        │  POST /discover
-        │  Authorization: Bearer <BAP_API_KEY>
+        │  1. SUBSCRIBE Redis beckn_results:{txn_id}
+        │  2. POST /discover {transaction_id, ...}  [asyncio.create_task]
+        │  3. await Redis message (≤ REDIS_RESULT_TIMEOUT s)
         ▼
 BAP Client (Python :8002)
         │
-        │  Beckn /search broadcast
+        │  POST /bap/caller/discover → ONIX → /bpp/discover
+        │  POST /on_discover → PUBLISH Redis beckn_results:{txn_id}
+        ▼
+Redis :6379  ──────────────────────────────────────────────────────────► Sidecar receives
         ▼
 ONIX Network (external Beckn P2P)
 ```
@@ -50,7 +56,8 @@ ONIX Network (external Beckn P2P)
 |---|---|---|
 | Python | 3.11+ | Must match the project's conda environment |
 | conda environment | `infosys_project` | Used for all package management in this project |
-| BAP Client | running on `:8002` | Required for live ONIX probes; sidecar will time out gracefully if unavailable |
+| BAP Client | running on `:8002` | Required for live ONIX probes; sidecar returns `found=false` gracefully if unavailable |
+| **Redis** | 7+ | **Required.** The sidecar subscribes to `beckn_results:{txn_id}` on every probe. Start with `docker compose up -d redis`. Exposed on `localhost:6379`. |
 
 The sidecar downloads `all-MiniLM-L6-v2` from the Hugging Face Hub on first startup. Subsequent starts use the local model cache (`~/.cache/huggingface/`). Ensure outbound internet access or a pre-populated cache for air-gapped deployments.
 
@@ -63,10 +70,30 @@ All configuration is read from environment variables at startup. The sidecar als
 | Variable | Default | Required | Description |
 |---|---|---|---|
 | `BAP_API_KEY` | *(none)* | **Mandatory** | API key or JWT for authenticating requests to the BAP Client. Passed as `Authorization: Bearer <value>` on every `POST /discover` call. **The service will raise a `ValidationError` and refuse to start if this variable is absent from the environment.** |
-| `BAP_CLIENT_URL` | `http://localhost:8002` | Optional | Base URL of the BAP Client service. In Docker Compose, set to `http://beckn-bap-client:8002`. |
+| `BAP_CLIENT_URL` | `http://localhost:8002` | Optional | Base URL of the BAP Client service. Port `8002` is exposed by Docker Compose. |
 | `PORT` | `3000` | Optional | Port the SSE server listens on. Must match `MCP_SSE_URL` configured in the IntentParser. |
-| `MCP_BAP_TIMEOUT` | `3.0` | Optional | Seconds the sidecar waits for a `POST /discover` response before cancelling the request and returning `found: false`. The IntentParser's outer `MCP_PROBE_TIMEOUT=8s` is a separate, wider safety net. |
+| `REDIS_URL` | `redis://localhost:6379` | Optional | Redis connection string. Port `6379` is exposed by Docker Compose. Change to `redis://redis:6379` if running this service inside Docker. |
+| `REDIS_RESULT_TIMEOUT` | `15` | Optional | **Seconds to await a `beckn_results:{txn_id}` message on the Redis Pub/Sub channel before giving up.** This is the primary latency ceiling for the live Beckn probe — set it to accommodate your network's worst-case `on_discover` callback delay. On expiry the sidecar returns `{"found": false, "items": [], "probe_latency_ms": <elapsed>}`. |
+| `MCP_BAP_TIMEOUT` | `3.0` | Optional | Timeout (seconds) for the `POST /discover` HTTP task. This is a **fire-and-forget** call: the sidecar does not wait for the HTTP response to contain catalog data — results arrive via Redis. The HTTP task is cancelled (gracefully) once the Redis message is received or `REDIS_RESULT_TIMEOUT` elapses. Set this high enough to give the BAP Client time to accept the request; it does not need to cover the full Beckn round-trip. |
 | `RANKING_MIN_SIMILARITY` | `0.30` | Optional | Cosine similarity threshold (0–1) below which ONIX results are discarded before being returned to the IntentParser. Scores are computed with `all-MiniLM-L6-v2`; higher values produce more precise but potentially empty result sets. |
+
+### Timeout relationship
+
+```
+Request timeline (wall clock)
+────────────────────────────────────────────────────────────────────
+t=0      SUBSCRIBE Redis channel
+t=0      POST /discover fired (asyncio.create_task)
+t=~0.3   ONIX receives request, routes to /bpp/discover
+t=~0.5   /on_discover handler publishes to Redis
+t=~0.5   Redis message received ──────────────────────────────► sidecar returns
+         [HTTP task cancelled here — MCP_BAP_TIMEOUT never reached in normal flow]
+
+t=REDIS_RESULT_TIMEOUT (15 s default)
+         Timeout fires if no Redis message ──────────────────── return found=false
+```
+
+`MCP_BAP_TIMEOUT` acts as a safety valve for the HTTP layer only. The meaningful latency ceiling is `REDIS_RESULT_TIMEOUT`.
 
 ### Example `.env` file (local development only)
 
@@ -74,6 +101,8 @@ All configuration is read from environment variables at startup. The sidecar als
 BAP_API_KEY=dev-secret-key-replace-in-production
 BAP_CLIENT_URL=http://localhost:8002
 PORT=3000
+REDIS_URL=redis://localhost:6379
+REDIS_RESULT_TIMEOUT=15
 MCP_BAP_TIMEOUT=3.0
 RANKING_MIN_SIMILARITY=0.30
 ```
@@ -200,15 +229,59 @@ This shape is returned for: BAP Client timeout, BAP Client unreachable, zero ONI
 
 ---
 
+## Redis Subscriber — `bap_client.py`
+
+`probe_bap_network` is the core function that executes the live Beckn probe. Its async contract is:
+
+```
+async def probe_bap_network(...) -> tuple[bool, list[dict], int]:
+    transaction_id = uuid4()
+    channel = f"beckn_results:{transaction_id}"
+
+    async with aioredis.from_url(REDIS_URL) as r:
+        async with r.pubsub() as pubsub:
+            await pubsub.subscribe(channel)          # ← subscription confirmed first
+
+            http_task = asyncio.create_task(_fire_http())  # ← non-blocking POST /discover
+
+            try:
+                payload = await asyncio.wait_for(
+                    _wait_for_redis_message(pubsub),
+                    timeout=REDIS_RESULT_TIMEOUT,   # ← 15 s default ceiling
+                )
+            except asyncio.TimeoutError:
+                return False, [], elapsed_ms         # ← "Never Throw" — returns cleanly
+            finally:
+                if not http_task.done():
+                    http_task.cancel()               # ← no dangling tasks
+                    await http_task                  # ← flush CancelledError
+
+    items = _extract_items_from_callback(payload)
+    return bool(items), items, elapsed_ms
+```
+
+### `_extract_items_from_callback` — on_discover payload parser
+
+The Redis message contains the raw Beckn `on_discover` callback payload published by the BAP Client's `/on_discover` handler. This differs from the old synchronous HTTP response shape:
+
+| Format | Path to items | When used |
+|---|---|---|
+| Beckn v2 `on_discover` callback | `message.catalogs[].resources[]` | Redis Pub/Sub message (current) |
+| Legacy sync HTTP response | `catalog.items[]` | Old synchronous flow (removed) |
+
+`_extract_items_from_callback` handles the v2 format and falls back to the legacy `catalog.items[]` shape for compatibility with non-standard BPP implementations.
+
+---
+
 ## Module Structure
 
 ```
 services/mcp-sidecar/
 ├── server.py         FastMCP server — tool registration, ASGI app, entry point
-├── bap_client.py     Async HTTP client for POST /discover to the BAP Client
+├── bap_client.py     Redis Pub/Sub subscriber + async BAP Client probe
 ├── ranking.py        Semantic ranking with all-MiniLM-L6-v2 (ThreadPoolExecutor)
 ├── config.py         pydantic-settings environment configuration
-└── requirements.txt  Python dependencies
+└── requirements.txt  Python dependencies (includes redis>=5.0.0)
 ```
 
 Dependencies flow strictly downward: `server` → `bap_client`, `ranking`, `config`. No module imports from `server`.

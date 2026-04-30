@@ -1,16 +1,32 @@
 # BAP Receiver Routing — inbound on_* callbacks from BPPs to the beckn-bap-client service
 #
-# All on_* callbacks are forwarded to the beckn-bap-client container (Lambda 2).
 # Both services share the beckn_network so the container name resolves directly.
+# ONIX appends the action name to the target URL: <url> + "/" + <action>
+#
+# on_discover is routed separately to /on_discover (Redis Pub/Sub path).
+# That handler publishes to Redis so the MCP sidecar's probe_bap_network
+# can receive catalog items without deadlocking on the HTTP response.
+# It also feeds the CallbackCollector for the orchestrator's synchronous flow.
+#
+# All other on_* callbacks continue to /bap/receiver/{action} as before.
 
 routingRules:
+  # on_discover → http://beckn-bap-client:8002/on_discover  (Redis publish + collector)
+  - domain: "beckn.one/testnet"
+    version: "2.0.0"
+    targetType: "url"
+    target:
+      url: "http://beckn-bap-client:8002"
+    endpoints:
+      - on_discover
+
+  # Transactional on_* → http://beckn-bap-client:8002/bap/receiver/{action}
   - domain: "beckn.one/testnet"
     version: "2.0.0"
     targetType: "url"
     target:
       url: "http://beckn-bap-client:8002/bap/receiver"
     endpoints:
-      - on_discover
       - on_select
       - on_init
       - on_confirm

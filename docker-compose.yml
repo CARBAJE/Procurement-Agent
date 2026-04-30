@@ -30,6 +30,7 @@ services:
       - DOMAIN=beckn.one/testnet
       - CALLBACK_TIMEOUT=10.0
       - CATALOG_NORMALIZER_URL=http://catalog-normalizer:8005
+      - REDIS_URL=redis://redis:6379
     networks:
       - beckn_network
     depends_on:
