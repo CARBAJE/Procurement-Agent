@@ -42,7 +42,7 @@ conda activate infosys_project
 
 # 3. Start the MCP Sidecar (requires BAP_API_KEY)
 cd services/mcp-sidecar
-BAP_API_KEY=dev-secret-key uvicorn server:app --host 0.0.0.0 --port 3000
+BAP_API_KEY="$BAP_API_KEY" uvicorn server:app --host 0.0.0.0 --port 3000  # any non-empty value works in dev; export it in your shell first
 
 # 4. Start the IntentParser
 cd IntentParser

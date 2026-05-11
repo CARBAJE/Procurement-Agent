@@ -21,7 +21,9 @@ frontend/coverage/
 *.pem
 npm-debug.log*
 .vscode/
-.claude
+# Share .claude/ skills, agents, hooks, and settings.json with the team.
+# Only the user's local permission allowlist is excluded.
+.claude/settings.local.json
 
 # ── KnowledgeBase ─────────────────────────────────────────────────────────────
 KnowledgeBase/.obsidian/workspace.json

@@ -1,0 +1,39 @@
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+extend-exclude = [
+    "KnowledgeBase",
+    "frontend",
+    "Bap-1/starter-kit",
+    ".pytest_cache",
+    "**/__pycache__",
+    "**/*.ipynb",
+    "Playground",
+]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "B",   # flake8-bugbear
+    "UP",  # pyupgrade (py311+)
+    "ASYNC", # flake8-async (asyncio idioms — heavy use in this project)
+]
+ignore = [
+    "E501",  # line-too-long handled by formatter, not linter
+    "B008",  # function calls in default args (FastAPI Depends pattern)
+    "B904",  # raise from — too noisy in existing code
+]
+
+[tool.ruff.lint.per-file-ignores]
+"**/tests/**" = ["B011", "F841"]   # asserts and unused-locals are fine in tests
+"**/__init__.py" = ["F401"]         # re-exports
+
+[tool.ruff.lint.isort]
+known-first-party = ["IntentParser", "Bap-1", "shared", "CatalogNormalizer", "ComparativeScoring"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
