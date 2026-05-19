@@ -133,6 +133,98 @@ export interface StatusSnapshot {
   status: "live" | "mock"
 }
 
+// ── Analytics Dashboard ──────────────────────────────────────────────────────
+
+export interface KpiMetrics {
+  total_spend: number
+  total_savings: number
+  savings_percent: number
+  active_requests: number
+  completed_this_month: number
+  pending_approval: number
+  avg_cycle_time_hours: number
+  baseline_cycle_time_hours: number
+  active_suppliers: number
+}
+
+export interface SpendDataPoint {
+  date: string
+  spend: number
+  savings: number
+}
+
+export interface CycleTimeCategory {
+  category: string
+  before_hours: number
+  after_hours: number
+}
+
+export interface SpendByCategory {
+  category: string
+  spend: number
+}
+
+export interface NegotiationSaving {
+  category: string
+  avg_discount_percent: number
+  total_savings: number
+}
+
+export interface RequestVolumePoint {
+  date: string
+  count: number
+}
+
+export interface StatusCount {
+  status: string
+  count: number
+}
+
+export interface AcceptancePoint {
+  date: string
+  accepted_pct: number
+  total: number
+  overridden_count: number
+}
+
+export interface SupplierMetric {
+  bpp_id: string
+  provider_name: string
+  quality_score: number
+  delivery_score: number
+  price_competitiveness: number
+  compliance_score: number
+  total_orders: number
+}
+
+export interface AnalyticsRequest {
+  request_id: string
+  raw_input_text: string
+  status: string
+  category: string | null
+  agreed_price: number | null
+  currency: string
+  created_at: string
+  user_overridden: boolean | null
+}
+
+export interface AnalyticsData {
+  kpis: KpiMetrics
+  spend_over_time: SpendDataPoint[]
+  spend_by_category: SpendByCategory[]
+  negotiation_savings: NegotiationSaving[]
+  request_volume: RequestVolumePoint[]
+  cycle_time_by_category: CycleTimeCategory[]
+  status_funnel: StatusCount[]
+  acceptance_rate: AcceptancePoint[]
+  supplier_metrics: SupplierMetric[]
+  recent_requests: AnalyticsRequest[]
+  period: string
+  data_source: "live" | "mock"
+}
+
+export type AnalyticsPeriod = "30d" | "90d" | "180d"
+
 // ── Auth ────────────────────────────────────────────────────────────────────
 
 export type UserRole = "requester" | "approver" | "admin"

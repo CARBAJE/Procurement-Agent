@@ -1,5 +1,7 @@
 import axios from "axios"
 import type {
+  AnalyticsData,
+  AnalyticsPeriod,
   BecknIntent,
   CommitResult,
   ComparisonResult,
@@ -31,6 +33,13 @@ export async function commitOrder(
     transaction_id: transactionId,
     chosen_item_id: chosenItemId,
   })
+  return data
+}
+
+// ── /analytics — dashboard KPIs and trends ──────────────────────────────────
+
+export async function fetchAnalytics(period: AnalyticsPeriod = "90d"): Promise<AnalyticsData> {
+  const { data } = await axios.get<AnalyticsData>(`/api/analytics?period=${period}`)
   return data
 }
 

@@ -38,6 +38,8 @@ INTENTION_PARSER_URL     = os.getenv("INTENTION_PARSER_URL",     "http://localho
 BECKN_BAP_URL            = os.getenv("BECKN_BAP_URL",            "http://localhost:8002")
 COMPARATIVE_SCORING_URL  = os.getenv("COMPARATIVE_SCORING_URL",  "http://localhost:8003")
 
+ANALYTICS_URL = os.getenv("ANALYTICS_URL", "http://localhost:8006")
+
 # ── Buyer billing config (mirrors Bap-1's ConfigBillingProvider) ─────────────
 
 BUYER_NAME              = os.getenv("BUYER_NAME",              "Procurement Agent")
@@ -1027,6 +1029,25 @@ async def discover(request: web.Request) -> web.Response:
     return web.json_response(result)
 
 
+async def analytics(request: web.Request) -> web.Response:
+    """GET /analytics — proxy to the analytics microservice."""
+    period = request.query.get("period", "90d")
+    if period not in ("30d", "90d", "180d"):
+        period = "90d"
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(
+                f"{ANALYTICS_URL}/analytics",
+                params={"period": period},
+                timeout=aiohttp.ClientTimeout(total=10),
+            ) as resp:
+                body = await resp.json()
+                return web.json_response(body, status=resp.status)
+    except aiohttp.ClientError as exc:
+        logger.warning("Analytics service unreachable: %s", exc)
+        raise web.HTTPServiceUnavailable(reason="Analytics service unavailable")
+
+
 async def run(request: web.Request) -> web.Response:
     """POST /run  { "query": "..." } — execute full procurement pipeline."""
     try:
@@ -1056,6 +1077,7 @@ async def run(request: web.Request) -> web.Response:
 def create_app() -> web.Application:
     app = web.Application()
     app.router.add_get("/health",                          health)
+    app.router.add_get("/analytics",                       analytics)
     app.router.add_post("/run",                            run)
     app.router.add_post("/parse",                          parse)
     app.router.add_post("/discover",                       discover)

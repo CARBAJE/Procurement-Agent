@@ -270,6 +270,15 @@ async def health(request: web.Request) -> web.Response:
     })
 
 
+async def analytics(request: web.Request) -> web.Response:
+    """GET /analytics — procurement KPIs, spend trends, supplier and cycle-time metrics."""
+    period = request.query.get("period", "90d")
+    if period not in ("30d", "90d", "180d"):
+        period = "90d"
+    from src.analytics import generate_mock_analytics
+    return web.json_response(generate_mock_analytics(period))
+
+
 async def bap_receiver(request: web.Request) -> web.Response:
     """Handle async callbacks from ONIX adapter or directly from the network."""
     action = request.match_info["action"]
@@ -693,6 +702,7 @@ async def _on_cleanup(app: web.Application) -> None:
 def create_app() -> web.Application:
     app = web.Application()
     app.router.add_get("/health",                                   health)
+    app.router.add_get("/analytics",                               analytics)
     app.router.add_post("/parse",                                   parse)
     app.router.add_post("/compare",                                 compare)
     app.router.add_post("/commit",                                  commit)

@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "project_scaffold/ai_models/IntentParser/MCP_Sidecar_Design/00_MCP_Sidecar_Design_MOC.md",
+                "file": "project_scaffold/milestones/phase3_advanced_intelligence_enterprise_features.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "00_MCP_Sidecar_Design_MOC"
+              "title": "phase3_advanced_intelligence_enterprise_features"
             }
           }
         ]
@@ -44,7 +44,7 @@
                 "autoReveal": false
               },
               "icon": "lucide-folder-closed",
-              "title": "Files"
+              "title": "Explorador de archivos"
             }
           },
           {
@@ -87,7 +87,7 @@
               "type": "graph",
               "state": {},
               "icon": "lucide-git-fork",
-              "title": "Graph view"
+              "title": "Vista gráfica"
             }
           }
         ]
@@ -119,7 +119,7 @@
                 "unlinkedCollapsed": true
               },
               "icon": "links-coming-in",
-              "title": "Backlinks"
+              "title": "Enlaces entrantes"
             }
           },
           {
@@ -186,17 +186,19 @@
   },
   "left-ribbon": {
     "hiddenItems": {
-      "switcher:Open quick switcher": false,
-      "graph:Open graph view": false,
-      "canvas:Create new canvas": false,
-      "daily-notes:Open today's daily note": false,
-      "templates:Insert template": false,
-      "command-palette:Open command palette": false,
-      "bases:Create new base": false
+      "switcher:Abrir selector rápido": false,
+      "graph:Abrir vista gráfica": false,
+      "canvas:Crear nuevo lienzo": false,
+      "daily-notes:Abrir la nota de hoy": false,
+      "templates:Insertar plantilla": false,
+      "command-palette:Abrir paleta de comandos": false,
+      "bases:Crear nueva base": false
     }
   },
   "active": "45b3d14b86f4e272",
   "lastOpenFiles": [
+    "project_scaffold/ai_models/IntentParser/BPP_Item_Validation/00_BPP_Validation_MOC.md",
+    "project_scaffold/milestones/phase3_advanced_intelligence_enterprise_features.md",
     "project_scaffold/ai_models/IntentParser/MCP_Sidecar_Design/00_MCP_Sidecar_Design_MOC.md",
     "project_scaffold/ai_models/IntentParser/MCP_Sidecar_Design/04_Timeouts_and_Failure_Handling.md.tmp.29917.1777448018219",
     "project_scaffold/ai_models/IntentParser/MCP_Sidecar_Design/04_Timeouts_and_Failure_Handling.md.tmp.29917.1777447991551",
@@ -220,7 +222,6 @@
     "project_scaffold/ai_models/IntentParser/Production_Transition/01_Real_MCP_Server_Integration.md",
     "project_scaffold/ai_models/IntentParser/Production_Transition/00_Production_Transition_MOC.md",
     "project_scaffold/components/nl_intent_parser.md",
-    "project_scaffold/ai_models/IntentParser/BPP_Item_Validation/00_BPP_Validation_MOC.md",
     "project_scaffold/ai_models/IntentParser/Core_Logic/00_Intent_Parsing_Core_MOC.md",
     "project_scaffold/ai_models/IntentParser/Core_Logic/26_Production_vs_Prototype_Divergences.md",
     "project_scaffold/ai_models/IntentParser/Core_Logic/25_Base_vs_Notebook_Comparison.md",
