@@ -9,6 +9,7 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts"
+import { TrendingUp } from "lucide-react"
 import type { RequestVolumePoint } from "@/lib/types"
 
 interface Props {
@@ -19,13 +20,15 @@ interface Props {
 export default function RequestVolumeChart({ data, onPointClick }: Props) {
   if (!data.length) {
     return (
-      <div className="flex h-[260px] items-center justify-center text-muted-foreground text-sm">
-        Sin datos
+      <div role="status" className="flex h-[260px] flex-col items-center justify-center gap-2 text-muted-foreground">
+        <TrendingUp className="h-8 w-8 opacity-30" aria-hidden="true" />
+        <span className="text-sm">No data for this period</span>
       </div>
     )
   }
 
   return (
+    <div role="img" aria-label="Request volume over time">
     <ResponsiveContainer width="100%" height={260}>
       <AreaChart
         data={data}
@@ -48,7 +51,7 @@ export default function RequestVolumeChart({ data, onPointClick }: Props) {
           axisLine={false}
           width={24}
         />
-        <Tooltip formatter={(v: any) => [v, "Solicitudes"]} />
+        <Tooltip formatter={(v: any) => [v, "Requests"]} />
         <Area
           type="monotone"
           dataKey="count"
@@ -59,5 +62,6 @@ export default function RequestVolumeChart({ data, onPointClick }: Props) {
         />
       </AreaChart>
     </ResponsiveContainer>
+    </div>
   )
 }

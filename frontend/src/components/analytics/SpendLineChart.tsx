@@ -10,6 +10,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts"
+import { TrendingUp } from "lucide-react"
 import type { SpendDataPoint } from "@/lib/types"
 
 interface SpendLineChartProps {
@@ -24,7 +25,17 @@ function tickFormatter(v: number): string {
 }
 
 export default function SpendLineChart({ data, onPointClick }: SpendLineChartProps) {
+  if (!data.length) {
+    return (
+      <div role="status" className="flex h-[300px] flex-col items-center justify-center gap-2 text-muted-foreground">
+        <TrendingUp className="h-8 w-8 opacity-30" aria-hidden="true" />
+        <span className="text-sm">No data for this period</span>
+      </div>
+    )
+  }
+
   return (
+    <div role="img" aria-label="Spend and savings trend over time">
     <ResponsiveContainer width="100%" height={300}>
       <LineChart
         data={data}
@@ -41,11 +52,11 @@ export default function SpendLineChart({ data, onPointClick }: SpendLineChartPro
         <Tooltip
           formatter={(value, name) => [
             `₹${Number(value ?? 0).toLocaleString("en-IN")}`,
-            name === "spend" ? "Gasto" : "Ahorro",
+            name === "spend" ? "Spend" : "Savings",
           ]}
         />
         <Legend
-          formatter={(v: string) => (v === "spend" ? "Gasto" : "Ahorro")}
+          formatter={(v: string) => (v === "spend" ? "Spend" : "Savings")}
         />
         <Line
           type="monotone"
@@ -65,5 +76,6 @@ export default function SpendLineChart({ data, onPointClick }: SpendLineChartPro
         />
       </LineChart>
     </ResponsiveContainer>
+    </div>
   )
 }

@@ -29,9 +29,9 @@ export default function LoginForm() {
     const result = await signIn("credentials", { email, password, redirect: false })
     setLoading(false)
     if (result?.error) {
-      setError("Credenciales incorrectas. Usa uno de los usuarios de demo.")
+      setError("Invalid credentials. Try one of the demo users.")
     } else {
-      router.push("/dashboard")
+      router.push("/")
     }
   }
 
@@ -44,15 +44,17 @@ export default function LoginForm() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-muted/30 p-4">
       <div className="w-full max-w-md space-y-4">
-        <div className="flex items-center justify-center gap-2 mb-2">
-          <ShoppingCart className="h-8 w-8 text-primary" />
+        <div className="flex items-center justify-center gap-3 mb-2">
+          <div className="rounded-md bg-primary/10 p-2 text-primary">
+            <ShoppingCart className="h-6 w-6" aria-hidden="true" />
+          </div>
           <h1 className="text-2xl font-bold">Procurement Agent</h1>
         </div>
 
         <Card>
           <CardHeader>
-            <CardTitle>Iniciar sesión</CardTitle>
-            <CardDescription>Ingresa tus credenciales para acceder al sistema de compras.</CardDescription>
+            <CardTitle>Sign in</CardTitle>
+            <CardDescription>Enter your credentials to access the procurement system.</CardDescription>
           </CardHeader>
 
           <CardContent>
@@ -62,32 +64,38 @@ export default function LoginForm() {
                 <Input
                   id="email"
                   type="email"
-                  placeholder="usuario@example.com"
+                  autoComplete="email"
+                  placeholder="user@example.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="password">Contraseña</Label>
+                <Label htmlFor="password">Password</Label>
                 <Input
                   id="password"
                   type="password"
+                  autoComplete="current-password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
                 />
               </div>
-              {error && <p className="text-sm text-destructive">{error}</p>}
+              {error && (
+                <p role="alert" className="text-sm text-destructive">{error}</p>
+              )}
               <Button type="submit" className="w-full" disabled={loading}>
-                {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Entrar
+                {loading
+                  ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Signing in…</>
+                  : "Sign in"
+                }
               </Button>
             </form>
           </CardContent>
 
           <CardFooter className="flex flex-col gap-2">
-            <p className="text-xs text-muted-foreground w-full">Usuarios de demo (Phase 1 SSO stub):</p>
+            <p className="text-xs text-muted-foreground w-full">Demo users (Phase 1 SSO stub):</p>
             <div className="flex gap-2 w-full flex-wrap">
               {DEMO_USERS.map((u) => (
                 <Button

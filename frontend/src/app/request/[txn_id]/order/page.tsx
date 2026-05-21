@@ -15,7 +15,7 @@ export default async function OrderPage({ params }: PageProps) {
   return (
     <>
       <Navbar />
-      <main className="container py-8 max-w-6xl">
+      <main id="main-content" className="container py-8 max-w-6xl">
         <OrderView txnId={params.txn_id} />
       </main>
     </>

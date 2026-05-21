@@ -1,6 +1,7 @@
 "use client"
 
-import { Brain, Zap, Eye } from "lucide-react"
+import { useState } from "react"
+import { Brain, ChevronDown, ChevronRight, Zap, Eye } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import type { ReasoningStep } from "@/lib/types"
@@ -67,15 +68,26 @@ export default function ReasoningPanel({
 
   if (resolved.length === 0) return null
 
+  const [open, setOpen] = useState(false)
+  const Chevron = open ? ChevronDown : ChevronRight
+
   return (
     <Card className={className}>
       <CardHeader className="pb-4">
-        <CardTitle className="text-base flex items-center gap-2">
-          <Brain className="h-4 w-4 text-muted-foreground" />
-          {title}
-        </CardTitle>
+        <button
+          type="button"
+          aria-expanded={open}
+          onClick={() => setOpen((v) => !v)}
+          className="flex w-full items-center gap-2 text-left"
+        >
+          <CardTitle className="text-base flex items-center gap-2 flex-1">
+            <Brain className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+            {title}
+          </CardTitle>
+          <Chevron className="h-4 w-4 text-muted-foreground shrink-0" aria-hidden="true" />
+        </button>
       </CardHeader>
-      <CardContent>
+      {open && <CardContent>
         <ol className="relative space-y-0">
           {resolved.map((step, i) => {
             const meta = ROLE_META[step.role] ?? ROLE_META.observe
@@ -104,7 +116,7 @@ export default function ReasoningPanel({
             )
           })}
         </ol>
-      </CardContent>
+      </CardContent>}
     </Card>
   )
 }

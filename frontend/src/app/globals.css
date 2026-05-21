@@ -4,24 +4,25 @@
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
-    --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
-    --primary: 221.2 83.2% 53.3%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 221.2 83.2% 53.3%;
-    --radius: 0.5rem;
+    /* ── Scientific Minimalist palette (matches design references) ── */
+    --background: 210 17% 98%;          /* #f8f9fa  surface */
+    --foreground: 195 12% 19%;          /* #2b3437  on-surface */
+    --card: 0 0% 100%;                  /* #ffffff  surface-container-lowest */
+    --card-foreground: 195 12% 19%;
+    --primary: 221 100% 47%;            /* #004ced  the signal blue */
+    --primary-foreground: 245 100% 99%; /* #f8f7ff */
+    --secondary: 207 14% 95%;           /* #f1f4f6  surface-container-low */
+    --secondary-foreground: 213 15% 39%; /* #536073 */
+    --muted: 207 14% 95%;
+    --muted-foreground: 200 7% 37%;     /* #586064  on-surface-variant */
+    --accent: 207 14% 95%;
+    --accent-foreground: 195 12% 19%;
+    --destructive: 350 43% 43%;         /* #9e3f4e  error */
+    --destructive-foreground: 0 0% 100%;
+    --border: 200 8% 88%;               /* ghost border — barely visible */
+    --input: 200 14% 93%;               /* #eaeff1  surface-container */
+    --ring: 221 100% 47%;
+    --radius: 0.625rem;
   }
 
   .dark {
@@ -29,7 +30,7 @@
     --foreground: 210 40% 98%;
     --card: 222.2 84% 4.9%;
     --card-foreground: 210 40% 98%;
-    --primary: 217.2 91.2% 59.8%;
+    --primary: 221 100% 60%;
     --primary-foreground: 222.2 47.4% 11.2%;
     --secondary: 217.2 32.6% 17.5%;
     --secondary-foreground: 210 40% 98%;
@@ -41,7 +42,7 @@
     --destructive-foreground: 210 40% 98%;
     --border: 217.2 32.6% 17.5%;
     --input: 217.2 32.6% 17.5%;
-    --ring: 224.3 76.3% 48%;
+    --ring: 221 100% 60%;
   }
 }
 
@@ -50,7 +51,7 @@
     @apply border-border;
   }
   body {
-    @apply bg-background text-foreground;
-    font-family: Arial, Helvetica, sans-serif;
+    @apply bg-background text-foreground antialiased;
+    font-family: var(--font-manrope), 'Manrope', system-ui, sans-serif;
   }
 }

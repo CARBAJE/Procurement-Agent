@@ -3,11 +3,11 @@
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import axios from "axios"
-import { Loader2, ArrowRight, ArrowLeft, Search, Send } from "lucide-react"
+import { Loader2, ArrowRight, ArrowLeft, Send } from "lucide-react"
 import { Button }   from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { Label }    from "@/components/ui/label"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
 import IntentPreview from "@/components/procurement/IntentPreview"
 import { compareOfferings, parseIntent } from "@/lib/api"
 import { saveSession } from "@/lib/session-store"
@@ -84,23 +84,18 @@ export default function ProcurementForm() {
 
   return (
     <div className="space-y-6 max-w-2xl mx-auto">
-      <div className="mb-2">
-        <h1 className="text-3xl font-bold">New Request</h1>
-        <p className="text-muted-foreground">Describe in natural language what you need to purchase</p>
-      </div>
+      <header className="mb-8">
+        <span className="text-xs font-black tracking-[0.2em] uppercase text-primary block mb-3">
+          AI Procurement Agent
+        </span>
+        <h1 className="text-5xl font-extrabold tracking-tight leading-tight">
+          What can I help you source today?
+        </h1>
+      </header>
 
       {step === "input" && (
         <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Search className="h-5 w-5 text-primary" />
-              Describe your purchase need
-            </CardTitle>
-            <CardDescription>
-              Write in natural language what you need to buy.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
+          <CardContent className="pt-6">
             <form onSubmit={handleParse} className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="query">Request</Label>
@@ -113,7 +108,7 @@ export default function ProcurementForm() {
                   required
                 />
               </div>
-              {error && <p className="text-sm text-destructive">{error}</p>}
+              {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
               <Button type="submit" disabled={loading || !query.trim()}>
                 {loading
                   ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Analyzing…</>
@@ -144,7 +139,7 @@ export default function ProcurementForm() {
       {step === "preview" && parseResult && (
         <div className="space-y-4">
           <IntentPreview result={parseResult} originalQuery={query} />
-          {error && <p className="text-sm text-destructive">{error}</p>}
+          {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
           <div className="flex gap-3">
             <Button variant="outline" onClick={() => setStep("input")} disabled={loading}>
               <ArrowLeft className="mr-2 h-4 w-4" />

@@ -150,6 +150,15 @@ export default function ComparisonTable({
     }
   }
 
+  if (!offerings.length) {
+    return (
+      <div className="flex flex-col items-center justify-center py-12 text-center text-muted-foreground">
+        <Package className="h-8 w-8 opacity-30 mb-2" aria-hidden="true" />
+        <span className="text-sm">No offerings found for this request.</span>
+      </div>
+    )
+  }
+
   return (
     <div className="rounded-lg border bg-card">
       <Table>

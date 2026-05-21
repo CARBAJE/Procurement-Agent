@@ -10,6 +10,7 @@ import {
   ReferenceLine,
   ResponsiveContainer,
 } from "recharts"
+import { TrendingUp } from "lucide-react"
 import type { AcceptancePoint } from "@/lib/types"
 
 interface Props {
@@ -20,13 +21,15 @@ interface Props {
 export default function AcceptanceRateChart({ data, onPointClick }: Props) {
   if (!data.length) {
     return (
-      <div className="flex h-[260px] items-center justify-center text-muted-foreground text-sm">
-        Sin datos
+      <div role="status" className="flex h-[260px] flex-col items-center justify-center gap-2 text-muted-foreground">
+        <TrendingUp className="h-8 w-8 opacity-30" aria-hidden="true" />
+        <span className="text-sm">No data for this period</span>
       </div>
     )
   }
 
   return (
+    <div role="img" aria-label="Agent acceptance rate over time">
     <ResponsiveContainer width="100%" height={260}>
       <LineChart
         data={data}
@@ -51,10 +54,10 @@ export default function AcceptanceRateChart({ data, onPointClick }: Props) {
         <Tooltip
           formatter={(value: any, name: any) => {
             if (name === "accepted_pct")
-              return [`${Number(value).toFixed(1)}%`, "Recomendaciones aceptadas"]
+              return [`${Number(value).toFixed(1)}%`, "Accepted recommendations"]
             return [value, name]
           }}
-          labelFormatter={(label) => `Semana del ${label}`}
+          labelFormatter={(label) => `Week of ${label}`}
           contentStyle={{ fontSize: 12 }}
         />
         {/* Document §8.3: target acceptance rate ≥ 60% at 6 months */}
@@ -62,7 +65,7 @@ export default function AcceptanceRateChart({ data, onPointClick }: Props) {
           y={60}
           stroke="hsl(var(--muted-foreground))"
           strokeDasharray="4 4"
-          label={{ value: "objetivo 60%", position: "insideTopRight", fontSize: 10 }}
+          label={{ value: "target 60%", position: "insideTopRight", fontSize: 11 }}
         />
         <Line
           type="monotone"
@@ -74,5 +77,6 @@ export default function AcceptanceRateChart({ data, onPointClick }: Props) {
         />
       </LineChart>
     </ResponsiveContainer>
+    </div>
   )
 }

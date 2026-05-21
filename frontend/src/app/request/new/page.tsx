@@ -11,7 +11,7 @@ export default async function NewRequestPage() {
   return (
     <>
       <Navbar />
-      <main className="container py-8 max-w-5xl">
+      <main id="main-content" className="container py-8 max-w-5xl">
         <ProcurementForm />
       </main>
     </>

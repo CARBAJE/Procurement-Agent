@@ -130,7 +130,7 @@ export default function CompareView({ txnId }: CompareViewProps) {
             {" → "}
             Confirm order
           </p>
-          <h1 className="text-3xl font-bold">Compare Offers</h1>
+          <h1 className="text-4xl font-extrabold tracking-tight">Compare Offers</h1>
           <div className="flex items-center gap-1.5 mt-1">
             <Hash className="h-3 w-3 text-muted-foreground" />
             <span className="text-xs text-muted-foreground font-mono">{comparison.transaction_id}</span>
@@ -145,9 +145,11 @@ export default function CompareView({ txnId }: CompareViewProps) {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-3">
           <div className="flex items-center justify-between flex-wrap gap-2">
-            <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
-              {offerings.length} Offerings · Sort any column
-            </h2>
+            <div className="flex items-center gap-2">
+              <span className="h-4 w-0.5 rounded-full bg-primary shrink-0" aria-hidden="true" />
+              <h2 className="text-sm font-semibold text-foreground">{offerings.length} Offerings</h2>
+              <span className="text-xs text-muted-foreground">— sort by any column</span>
+            </div>
             <span className="text-xs text-muted-foreground inline-flex items-center gap-1">
               <Info className="h-3 w-3" />
               Arrow keys to navigate, Enter to select
@@ -193,7 +195,7 @@ export default function CompareView({ txnId }: CompareViewProps) {
       </div>
 
       {error && (
-        <p className="text-sm text-destructive text-right">{error}</p>
+        <p role="alert" className="text-sm text-destructive text-right">{error}</p>
       )}
 
       {/* ── Reasoning trace ───────────────────────────────────────────────── */}

@@ -10,6 +10,7 @@ import {
   Cell,
   ResponsiveContainer,
 } from "recharts"
+import { BarChart2 } from "lucide-react"
 import type { StatusCount } from "@/lib/types"
 
 interface Props {
@@ -18,20 +19,21 @@ interface Props {
 }
 
 const STATUS_CONFIG: Record<string, { label: string; color: string }> = {
-  parsing:          { label: "Procesando",       color: "#94a3b8" },
-  discovering:      { label: "Buscando",         color: "#60a5fa" },
-  scoring:          { label: "Evaluando",        color: "#6366f1" },
-  negotiating:      { label: "Negociando",       color: "#8b5cf6" },
-  pending_approval: { label: "Pend. Aprobación", color: "#f97316" },
-  confirmed:        { label: "Confirmadas",      color: "#22c55e" },
-  cancelled:        { label: "Canceladas",       color: "#ef4444" },
+  parsing:          { label: "Processing",      color: "#94a3b8" },
+  discovering:      { label: "Searching",       color: "#60a5fa" },
+  scoring:          { label: "Scoring",         color: "#6366f1" },
+  negotiating:      { label: "Negotiating",     color: "#8b5cf6" },
+  pending_approval: { label: "Pend. Approval",  color: "#f97316" },
+  confirmed:        { label: "Confirmed",       color: "#22c55e" },
+  cancelled:        { label: "Cancelled",       color: "#ef4444" },
 }
 
 export default function StatusFunnelChart({ data, onBarClick }: Props) {
   if (!data.length) {
     return (
-      <div className="flex h-[260px] items-center justify-center text-muted-foreground text-sm">
-        Sin datos
+      <div role="status" className="flex h-[260px] flex-col items-center justify-center gap-2 text-muted-foreground">
+        <BarChart2 className="h-8 w-8 opacity-30" aria-hidden="true" />
+        <span className="text-sm">No data for this period</span>
       </div>
     )
   }
@@ -44,6 +46,7 @@ export default function StatusFunnelChart({ data, onBarClick }: Props) {
   }))
 
   return (
+    <div role="img" aria-label="Request funnel by status">
     <ResponsiveContainer width="100%" height={260}>
       <BarChart
         data={chartData}
@@ -69,7 +72,7 @@ export default function StatusFunnelChart({ data, onBarClick }: Props) {
           tickLine={false}
         />
         <Tooltip
-          formatter={(v: any) => [v, "Solicitudes"]}
+          formatter={(v: any) => [v, "Requests"]}
           labelFormatter={(label) => String(label)}
         />
         <Bar dataKey="count" radius={[0, 4, 4, 0]}>
@@ -79,5 +82,6 @@ export default function StatusFunnelChart({ data, onBarClick }: Props) {
         </Bar>
       </BarChart>
     </ResponsiveContainer>
+    </div>
   )
 }

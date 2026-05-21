@@ -3,6 +3,7 @@ import type {
   AnalyticsData,
   AnalyticsPeriod,
   BecknIntent,
+  BenchmarkReport,
   CommitResult,
   ComparisonResult,
   ParseResult,
@@ -40,6 +41,13 @@ export async function commitOrder(
 
 export async function fetchAnalytics(period: AnalyticsPeriod = "90d"): Promise<AnalyticsData> {
   const { data } = await axios.get<AnalyticsData>(`/api/analytics?period=${period}`)
+  return data
+}
+
+// ── /analytics/benchmark — CPO benchmarking report ──────────────────────────
+
+export async function fetchBenchmark(): Promise<BenchmarkReport> {
+  const { data } = await axios.get<BenchmarkReport>("/api/analytics/benchmark")
   return data
 }
 

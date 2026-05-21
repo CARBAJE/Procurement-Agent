@@ -10,6 +10,7 @@ import {
   ResponsiveContainer,
   Tooltip,
 } from "recharts"
+import { BarChart2 } from "lucide-react"
 import type { SupplierMetric } from "@/lib/types"
 
 interface SupplierRadarChartProps {
@@ -20,13 +21,22 @@ interface SupplierRadarChartProps {
 const COLORS = ["#3b82f6", "#22c55e", "#f97316", "#a855f7"]
 
 const AXES: { key: keyof SupplierMetric; label: string }[] = [
-  { key: "quality_score",         label: "Calidad" },
-  { key: "delivery_score",        label: "Entrega" },
-  { key: "price_competitiveness", label: "Precio" },
-  { key: "compliance_score",      label: "Cumplimiento" },
+  { key: "quality_score",         label: "Quality" },
+  { key: "delivery_score",        label: "Delivery" },
+  { key: "price_competitiveness", label: "Price" },
+  { key: "compliance_score",      label: "Compliance" },
 ]
 
 export default function SupplierRadarChart({ data, onSupplierClick }: SupplierRadarChartProps) {
+  if (!data.length) {
+    return (
+      <div role="status" className="flex h-[300px] flex-col items-center justify-center gap-2 text-muted-foreground">
+        <BarChart2 className="h-8 w-8 opacity-30" aria-hidden="true" />
+        <span className="text-sm">No supplier data for this period</span>
+      </div>
+    )
+  }
+
   const topSuppliers = [...data]
     .sort((a, b) => b.total_orders - a.total_orders)
     .slice(0, 4)
@@ -40,11 +50,12 @@ export default function SupplierRadarChart({ data, onSupplierClick }: SupplierRa
   })
 
   return (
+    <div role="img" aria-label="Supplier performance radar: quality, delivery, price, compliance">
     <ResponsiveContainer width="100%" height={300}>
       <RadarChart data={radarData}>
         <PolarGrid />
         <PolarAngleAxis dataKey="subject" tick={{ fontSize: 12 }} />
-        <PolarRadiusAxis angle={90} domain={[0, 100]} tick={{ fontSize: 9 }} />
+        <PolarRadiusAxis angle={90} domain={[0, 100]} tick={false} />
         {topSuppliers.map((s, i) => (
           <Radar
             key={s.bpp_id}
@@ -62,5 +73,6 @@ export default function SupplierRadarChart({ data, onSupplierClick }: SupplierRa
         <Tooltip />
       </RadarChart>
     </ResponsiveContainer>
+    </div>
   )
 }

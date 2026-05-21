@@ -11,6 +11,7 @@ import {
   ResponsiveContainer,
   LabelList,
 } from "recharts"
+import { BarChart2 } from "lucide-react"
 import type { NegotiationSaving } from "@/lib/types"
 
 interface Props {
@@ -27,13 +28,15 @@ function formatINR(value: number): string {
 export default function NegotiationSavingsChart({ data, onBarClick }: Props) {
   if (!data.length) {
     return (
-      <div className="flex h-[300px] items-center justify-center text-muted-foreground text-sm">
-        Sin datos
+      <div role="status" className="flex h-[300px] flex-col items-center justify-center gap-2 text-muted-foreground">
+        <BarChart2 className="h-8 w-8 opacity-30" aria-hidden="true" />
+        <span className="text-sm">No data for this period</span>
       </div>
     )
   }
 
   return (
+    <div role="img" aria-label="Negotiation savings by category">
     <ResponsiveContainer width="100%" height={300}>
       <BarChart
         data={data}
@@ -57,8 +60,8 @@ export default function NegotiationSavingsChart({ data, onBarClick }: Props) {
         />
         <Tooltip
           formatter={(value: any, _name: any, props: any) => [
-            `${Number(value).toFixed(1)}% descuento — ${formatINR(props.payload.total_savings)} ahorrado`,
-            "Negociación",
+            `${Number(value).toFixed(1)}% discount — ${formatINR(props.payload.total_savings)} saved`,
+            "Negotiation",
           ]}
         />
         {/* Document target: 8-15% avg savings */}
@@ -66,7 +69,7 @@ export default function NegotiationSavingsChart({ data, onBarClick }: Props) {
           x={8}
           stroke="hsl(var(--muted-foreground))"
           strokeDasharray="4 4"
-          label={{ value: "objetivo 8%", position: "top", fontSize: 10 }}
+          label={{ value: "target 8%", position: "top", fontSize: 11 }}
         />
         <Bar dataKey="avg_discount_percent" fill="hsl(var(--primary))" radius={[0, 4, 4, 0]}>
           <LabelList
@@ -78,5 +81,6 @@ export default function NegotiationSavingsChart({ data, onBarClick }: Props) {
         </Bar>
       </BarChart>
     </ResponsiveContainer>
+    </div>
   )
 }

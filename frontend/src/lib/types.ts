@@ -225,6 +225,31 @@ export interface AnalyticsData {
 
 export type AnalyticsPeriod = "30d" | "90d" | "180d"
 
+// ── Business Impact ──────────────────────────────────────────────────────────
+
+export interface BusinessImpact {
+  platform_licensing: { baseline_monthly: number; actual_monthly: number }
+  team_productivity:  { requests_per_fte_before: number; requests_per_fte_after: number }
+  audit_prep_hours:   { before: number; after: number }
+}
+
+// ── CPO Benchmarking ─────────────────────────────────────────────────────────
+
+export interface BenchmarkCategory {
+  category: string
+  current_contract: number
+  best_market_price: number
+  gap_percent: number
+  annual_savings: number
+  top_alternative: string
+}
+
+export interface BenchmarkReport {
+  generated_at: string
+  projected_annual_savings: number
+  categories: BenchmarkCategory[]
+}
+
 // ── Auth ────────────────────────────────────────────────────────────────────
 
 export type UserRole = "requester" | "approver" | "admin"

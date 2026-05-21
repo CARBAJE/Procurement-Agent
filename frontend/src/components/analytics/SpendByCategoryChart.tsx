@@ -8,6 +8,7 @@ import {
   Legend,
   ResponsiveContainer,
 } from "recharts"
+import { BarChart2 } from "lucide-react"
 import type { SpendByCategory } from "@/lib/types"
 
 const COLORS = ["#6366f1", "#8b5cf6", "#06b6d4", "#10b981", "#f59e0b", "#ef4444"]
@@ -26,13 +27,15 @@ interface Props {
 export default function SpendByCategoryChart({ data, onSliceClick }: Props) {
   if (!data.length) {
     return (
-      <div className="flex h-[300px] items-center justify-center text-muted-foreground text-sm">
-        Sin datos
+      <div role="status" className="flex h-[300px] flex-col items-center justify-center gap-2 text-muted-foreground">
+        <BarChart2 className="h-8 w-8 opacity-30" aria-hidden="true" />
+        <span className="text-sm">No data for this period</span>
       </div>
     )
   }
 
   return (
+    <div role="img" aria-label="Spend distribution by category">
     <ResponsiveContainer width="100%" height={300}>
       <PieChart>
         <Pie
@@ -68,5 +71,6 @@ export default function SpendByCategoryChart({ data, onSliceClick }: Props) {
         />
       </PieChart>
     </ResponsiveContainer>
+    </div>
   )
 }

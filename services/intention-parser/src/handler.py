@@ -39,8 +39,8 @@ async def parse(request: web.Request) -> web.Response:
         raise web.HTTPBadRequest(reason="query is required")
 
     try:
-        from IntentParser import parse_request  # type: ignore[import]
-        result = parse_request(query)
+        from IntentParser.orchestrator import parse_procurement_request  # type: ignore[import]
+        result = await parse_procurement_request(query, enable_stage3=False)
 
         intent_type = "procurement" if result.intent in _PROCUREMENT_INTENTS else "unknown"
         beckn_dict = None

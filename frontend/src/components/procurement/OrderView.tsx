@@ -106,7 +106,7 @@ export default function OrderView({ txnId }: OrderViewProps) {
             {" → "}
             <span className="text-foreground font-medium">Order</span>
           </p>
-          <h1 className="text-3xl font-bold">Order</h1>
+          <h1 className="text-4xl font-extrabold tracking-tight">Order Confirmed</h1>
           <div className="flex items-center gap-1.5 mt-1">
             <Hash className="h-3 w-3 text-muted-foreground" />
             <span className="text-xs text-muted-foreground font-mono">{commit.transaction_id}</span>

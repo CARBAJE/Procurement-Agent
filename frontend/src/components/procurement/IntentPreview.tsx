@@ -2,7 +2,7 @@ import type { ParseResult } from "@/lib/types"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
-import { CheckCircle2, Package, MapPin, Clock, Wallet, Tag } from "lucide-react"
+import { CheckCircle2, Package, Clock, Wallet, Tag } from "lucide-react"
 
 function hoursToLabel(h: number): string {
   if (h < 24) return `${h}h`
@@ -96,17 +96,6 @@ export default function IntentPreview({ result, originalQuery }: IntentPreviewPr
           </div>
         </div>
 
-        <div className="flex items-start gap-3">
-          <MapPin className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
-          <div>
-            <p className="text-xs text-muted-foreground">Delivery coordinates</p>
-            <p className="font-medium text-sm font-mono">{intent.location_coordinates}</p>
-          </div>
-        </div>
-
-        <p className="text-xs text-muted-foreground pt-1">
-          Model: <span className="font-mono">{result.routed_to}</span>
-        </p>
       </CardContent>
     </Card>
   )

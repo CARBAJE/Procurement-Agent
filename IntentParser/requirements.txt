@@ -9,3 +9,4 @@ pgvector>=0.3
 sentence-transformers>=2.6
 numpy
 anthropic>=0.20
+mcp>=1.1.0
