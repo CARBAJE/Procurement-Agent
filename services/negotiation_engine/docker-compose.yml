@@ -1,0 +1,141 @@
+# Service-local docker-compose for the Negotiation Engine.
+#
+# This file is a **standalone dev environment** — `docker compose -f
+# services/negotiation_engine/docker-compose.yml up` brings the engine
+# up alongside its two infra dependencies (Redis Pub/Sub broker for
+# /on_select callbacks, Redpanda as a mock Kafka audit broker). The
+# main project compose at the repo root orchestrates the full 11-service
+# stack; this file is for working on the negotiation engine in isolation.
+#
+# Bring up:
+#     docker compose -f services/negotiation_engine/docker-compose.yml up --build
+# Tear down:
+#     docker compose -f services/negotiation_engine/docker-compose.yml down -v
+#
+# Once the stack is healthy:
+#     curl http://localhost:8004/healthz                          # liveness
+#     curl http://localhost:8004/readyz                           # readiness
+#     curl -X POST http://localhost:8004/negotiate \
+#          -H 'Content-Type: application/json' \
+#          -d @example_payload.json                                # 202 Accepted
+#
+# Redpanda admin UI (optional): http://localhost:8080
+# Redis: redis-cli -h localhost -p 6379 monitor
+
+name: negotiation-engine-dev
+
+services:
+
+  # ── Negotiation Engine ─────────────────────────────────────────────────
+  negotiation-engine:
+    build:
+      context: .
+    image: negotiation-engine:dev
+    ports:
+      - "8004:8004"
+    environment:
+      # Transport — service-name DNS inside the compose network.
+      REDIS_URL: redis://redis:6379/0
+      NEGOTIATION_REDIS_ON_SELECT_CHANNEL: beckn_on_select_results
+
+      # Audit (Kafka via Redpanda).
+      KAFKA_BOOTSTRAP_SERVERS: redpanda:9092
+      NEGOTIATION_KAFKA_TOPIC: procurement.negotiation.v1
+      NEGOTIATION_KAFKA_POLICY_VIOLATIONS_TOPIC: procurement.negotiation.policy_violations.v1
+
+      # LangSmith observability — set these from your shell to enable tracing.
+      # Default LANGCHAIN_TRACING_V2=false keeps the engine fully functional
+      # for local dev without a LangSmith account.
+      LANGCHAIN_TRACING_V2: ${LANGCHAIN_TRACING_V2:-false}
+      LANGCHAIN_ENDPOINT: ${LANGCHAIN_ENDPOINT:-https://api.smith.langchain.com}
+      LANGCHAIN_API_KEY: ${LANGCHAIN_API_KEY:-}
+      LANGCHAIN_PROJECT: ${LANGCHAIN_PROJECT:-procurement-negotiation-dev}
+
+      # OpenAI — advisory node falls open to a placeholder if unset.
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      NEGOTIATION_OPENAI_MODEL: ${NEGOTIATION_OPENAI_MODEL:-gpt-4o}
+
+      # Postgres DSN unset → MemorySaver checkpointer (dev only — state
+      # doesn't survive container restart). Set to a real DSN in prod:
+      # NEGOTIATION_POSTGRES_DSN: postgresql://user:pw@postgres:5432/negotiation
+    depends_on:
+      redis:
+        condition: service_healthy
+      redpanda:
+        condition: service_healthy
+    networks:
+      - negotiation_net
+    restart: unless-stopped
+
+  # ── Redis (Pub/Sub broker) ─────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    command: ["redis-server", "--appendonly", "yes"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    volumes:
+      - redis_data:/data
+    networks:
+      - negotiation_net
+
+  # ── Redpanda (Kafka-compatible audit broker) ───────────────────────────
+  redpanda:
+    image: redpandadata/redpanda:v25.1.7
+    command:
+      - redpanda
+      - start
+      - --kafka-addr=PLAINTEXT://0.0.0.0:9092
+      - --advertise-kafka-addr=PLAINTEXT://redpanda:9092
+      - --pandaproxy-addr=0.0.0.0:8082
+      - --advertise-pandaproxy-addr=redpanda:8082
+      - --schema-registry-addr=0.0.0.0:8081
+      - --rpc-addr=0.0.0.0:33145
+      - --advertise-rpc-addr=redpanda:33145
+      - --mode=dev-container
+      - --smp=1
+      - --memory=512M
+      - --reserve-memory=0M
+      - --overprovisioned
+    ports:
+      - "9092:9092"   # Kafka API
+      - "8082:8082"   # Pandaproxy (HTTP / REST)
+      - "8081:8081"   # Schema Registry
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster health | grep -E 'Healthy:.+true'"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    volumes:
+      - redpanda_data:/var/lib/redpanda/data
+    networks:
+      - negotiation_net
+
+  # ── Redpanda Console (admin UI — optional but invaluable for audit tail) ──
+  redpanda-console:
+    image: redpandadata/console:v3.2.1
+    ports:
+      - "8080:8080"
+    environment:
+      KAFKA_BROKERS: redpanda:9092
+      CONFIG_FILEPATH: /tmp/empty.yml
+    entrypoint: ["/bin/sh", "-c", "touch /tmp/empty.yml && /app/console"]
+    depends_on:
+      redpanda:
+        condition: service_healthy
+    networks:
+      - negotiation_net
+
+# ── Network ──────────────────────────────────────────────────────────────
+networks:
+  negotiation_net:
+    driver: bridge
+
+# ── Persistent volumes ───────────────────────────────────────────────────
+volumes:
+  redis_data:
+  redpanda_data:

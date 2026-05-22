@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "project_scaffold/ai_models/comparasion_scoring_model/phase3_optnet_e2e.md",
+                "file": "project_scaffold/architecture/negotiation_engine/01_langgraph_state_machine.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "phase3_optnet_e2e"
+              "title": "01_langgraph_state_machine"
             }
           }
         ]
@@ -110,7 +110,7 @@
             "state": {
               "type": "backlink",
               "state": {
-                "file": "project_scaffold/ai_models/comparasion_scoring_model/phase3_optnet_e2e.md",
+                "file": "project_scaffold/architecture/negotiation_engine/01_langgraph_state_machine.md",
                 "collapseAll": false,
                 "extraContext": false,
                 "sortOrder": "alphabetical",
@@ -120,7 +120,7 @@
                 "unlinkedCollapsed": true
               },
               "icon": "links-coming-in",
-              "title": "Backlinks for phase3_optnet_e2e"
+              "title": "Backlinks for 01_langgraph_state_machine"
             }
           },
           {
@@ -198,11 +198,12 @@
   },
   "active": "a67c35dc2c48b379",
   "lastOpenFiles": [
+    "project_scaffold/architecture/negotiation_engine/_negotiation_engine_index.md",
+    "project_scaffold/ai_models/comparasion_scoring_model/phase3_optnet_e2e.md",
     "project_scaffold/ai_models/comparasion_scoring_model/phase1_hybrid_react.md",
     "project_scaffold/ai_models/comparasion_scoring_model/_comparison_engine_index.md",
     "project_scaffold/ai_models/comparison_scoring_model.md",
     "project_scaffold/ai_models/comparasion_scoring_model/comparison_engine_roadmap.md",
-    "project_scaffold/ai_models/comparasion_scoring_model/phase3_optnet_e2e.md",
     "project_scaffold/ai_models/comparasion_scoring_model/phase3_optnet_e2e.md.tmp.400379.1777984909511",
     "project_scaffold/ai_models/comparasion_scoring_model/phase2_learning_to_rank.md",
     "project_scaffold/ai_models/comparasion_scoring_model/phase2_learning_to_rank.md.tmp.400379.1777984738449",
@@ -232,7 +233,6 @@
     "project_scaffold/ai_models/IntentParser/Core_Logic/26_Production_vs_Prototype_Divergences.md",
     "project_scaffold/ai_models/IntentParser/Core_Logic/25_Base_vs_Notebook_Comparison.md",
     "project_scaffold/ai_models/IntentParser/Core_Logic/24_Design_Patterns_Table.md",
-    "project_scaffold/ai_models/IntentParser/Core_Logic/23_Beckn_Protocol_Structured_Fields_Context.md",
-    "project_scaffold/ai_models/IntentParser/Core_Logic/22_Accuracy_Target_Fallback_Policy.md"
+    "project_scaffold/ai_models/IntentParser/Core_Logic/23_Beckn_Protocol_Structured_Fields_Context.md"
   ]
 }
