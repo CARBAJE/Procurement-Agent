@@ -129,15 +129,36 @@ def drop_all_objects(conn) -> None:
 # Step 3: execute SQL files
 # ──────────────────────────────────────────────────────────────────────────────
 
-def execute_sql_file(conn, filepath: Path) -> None:
+# PostgreSQL SQLSTATE codes that mean "the object you tried to create is
+# already there". Reasonable to treat as SKIP when re-running on a database
+# that has a previous version of the schema already applied (e.g. when only
+# the new M3.2 migrations 19 + 19b need to be applied to an existing DB).
+_ALREADY_EXISTS_CODES = {
+    "42P06",  # duplicate_schema
+    "42P07",  # duplicate_table
+    "42710",  # duplicate_object  — type, function, index, trigger, ...
+    "42701",  # duplicate_column
+    "42723",  # duplicate_function
+    "42712",  # duplicate_alias
+}
+
+
+def execute_sql_file(conn, filepath: Path, *, continue_on_exists: bool = False) -> None:
     sql = filepath.read_text(encoding="utf-8")
     cur = conn.cursor()
     try:
         cur.execute(sql)
         conn.commit()
         print(f"  [OK]   {filepath.name}")
-    except Exception as exc:
+    except psycopg2.Error as exc:
         conn.rollback()
+        pgcode = getattr(exc, "pgcode", None)
+        if continue_on_exists and pgcode in _ALREADY_EXISTS_CODES:
+            # Pre-existing schema — the migration's objects are already there.
+            # Idempotent migrations (e.g. 19_*, 19b_*) won't land here because
+            # they use IF NOT EXISTS.
+            print(f"  [SKIP] {filepath.name}  (already applied — pgcode={pgcode})")
+            return
         print(f"  [FAIL] {filepath.name}")
         print(f"         {exc}")
         raise
@@ -164,6 +185,15 @@ def main() -> None:
         "--drop-all",
         action="store_true",
         help="Drop all tables and ENUM types before recreating (destructive — use with care).",
+    )
+    parser.add_argument(
+        "--continue-on-exists",
+        action="store_true",
+        help=(
+            "Treat 'already exists' errors as SKIP, not failure. Useful when "
+            "re-applying migrations to a database that already has the schema "
+            "(only newer migrations using IF NOT EXISTS will actually run)."
+        ),
     )
     args = parser.parse_args()
 
@@ -206,9 +236,10 @@ def main() -> None:
             print(f"\nERROR: No .sql files found in {sql_dir}")
             sys.exit(1)
 
-        print(f"\nStep 3 — Executing {len(sql_files)} SQL scripts")
+        print(f"\nStep 3 — Executing {len(sql_files)} SQL scripts"
+              + (" (continue-on-exists)" if args.continue_on_exists else ""))
         for sql_file in sql_files:
-            execute_sql_file(conn, sql_file)
+            execute_sql_file(conn, sql_file, continue_on_exists=args.continue_on_exists)
 
         print()
         print("═══════════════════════════════════════════════════════")

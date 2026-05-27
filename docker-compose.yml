@@ -80,6 +80,9 @@ services:
       - DB_PASSWORD=postgres123
     networks:
       - beckn_network
+    # Note: requires an external `procurement-postgres` container attached to
+    # the `beckn_network` (managed outside this compose file). Falls back to
+    # mock data automatically when DB is unreachable.
 
   # ── Orchestrator: Step Functions local simulator ───────────────────────────
   orchestrator:
@@ -92,6 +95,14 @@ services:
       - BECKN_BAP_URL=http://beckn-bap-client:8002
       - COMPARATIVE_SCORING_URL=http://comparative-scoring:8003
       - ANALYTICS_URL=http://analytics:8006
+      # ERP adapter — read by erp.ErpAdapterClient in workflow.py
+      - ERP_ADAPTER_URL=http://erp-adapter:8007
+      - ERP_INTERNAL_TOKEN=dev-internal-token-CHANGE_ME
+      - ERP_BUDGET_CHECK_ENABLED=true
+      - ERP_BUDGET_CHECK_REQUIRED=false
+      - ERP_BUDGET_CHECK_TIMEOUT_MS=800
+      - ERP_SYNC_ENABLED=true
+      - ERP_DEFAULT_COST_CENTER=CC-IND-PROC-01
       # Buyer billing — read by _build_billing_info() in workflow.py
       - BUYER_NAME=Infosys Limited - Procurement Desk
       - BUYER_EMAIL=procurement@infosys.com
@@ -108,6 +119,63 @@ services:
       - beckn-bap-client
       - comparative-scoring
       - analytics
+      - erp-adapter
+
+  # ── ERP Adapter (vendor-neutral SAP/Oracle integration) ────────────────────
+  erp-adapter:
+    build:
+      context: .
+      dockerfile: ./services/erp-adapter/Dockerfile
+    ports:
+      - "8007:8007"
+    environment:
+      - DB_HOST=procurement-postgres
+      - DB_PORT=5432
+      - DB_NAME=procurement_agent
+      - DB_USER=postgres
+      - DB_PASSWORD=postgres123
+      - REDIS_URL=redis://redis:6379
+      - ERP_VENDORS=mock                       # override to sap | oracle | sap,oracle
+      - ERP_INTERNAL_TOKEN=dev-internal-token-CHANGE_ME
+      - ERP_MOCK_BASE_URL=http://erp-mock:8008
+      - SAP_OAUTH_TOKEN_URL=http://erp-mock:8008/sap/oauth2/token
+      - SAP_BASE_URL=http://erp-mock:8008/sap/opu/odata/sap/API_PURCHASEORDER_PROCESS_SRV
+      - SAP_CLIENT_ID=mock-sap-client
+      - SAP_CLIENT_SECRET=mock-sap-secret
+      - SAP_WEBHOOK_HMAC_SECRET=dev-sap-hmac-CHANGE_ME
+      - ORACLE_OAUTH_TOKEN_URL=http://erp-mock:8008/oauth2/v1/token
+      - ORACLE_BASE_URL=http://erp-mock:8008/fscmRestApi/resources/11.13.18.05
+      - ORACLE_CLIENT_ID=mock-oracle-client
+      - ORACLE_CLIENT_SECRET=mock-oracle-secret
+      - ORACLE_WEBHOOK_HMAC_SECRET=dev-oracle-hmac-CHANGE_ME
+      - WORKER_CONCURRENCY=10
+    networks:
+      - beckn_network
+    depends_on:
+      redis:
+        condition: service_healthy
+      erp-mock:
+        condition: service_started
+    # Note: requires `procurement-postgres` reachable on the `beckn_network`
+    # with the schema already applied. See database/README.md for the
+    # one-time manual init step. Falls back to InMemoryOutboxRepo silently
+    # if the DB is unreachable.
+
+  # ── ERP Mock (emulates SAP OData v4 + Oracle ERP Cloud REST) ───────────────
+  erp-mock:
+    build:
+      context: .
+      dockerfile: ./services/erp-mock/Dockerfile
+    ports:
+      - "8008:8008"
+    environment:
+      - MOCK_SCENARIO=happy
+      - WEBHOOK_TARGET_URL=http://erp-adapter:8007
+      - WEBHOOK_DELAY_SECONDS=2
+      - SAP_WEBHOOK_HMAC_SECRET=dev-sap-hmac-CHANGE_ME
+      - ORACLE_WEBHOOK_HMAC_SECRET=dev-oracle-hmac-CHANGE_ME
+    networks:
+      - beckn_network
 
   # ── Redis — shared cache for ONIX adapters ─────────────────────────────────
   redis:

@@ -1,0 +1,44 @@
+{
+  "transaction_id": "txn-contract-1",
+  "order_id": "order-contract-1",
+  "contract_id": "contract-contract-1",
+  "buyer": {
+    "id": "user-42",
+    "name": "Infosys Limited - Procurement Desk",
+    "email": "procurement@infosys.com",
+    "cost_center": "CC-IND-PROC-01"
+  },
+  "supplier": {
+    "bpp_id": "bpp-supplier-7",
+    "bpp_uri": "https://supplier.example.com/bpp",
+    "name": "Acme Paper Co"
+  },
+  "line_items": [
+    {
+      "item_id": "SKU-A4-80",
+      "name": "A4 Paper 80gsm",
+      "quantity": 500,
+      "unit": "ream",
+      "unit_price": "195.00",
+      "currency": "INR",
+      "category": "stationery"
+    }
+  ],
+  "totals": {
+    "subtotal": "97500.00",
+    "currency": "INR"
+  },
+  "payment_terms": {
+    "type": "ON_FULFILLMENT",
+    "collector": "BPP",
+    "currency": "INR",
+    "net_days": 30
+  },
+  "fulfillment": {
+    "eta": "2026-06-01T12:00:00Z"
+  },
+  "metadata": {
+    "budget_hold_id": "hold-test-1",
+    "beckn_confirm_ref": "order-contract-1"
+  }
+}

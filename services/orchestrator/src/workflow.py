@@ -20,15 +20,23 @@ Service URLs are read from env vars so the orchestrator works both in Docker
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os
+import sys
 import time
+from decimal import Decimal
 from datetime import datetime, timezone
 from uuid import uuid4
 
 import aiohttp
 from aiohttp import web
+
+# Make `erp` importable when this file is launched as `python src/workflow.py`
+sys.path.insert(0, os.path.dirname(__file__))
+
+from erp import BudgetCheckRequest, ErpAdapterClient, build_normalized_po  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +47,22 @@ BECKN_BAP_URL            = os.getenv("BECKN_BAP_URL",            "http://localho
 COMPARATIVE_SCORING_URL  = os.getenv("COMPARATIVE_SCORING_URL",  "http://localhost:8003")
 
 ANALYTICS_URL = os.getenv("ANALYTICS_URL", "http://localhost:8006")
+
+# ── ERP adapter (synchronous budget gate + outbox sync) ──────────────────────
+
+ERP_ADAPTER_URL            = os.getenv("ERP_ADAPTER_URL",            "http://localhost:8007")
+ERP_INTERNAL_TOKEN         = os.getenv("ERP_INTERNAL_TOKEN",         "dev-internal-token-CHANGE_ME")
+ERP_BUDGET_CHECK_ENABLED   = os.getenv("ERP_BUDGET_CHECK_ENABLED",   "true").lower() == "true"
+ERP_BUDGET_CHECK_REQUIRED  = os.getenv("ERP_BUDGET_CHECK_REQUIRED",  "false").lower() == "true"
+ERP_BUDGET_CHECK_TIMEOUT_MS = int(os.getenv("ERP_BUDGET_CHECK_TIMEOUT_MS", "800"))
+ERP_SYNC_ENABLED           = os.getenv("ERP_SYNC_ENABLED",           "true").lower() == "true"
+ERP_DEFAULT_COST_CENTER    = os.getenv("ERP_DEFAULT_COST_CENTER",    "CC-IND-PROC-01")
+
+# Redis is used in M3.3 only to receive ERP status updates published by the
+# adapter on `po.status_changed:{txn_id}`. When Redis is unreachable the
+# orchestrator still serves /status from the Beckn poll alone — no regression.
+REDIS_URL                  = os.getenv("REDIS_URL",                  "")
+ERP_STATE_CACHE_TTL_SECS   = int(os.getenv("ERP_STATE_CACHE_TTL_SECS", "3600"))
 
 # ── Buyer billing config (mirrors Bap-1's ConfigBillingProvider) ─────────────
 
@@ -57,6 +81,13 @@ _sessions: dict[str, dict] = {}
 _session_times: dict[str, float] = {}
 SESSION_TTL = 1800  # seconds
 
+# ── ERP inbound state cache (populated by the Redis psubscribe task) ─────────
+# Keyed by transaction_id. Each entry carries the most-recent inbound webhook
+# payload from the ERP adapter (state, erp_reference_id, vendor, event_ts, …).
+# `/status` reads from this cache to enrich the Beckn response.
+_erp_state_cache: dict[str, dict] = {}
+_erp_state_times: dict[str, float] = {}
+
 
 def _session_put(txn_id: str, state: dict) -> None:
     _sessions[txn_id] = state
@@ -74,6 +105,23 @@ def _session_get(txn_id: str) -> dict | None:
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
+_erp_client: ErpAdapterClient | None = None
+
+
+def _get_erp_client() -> ErpAdapterClient:
+    """Lazy singleton — built on first use. Keeping the orchestrator's existing
+    style of module-level state instead of routing through web.Application["..."].
+    """
+    global _erp_client
+    if _erp_client is None:
+        _erp_client = ErpAdapterClient(
+            base_url=ERP_ADAPTER_URL,
+            internal_token=ERP_INTERNAL_TOKEN,
+            timeout_ms=ERP_BUDGET_CHECK_TIMEOUT_MS,
+            budget_check_required=ERP_BUDGET_CHECK_REQUIRED,
+        )
+    return _erp_client
 
 
 def _now_iso() -> str:
@@ -99,6 +147,25 @@ def _build_billing_info() -> dict:
         "email":   BUYER_EMAIL,
         "phone":   BUYER_PHONE,
         "address": address,
+    }
+
+
+def _build_buyer_dict() -> dict:
+    """Buyer block embedded in NormalizedPO for the ERP adapter (M3.2)."""
+    return {
+        "id": None,
+        "name": BUYER_NAME,
+        "email": BUYER_EMAIL,
+        "phone": BUYER_PHONE,
+        "tax_id": None,
+        "cost_center": ERP_DEFAULT_COST_CENTER,
+        "address": {
+            "street":    BUYER_ADDRESS_STREET,
+            "city":      BUYER_ADDRESS_CITY,
+            "state":     BUYER_ADDRESS_STATE,
+            "area_code": BUYER_ADDRESS_AREA_CODE,
+            "country":   BUYER_ADDRESS_COUNTRY,
+        },
     }
 
 
@@ -739,6 +806,47 @@ async def commit(request: web.Request) -> web.Response:
     bpp_id = chosen["bpp_id"]
     bpp_uri = chosen["bpp_uri"]
     quantity = state.get("intent", {}).get("quantity", 1)
+
+    # ── ERP budget gate (M3.1) ────────────────────────────────────────────────
+    budget_hold_id: str | None = None
+    if ERP_BUDGET_CHECK_ENABLED:
+        intent = state.get("intent") or {}
+        try:
+            unit_price = Decimal(str(chosen["price_value"]))
+            requested = unit_price * Decimal(quantity)
+        except Exception:
+            requested = Decimal("0")
+        bc_req = BudgetCheckRequest(
+            transaction_id=txn_id,
+            cost_center=intent.get("cost_center") or ERP_DEFAULT_COST_CENTER,
+            requested_amount=requested,
+            currency=chosen.get("price_currency", "INR"),
+            category=intent.get("category", "uncategorized"),
+            requester_id=request.headers.get("X-Requester-Id", "anonymous"),
+        )
+        try:
+            bc = await _get_erp_client().budget_check(bc_req)
+        except Exception as exc:
+            logger.error("[budget-gate] required but adapter failed txn=%s err=%s", txn_id, exc)
+            return web.json_response(
+                {"transaction_id": txn_id, "status": "error",
+                 "reason": "erp_unavailable", "detail": str(exc)},
+                status=503,
+            )
+        if not bc.allowed:
+            logger.info("[budget-gate] DENIED txn=%s reasons=%s", txn_id, bc.reasons)
+            return web.json_response(
+                {"transaction_id": txn_id, "status": "rejected",
+                 "reason": "budget", "detail": bc.reasons},
+                status=409,
+            )
+        budget_hold_id = bc.hold_id
+        if bc.fallback:
+            logger.warning("[budget-gate] fail-open txn=%s reasons=%s", txn_id, bc.reasons)
+        else:
+            logger.info("[budget-gate] approved txn=%s hold=%s", txn_id, budget_hold_id)
+
+
     contract_id = str(uuid4())
     items = [{
         "id":             chosen["item_id"],
@@ -858,14 +966,41 @@ async def commit(request: web.Request) -> web.Response:
 
         _session_put(txn_id, {
             **state,
-            "order_id":      order_id,
-            "order_state":   order_state,
-            "payment_terms": payment_terms,
-            "bpp_id":        bpp_id,
-            "bpp_uri":       bpp_uri,
-            "items":         items,
-            "contract_id":   contract_id,
+            "order_id":       order_id,
+            "order_state":    order_state,
+            "payment_terms":  payment_terms,
+            "bpp_id":         bpp_id,
+            "bpp_uri":        bpp_uri,
+            "items":          items,
+            "contract_id":    contract_id,
+            "budget_hold_id": budget_hold_id,
         })
+
+        # ── ERP outbox enqueue (M3.2) — fire-and-forget ──────────────────────
+        if ERP_SYNC_ENABLED and order_id and not state.get("error"):
+            try:
+                po_payload = build_normalized_po(
+                    state={**state, "transaction_id": txn_id},
+                    chosen=chosen,
+                    intent=state.get("intent") or {},
+                    order_id=order_id,
+                    contract_id=contract_id,
+                    payment_terms=payment_terms,
+                    fulfillment_eta=None,
+                    budget_hold_id=budget_hold_id,
+                    buyer=_build_buyer_dict(),
+                )
+                # Propagate the X-Mock-Scenario header into payload metadata so
+                # the outbox worker (which runs out-of-band) sees it.
+                mock_scenario = request.headers.get("X-Mock-Scenario")
+                if mock_scenario:
+                    po_payload["metadata"] = {
+                        **po_payload.get("metadata", {}),
+                        "mock_scenario": mock_scenario,
+                    }
+                asyncio.create_task(_get_erp_client().enqueue_sync(po_payload))
+            except Exception as exc:
+                logger.warning("[erp-sync] enqueue build failed txn=%s err=%s", txn_id, exc)
 
         return web.json_response({
             "transaction_id": txn_id,
@@ -950,11 +1085,14 @@ async def order_status(request: web.Request) -> web.Response:
     stored_items = (state or {}).get("items", [])
     last_state = (state or {}).get("order_state", "CREATED")
 
+    erp_event = _erp_state_for(txn_id)
+
     if not bpp_id or not bpp_uri:
         return web.json_response({
             "transaction_id": txn_id,
             "order_id":       order_id,
             "state":          last_state,
+            "erp_state":      _erp_state_block(erp_event),
             "fulfillment_eta": None,
             "tracking_url":   None,
             "observed_at":    _now_iso(),
@@ -974,10 +1112,16 @@ async def order_status(request: web.Request) -> web.Response:
             }
             result = await _post(session, f"{BECKN_BAP_URL}/status", status_body)
 
+        beckn_state = result.get("state", last_state)
+        if erp_event and erp_event.get("state") and erp_event["state"] != beckn_state:
+            logger.info("[status] STATE_DISCREPANCY txn=%s beckn=%s erp=%s",
+                        txn_id, beckn_state, erp_event["state"])
+
         return web.json_response({
             "transaction_id": txn_id,
             "order_id":       order_id,
-            "state":          result.get("state", last_state),
+            "state":          beckn_state,                  # Beckn remains canonical
+            "erp_state":      _erp_state_block(erp_event),  # informational
             "fulfillment_eta": result.get("fulfillment_eta"),
             "tracking_url":   result.get("tracking_url"),
             "observed_at":    _now_iso(),
@@ -990,11 +1134,24 @@ async def order_status(request: web.Request) -> web.Response:
             "transaction_id": txn_id,
             "order_id":       order_id,
             "state":          last_state,
+            "erp_state":      _erp_state_block(erp_event),
             "fulfillment_eta": None,
             "tracking_url":   None,
             "observed_at":    _now_iso(),
             "status":         "mock",
         })
+
+
+def _erp_state_block(event: dict | None) -> dict | None:
+    if not event:
+        return None
+    return {
+        "state":            event.get("state"),
+        "vendor":           event.get("vendor"),
+        "erp_reference_id": event.get("erp_reference_id"),
+        "event_ts":         event.get("event_ts"),
+        "vendor_event_id":  event.get("vendor_event_id"),
+    }
 
 
 async def discover(request: web.Request) -> web.Response:
@@ -1071,11 +1228,99 @@ async def run(request: web.Request) -> web.Response:
     return web.json_response(result)
 
 
+# ── ERP status subscriber (Redis psubscribe to po.status_changed:*) ──────────
+
+async def _erp_status_subscriber_loop(redis) -> None:
+    """Long-running task — reads ERP status events off Redis and parks them
+    in `_erp_state_cache` keyed by transaction_id. Best-effort: any failure
+    logs and continues; never raises into the parent task."""
+    pubsub = redis.pubsub()
+    try:
+        await pubsub.psubscribe("po.status_changed:*")
+        logger.info("[erp-subscriber] psubscribed to po.status_changed:*")
+        async for msg in pubsub.listen():
+            if msg is None or msg.get("type") != "pmessage":
+                continue
+            try:
+                payload = json.loads(msg["data"]) if isinstance(msg["data"], (str, bytes)) else msg["data"]
+                txn_id = payload.get("transaction_id")
+                if not txn_id:
+                    continue
+                _erp_state_cache[txn_id] = payload
+                _erp_state_times[txn_id] = time.monotonic()
+                logger.info("[erp-subscriber] cached state=%s txn=%s vendor=%s",
+                            payload.get("state"), txn_id, payload.get("vendor"))
+            except Exception as exc:
+                logger.warning("[erp-subscriber] malformed message: %s", exc)
+    except asyncio.CancelledError:
+        logger.info("[erp-subscriber] cancelled")
+        raise
+    except Exception as exc:
+        logger.warning("[erp-subscriber] loop failed: %s", exc)
+    finally:
+        try:
+            await pubsub.punsubscribe("po.status_changed:*")
+            await pubsub.aclose()
+        except Exception:
+            pass
+
+
+def _erp_state_for(txn_id: str) -> dict | None:
+    """Return the cached inbound state, honoring the configurable TTL."""
+    payload = _erp_state_cache.get(txn_id)
+    if payload is None:
+        return None
+    if time.monotonic() - _erp_state_times.get(txn_id, 0) > ERP_STATE_CACHE_TTL_SECS:
+        _erp_state_cache.pop(txn_id, None)
+        _erp_state_times.pop(txn_id, None)
+        return None
+    return payload
+
+
+async def _on_startup_erp_subscriber(app: web.Application) -> None:
+    if not REDIS_URL:
+        logger.info("[erp-subscriber] REDIS_URL not set — skipping (no enrichment)")
+        return
+    try:
+        import redis.asyncio as aioredis  # type: ignore
+    except Exception as exc:
+        logger.warning("[erp-subscriber] redis lib missing: %s — skipping", exc)
+        return
+    try:
+        r = aioredis.from_url(REDIS_URL, encoding="utf-8", decode_responses=True)
+        await r.ping()
+    except Exception as exc:
+        logger.warning("[erp-subscriber] Redis unreachable (%s) — skipping", exc)
+        return
+    app["redis"] = r
+    app["erp_subscriber_task"] = asyncio.create_task(
+        _erp_status_subscriber_loop(r), name="erp-status-subscriber",
+    )
+
+
+async def _on_cleanup_erp_subscriber(app: web.Application) -> None:
+    task = app.get("erp_subscriber_task")
+    if task is not None:
+        task.cancel()
+        try:
+            await task
+        except (asyncio.CancelledError, Exception):
+            pass
+    r = app.get("redis")
+    if r is not None:
+        try:
+            await r.aclose()
+        except Exception:
+            pass
+
+
 # ── App factory ───────────────────────────────────────────────────────────────
 
 
 def create_app() -> web.Application:
     app = web.Application()
+    app.on_startup.append(_on_startup_erp_subscriber)
+    app.on_cleanup.append(_on_cleanup_erp_subscriber)
     app.router.add_get("/health",                          health)
     app.router.add_get("/analytics",                       analytics)
     app.router.add_post("/run",                            run)

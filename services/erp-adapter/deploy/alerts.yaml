@@ -1,0 +1,70 @@
+# Prometheus alerting rules for the erp-adapter service.
+# Drop into a `prometheus_rule_files` mount; route to PagerDuty / Slack via
+# Alertmanager. Severities are advisory — tune to org SLOs.
+
+groups:
+  - name: erp-adapter.outbox
+    interval: 30s
+    rules:
+      - alert: ERPOutboxDLQ
+        expr: increase(erp_po_outbox_dead_total[1m]) > 0
+        for: 1m
+        labels: { severity: critical, service: erp-adapter }
+        annotations:
+          summary: "ERP outbox row hit DLQ"
+          description: "A PO push exhausted retries or was permanently rejected. Inspect erp.audit (event=PO_DLQ) for cause; replay via POST /api/v1/admin/outbox/{sync_id}/replay after the root cause is fixed."
+
+      - alert: ERPOutboxLagHigh
+        expr: erp_po_outbox_lag_seconds > 300
+        for: 5m
+        labels: { severity: warning, service: erp-adapter }
+        annotations:
+          summary: "ERP outbox is backed up (>5m)"
+          description: "Oldest pending po_creation row is older than 5 minutes. Vendor probably degraded — check erp_circuit_state and vendor-side incidents."
+
+  - name: erp-adapter.circuit
+    interval: 30s
+    rules:
+      - alert: ERPCircuitOpen
+        expr: erp_circuit_state == 2
+        for: 10m
+        labels: { severity: critical, service: erp-adapter }
+        annotations:
+          summary: "Per-vendor circuit breaker has been OPEN for >10m"
+          description: "vendor={{ $labels.vendor }} circuit is OPEN — the breaker is fail-fasting. Verify vendor health and that the breaker reset_timeout is reasonable."
+
+  - name: erp-adapter.security
+    interval: 30s
+    rules:
+      - alert: ERPWebhookRejectedSpike
+        expr: |
+          (sum by (vendor) (rate(erp_webhook_received_total{outcome="401"}[5m])))
+          /
+          (sum by (vendor) (rate(erp_webhook_received_total[5m])) > 0)
+          > 0.01
+        for: 5m
+        labels: { severity: warning, service: erp-adapter, area: security }
+        annotations:
+          summary: "Webhook HMAC rejection rate >1%"
+          description: "vendor={{ $labels.vendor }} is rejecting >1% of inbound webhooks. Possible misconfigured shared secret, mid-rotation drift, or attacker probing."
+
+      - alert: ERPOAuthRefreshErrors
+        expr: increase(erp_token_refresh_total{outcome="error"}[5m]) > 0
+        for: 5m
+        labels: { severity: warning, service: erp-adapter, area: security }
+        annotations:
+          summary: "OAuth token refresh errors"
+          description: "vendor={{ $labels.vendor }} cannot refresh access token — IDP outage or credential rotation issue."
+
+  - name: erp-adapter.latency
+    interval: 30s
+    rules:
+      - alert: ERPBudgetCheckP95High
+        expr: |
+          histogram_quantile(0.95, sum by (vendor, le) (rate(erp_budget_check_duration_seconds_bucket[5m])))
+          > 0.8
+        for: 10m
+        labels: { severity: warning, service: erp-adapter }
+        annotations:
+          summary: "Budget-check p95 latency >800ms"
+          description: "vendor={{ $labels.vendor }} budget-check p95 has exceeded the 800ms /commit budget for 10 minutes. Investigate vendor latency or open the circuit-breaker exclusion list."

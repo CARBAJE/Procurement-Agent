@@ -1,0 +1,19 @@
+{
+  "BusinessUnit": "Vision Operations",
+  "Buyer": "Infosys Limited - Procurement Desk",
+  "Supplier": "Acme Paper Co",
+  "SupplierSite": "bpp-supplier-7",
+  "Currency": "INR",
+  "TotalAmount": "97500.00",
+  "lines": [
+    {
+      "LineNumber": 1,
+      "ItemNumber": "SKU-A4-80",
+      "Description": "A4 Paper 80gsm",
+      "Quantity": 500,
+      "UOMCode": "REA",
+      "Price": "195.00",
+      "Currency": "INR"
+    }
+  ]
+}

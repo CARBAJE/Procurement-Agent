@@ -1,0 +1,8 @@
+aiohttp>=3.9
+asyncpg>=0.29
+pydantic>=2.6
+pydantic-settings>=2.2
+tenacity>=8.2
+pybreaker>=1.0
+prometheus-client>=0.20
+redis>=5.0

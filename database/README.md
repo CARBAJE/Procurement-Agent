@@ -167,6 +167,7 @@ The script connects to PostgreSQL and executes every `.sql` file inside `./sql/`
 | _(none)_ | Connect and execute all SQL scripts against an existing database. |
 | `--create-db` | Connect to the `postgres` system database first and create `DB_NAME` if it does not exist, then proceed with the scripts. Requires the user to have `CREATEDB` privilege. |
 | `--drop-all` | Drop **all** tables and ENUM types in the `public` schema (CASCADE) before executing the scripts. Useful for a clean rebuild. **Destructive — all data will be lost.** |
+| `--continue-on-exists` | Treat "object already exists" errors as `[SKIP]` instead of `[FAIL]`. Required when re-applying the full set against a database that already has the older migrations — only the newer migrations using `IF NOT EXISTS` will actually run. |
 
 The two flags are independent and can be combined:
 
@@ -447,14 +448,56 @@ pytest test_database.py -v
 
 ### Apply new SQL scripts without dropping (migrations)
 
-Add your new script as `18_your_change.sql` inside `sql/`, then:
+Add your new script as `NN_your_change.sql` inside `sql/`. If the existing database
+already has prior migrations applied, run with `--continue-on-exists` so the
+already-applied scripts are skipped instead of failing:
 
 ```bash
 export $(grep -v '^#' .env | xargs)
-python setup_database.py        # --create-db and --drop-all are not needed
+python setup_database.py --continue-on-exists
 ```
 
-Because every `CREATE TABLE` and `CREATE INDEX` uses `IF NOT EXISTS`, re-running the existing scripts is idempotent.
+For PowerShell on Windows:
+
+```powershell
+$env:DB_HOST = "localhost"
+$env:DB_PASSWORD = "postgres123"
+python setup_database.py --continue-on-exists
+```
+
+The flag treats PostgreSQL "duplicate object" errors (pgcode 42710, 42P07,
+42701, …) as `[SKIP]` so older migrations that don't use `IF NOT EXISTS` —
+which is most of them — don't crash the run.
+
+### Quick alternative: apply a single migration via psql (no Python)
+
+When you only need to add one migration and don't want to set up Python /
+psycopg2, pipe the SQL straight into the running Postgres container:
+
+```powershell
+Get-Content database/sql/19b_erp_sync_records_outbox.sql | docker exec -i procurement-postgres psql -U postgres -d procurement_agent
+```
+
+Useful for one-off operational changes (e.g. the M3.2 ERP outbox migration
+on an already-populated dev database).
+
+### ERP Integration (M3.2) migrations
+
+Phase 3 / Milestone 2 added two new migrations that extend `erp_sync_records`
+into a durable outbox for SAP/Oracle PO push:
+
+- `19_erp_enum_extensions.sql` — adds the `in_progress` value to
+  `erp_sync_status` and `mock` to `erp_system_type`. Must run in its own
+  transaction (PG12+ allows `ALTER TYPE ADD VALUE` inside a transaction,
+  but the newly added value cannot be referenced in the same transaction).
+- `19b_erp_sync_records_outbox.sql` — adds 8 operational columns
+  (`idempotency_key`, `attempts`, `next_attempt_at`, `lease_until`,
+  `worker_id`, `last_error`, `payload`, `updated_at`), makes `po_id`
+  nullable, and creates two indexes (one of which references
+  `'in_progress'`).
+
+Both are idempotent (`ADD VALUE IF NOT EXISTS`, `ADD COLUMN IF NOT EXISTS`,
+`CREATE INDEX IF NOT EXISTS`) so re-running is safe.
 
 ### Connect with psql
 

@@ -1,0 +1,21 @@
+{
+  "PurchaseOrderType": "NB",
+  "PurchasingOrganization": "1000",
+  "PurchasingGroup": "001",
+  "Supplier": "bpp-supplier-7",
+  "CompanyCode": "1000",
+  "DocumentCurrency": "INR",
+  "to_PurchaseOrderItem": {
+    "results": [
+      {
+        "PurchaseOrderItem": "00010",
+        "Material": "SKU-A4-80",
+        "PurchaseOrderItemText": "A4 Paper 80gsm",
+        "OrderQuantity": "500",
+        "PurchaseOrderQuantityUnit": "REA",
+        "NetPriceAmount": "195.00",
+        "DocumentCurrency": "INR"
+      }
+    ]
+  }
+}
