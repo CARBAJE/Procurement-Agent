@@ -28,3 +28,7 @@ npm-debug.log*
 # ── KnowledgeBase ─────────────────────────────────────────────────────────────
 KnowledgeBase/.obsidian/workspace.json
 KnowledgeBase/.obsidian/snippets/snippsets.css
+# Ignorar configuraciones locales y caché de Obsidian
+KnowledgeBase/.obsidian/workspace.json
+KnowledgeBase/.obsidian/workspace-mobile.json
+KnowledgeBase/.obsidian/cache/
