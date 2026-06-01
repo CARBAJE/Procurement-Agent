@@ -1,0 +1,152 @@
+# MLOps stack for the Comparative & Scoring service (Phase 2 — RankNet/SGD).
+#
+# This compose file is intentionally self-contained: it brings up the MLflow
+# tracking server + its Postgres backend store, the inference API
+# (prediction-api), and the on-demand batch jobs (training-pipeline,
+# validation-service) which are gated behind compose profiles.
+#
+# Networking:
+#   - `beckn_network` is declared external — it is created by the repo-root
+#     docker-compose.yml. All services attach to it so prediction-api can be
+#     consumed by orchestrator, beckn-bap-client, etc.
+#   - `mlops_network` is local to this file and carries MLflow's internal
+#     traffic (server <-> Postgres <-> jobs) so it stays isolated from Beckn.
+#
+# Usage:
+#   docker compose -f docker-compose.mlops.yaml up -d                          # MLflow + prediction-api
+#   docker compose -f docker-compose.mlops.yaml --profile training   up training-pipeline
+#   docker compose -f docker-compose.mlops.yaml --profile validation up validation-service
+
+services:
+
+  # ── MLflow backend store ────────────────────────────────────────────────
+  mlflow-db:
+    image: postgres:16
+    container_name: mlflow-db
+    environment:
+      POSTGRES_USER: mlflow
+      POSTGRES_PASSWORD: mlflow
+      POSTGRES_DB: mlflow
+    volumes:
+      - mlflow_pgdata:/var/lib/postgresql/data
+    networks:
+      - mlops_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mlflow -d mlflow"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+  # ── MLflow tracking + model registry server ────────────────────────────
+  mlflow-server:
+    image: ghcr.io/mlflow/mlflow:v2.16.0
+    container_name: mlflow-server
+    ports:
+      - "5000:5000"
+    command: >
+      mlflow server
+      --host 0.0.0.0
+      --port 5000
+      --backend-store-uri postgresql://mlflow:mlflow@mlflow-db:5432/mlflow
+      --default-artifact-root /mlflow/artifacts
+      --serve-artifacts
+    volumes:
+      - mlflow_artifacts:/mlflow/artifacts
+    depends_on:
+      mlflow-db:
+        condition: service_healthy
+    networks:
+      - mlops_network
+      - beckn_network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:5000/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped
+
+  # ── Prediction API (FastAPI inference, loaded from MLflow registry) ────
+  prediction-api:
+    build:
+      context: .
+      dockerfile: Dockerfile.prediction
+    container_name: comparative-scoring-prediction-api
+    ports:
+      - "8004:8004"
+    environment:
+      MLFLOW_TRACKING_URI: http://mlflow-server:5000
+      MODEL_NAME: ProcurementRanker
+      MODEL_STAGE: Production
+      PORT: "8004"
+    depends_on:
+      mlflow-server:
+        condition: service_healthy
+    networks:
+      - mlops_network
+      - beckn_network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8004/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped
+
+  # ── Training pipeline (batch — run on demand) ──────────────────────────
+  # Invoke explicitly:
+  #   docker compose -f docker-compose.mlops.yaml --profile training up training-pipeline
+  training-pipeline:
+    build:
+      context: .
+      dockerfile: Dockerfile.training
+    container_name: comparative-scoring-training-pipeline
+    environment:
+      MLFLOW_TRACKING_URI: http://mlflow-server:5000
+      MODEL_NAME: ProcurementRanker
+      MLFLOW_EXPERIMENT_NAME: procurement-ranker
+    depends_on:
+      - mlflow-server
+    networks:
+      - mlops_network
+      - beckn_network
+    profiles: ["training"]
+    restart: "no"
+
+  # ── Validation service (weekly drift check — run on demand / via cron) ─
+  # Invoke explicitly:
+  #   docker compose -f docker-compose.mlops.yaml --profile validation up validation-service
+  validation-service:
+    build:
+      context: .
+      dockerfile: Dockerfile.validation
+    container_name: comparative-scoring-validation-service
+    environment:
+      MLFLOW_TRACKING_URI: http://mlflow-server:5000
+      MODEL_NAME: ProcurementRanker
+      NDCG_DRIFT_THRESHOLD: "0.05"
+    depends_on:
+      - mlflow-server
+    networks:
+      - mlops_network
+      - beckn_network
+    profiles: ["validation"]
+    restart: "no"
+
+networks:
+  # Pre-created by the repo-root docker-compose.yml — attach as external.
+  beckn_network:
+    name: beckn_network
+    external: true
+  # Internal MLflow traffic (server <-> Postgres <-> jobs).
+  mlops_network:
+    name: mlops_network
+    driver: bridge
+
+volumes:
+  mlflow_pgdata:
+    name: mlflow_pgdata
+  mlflow_artifacts:
+    name: mlflow_artifacts
