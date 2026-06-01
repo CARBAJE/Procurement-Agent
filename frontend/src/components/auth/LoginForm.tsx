@@ -2,43 +2,32 @@
 
 import { useState } from "react"
 import { signIn } from "next-auth/react"
-import { useRouter } from "next/navigation"
-import { Loader2, ShoppingCart } from "lucide-react"
-import { Button }   from "@/components/ui/button"
-import { Input }    from "@/components/ui/input"
-import { Label }    from "@/components/ui/label"
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
+import { useSearchParams } from "next/navigation"
+import { Loader2, ShoppingCart, LogIn } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 
-const DEMO_USERS = [
-  { label: "Requester (Priya)", email: "priya@example.com",  password: "requester123" },
-  { label: "Approver (Rajesh)", email: "rajesh@example.com", password: "approver123"  },
-  { label: "Admin",             email: "admin@example.com",  password: "admin123"     },
-]
+const ERROR_MESSAGES: Record<string, string> = {
+  Configuration:    "Authentication is not configured correctly. Please contact support.",
+  AccessDenied:     "Access denied. Your account does not have permission to sign in.",
+  Verification:     "Verification link expired. Please try signing in again.",
+  OAuthSignin:      "Could not start the sign-in flow. Please try again.",
+  OAuthCallback:    "Could not complete the sign-in flow. Please try again.",
+  OAuthCreateAccount: "Could not create your account. Please contact support.",
+  Callback:         "Sign-in failed. Please try again.",
+  Default:          "Sign-in failed. Please try again.",
+}
 
 export default function LoginForm() {
-  const router = useRouter()
-  const [email,    setEmail]    = useState("")
-  const [password, setPassword] = useState("")
-  const [error,    setError]    = useState("")
-  const [loading,  setLoading]  = useState(false)
+  const searchParams = useSearchParams()
+  const errorCode = searchParams.get("error")
+  const errorMessage = errorCode ? (ERROR_MESSAGES[errorCode] ?? ERROR_MESSAGES.Default) : null
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    setError("")
+  const [loading, setLoading] = useState(false)
+
+  async function handleSignIn() {
     setLoading(true)
-    const result = await signIn("credentials", { email, password, redirect: false })
-    setLoading(false)
-    if (result?.error) {
-      setError("Invalid credentials. Try one of the demo users.")
-    } else {
-      router.push("/")
-    }
-  }
-
-  function fillDemo(email: string, password: string) {
-    setEmail(email)
-    setPassword(password)
-    setError("")
+    await signIn("keycloak", { callbackUrl: "/" })
   }
 
   return (
@@ -54,63 +43,43 @@ export default function LoginForm() {
         <Card>
           <CardHeader>
             <CardTitle>Sign in</CardTitle>
-            <CardDescription>Enter your credentials to access the procurement system.</CardDescription>
+            <CardDescription>
+              You will be redirected to your organization&apos;s identity
+              provider to authenticate.
+            </CardDescription>
           </CardHeader>
 
-          <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  autoComplete="email"
-                  placeholder="user@example.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="password">Password</Label>
-                <Input
-                  id="password"
-                  type="password"
-                  autoComplete="current-password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                />
-              </div>
-              {error && (
-                <p role="alert" className="text-sm text-destructive">{error}</p>
-              )}
-              <Button type="submit" className="w-full" disabled={loading}>
-                {loading
-                  ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Signing in…</>
-                  : "Sign in"
-                }
-              </Button>
-            </form>
-          </CardContent>
+          <CardContent className="space-y-4">
+            {errorMessage && (
+              <p
+                role="alert"
+                tabIndex={-1}
+                className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+              >
+                {errorMessage}
+              </p>
+            )}
 
-          <CardFooter className="flex flex-col gap-2">
-            <p className="text-xs text-muted-foreground w-full">Demo users (Phase 1 SSO stub):</p>
-            <div className="flex gap-2 w-full flex-wrap">
-              {DEMO_USERS.map((u) => (
-                <Button
-                  key={u.email}
-                  variant="outline"
-                  size="sm"
-                  type="button"
-                  onClick={() => fillDemo(u.email, u.password)}
-                  className="text-xs flex-1"
-                >
-                  {u.label}
-                </Button>
-              ))}
-            </div>
-          </CardFooter>
+            <Button
+              type="button"
+              className="w-full"
+              onClick={handleSignIn}
+              disabled={loading}
+              aria-label="Sign in with Phase Two"
+            >
+              {loading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
+                  Redirecting…
+                </>
+              ) : (
+                <>
+                  <LogIn className="mr-2 h-4 w-4" aria-hidden="true" />
+                  Sign in with Phase Two
+                </>
+              )}
+            </Button>
+          </CardContent>
         </Card>
       </div>
     </div>

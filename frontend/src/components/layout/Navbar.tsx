@@ -1,6 +1,6 @@
 "use client"
 
-import { signOut, useSession } from "next-auth/react"
+import { useSession } from "next-auth/react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { Zap, LogOut } from "lucide-react"
@@ -71,7 +71,7 @@ export default function Navbar() {
               variant="ghost"
               size="sm"
               aria-label="Sign out"
-              onClick={() => signOut({ callbackUrl: "/login" })}
+              onClick={() => { window.location.href = "/api/auth/federated-logout" }}
               className="text-muted-foreground hover:text-foreground"
             >
               <LogOut className="h-4 w-4" aria-hidden="true" />
