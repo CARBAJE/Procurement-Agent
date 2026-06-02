@@ -62,7 +62,13 @@ modules:
           config:
             type: url
             # Points to the canonical Beckn Protocol v2.0.0 OpenAPI spec
-            location: https://raw.githubusercontent.com/beckn/protocol-specifications-v2/refs/heads/draft/api/v2.0.0/beckn.yaml
+            # Pinned to a stable commit (2026-04-21) instead of the moving `draft`
+            # branch. The draft branch later introduced a dangling $ref to
+            # components/headers/SignatureHeader (renamed to AckSignatureHeader
+            # but two refs were left behind), which crashes the schemav2validator
+            # plugin with: map key "SignatureHeader" not found. This commit
+            # predates that breakage and matches the spec era the adapter expects.
+            location: https://raw.githubusercontent.com/beckn/protocol-specifications-v2/d43ec30d1b30f3ab914ba48f7da5db7beac36732/api/v2.0.0/beckn.yaml
             cacheTTL: "3600"
             extendedSchema_enabled: "false"
             extendedSchema_cacheTTL: "86400"
@@ -128,7 +134,13 @@ modules:
           id: schemav2validator
           config:
             type: url
-            location: https://raw.githubusercontent.com/beckn/protocol-specifications-v2/refs/heads/draft/api/v2.0.0/beckn.yaml
+            # Pinned to a stable commit (2026-04-21) instead of the moving `draft`
+            # branch. The draft branch later introduced a dangling $ref to
+            # components/headers/SignatureHeader (renamed to AckSignatureHeader
+            # but two refs were left behind), which crashes the schemav2validator
+            # plugin with: map key "SignatureHeader" not found. This commit
+            # predates that breakage and matches the spec era the adapter expects.
+            location: https://raw.githubusercontent.com/beckn/protocol-specifications-v2/d43ec30d1b30f3ab914ba48f7da5db7beac36732/api/v2.0.0/beckn.yaml
             cacheTTL: "3600"
             extendedSchema_enabled: "true"
             extendedSchema_cacheTTL: "86400"
