@@ -117,7 +117,13 @@ async def _get_producer() -> Any | None:
                 bootstrap_servers=CONFIG.kafka_bootstrap_servers,
                 client_id=CONFIG.kafka_client_id,
                 # Idempotent producer: avoid double-writes under retry.
-                enable_idempotence=True,
+                # Idempotent producer (InitProducerId) hangs against the
+                # Redpanda dev-container; disabled here. acks="all" still
+                # guarantees the broker persisted the record, and the
+                # envelope's ``idempotency_key`` provides app-level dedup,
+                # so exactly-once is preserved at the consumer. Re-enable
+                # against a production Kafka cluster that supports it.
+                enable_idempotence=False,
                 acks="all",
                 # Trade a little throughput for lower per-event latency —
                 # audit events are small and we want them on-disk fast.
@@ -274,6 +280,54 @@ async def log_negotiation_event(
         )
 
 
+# Reference to the service's main event loop, registered at app startup via
+# :func:`register_event_loop`. LangGraph runs *sync* node bodies in worker
+# threads (via run_in_executor), where ``asyncio.get_running_loop()`` raises.
+# Without a captured main-loop reference, audit events from those nodes would
+# never reach Kafka — they'd fall through to the logger. Registering the loop
+# lets ``log_negotiation_event_sync`` bridge back to it with
+# ``run_coroutine_threadsafe`` from any thread.
+_main_loop: asyncio.AbstractEventLoop | None = None
+
+
+def register_event_loop(loop: asyncio.AbstractEventLoop | None = None) -> None:
+    """Capture the running loop so worker-thread audit calls can reach Kafka.
+
+    Call once from the FastAPI lifespan (or any async startup hook). If
+    ``loop`` is omitted, the currently-running loop is captured.
+    """
+    global _main_loop
+    if loop is None:
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+    _main_loop = loop
+
+
+def _log_fallback(
+    session_id: str,
+    event_type: str,
+    payload: dict,
+    *,
+    idempotency_key: str | None,
+    trace_context: dict | None,
+) -> None:
+    envelope = _build_envelope(
+        session_id=session_id,
+        event_type=event_type,
+        payload=payload,
+        idempotency_key=idempotency_key,
+        trace_context=trace_context,
+    )
+    logger.info(
+        "AUDIT-SYNC-FALLBACK %s session=%s payload=%s",
+        envelope["event_type"],
+        session_id,
+        json.dumps(payload, default=str)[:500],
+    )
+
+
 def log_negotiation_event_sync(
     session_id: str,
     event_type: str,
@@ -284,44 +338,50 @@ def log_negotiation_event_sync(
 ) -> None:
     """Synchronous convenience for sync LangGraph nodes.
 
-    LangGraph 1.x supports sync node bodies and the placeholder nodes in
-    ``nodes.py`` are sync — emitting an audit event from such a node
-    requires a non-async entry point. This helper schedules the
-    coroutine on a fire-and-forget task if a running loop exists, or
-    falls back to the synchronous logger when no loop is running (e.g.
-    during unit tests that exercise nodes outside the runtime).
+    LangGraph 1.x runs sync node bodies in worker threads, so emitting an
+    audit event from such a node needs a non-async entry point. Resolution
+    order:
+
+    1. If a loop is running in *this* thread, fire-and-forget on it.
+    2. Else, if a main loop was registered (:func:`register_event_loop`)
+       and is running, bridge to it via ``run_coroutine_threadsafe`` — this
+       is the path taken from LangGraph worker threads.
+    3. Else (no loop anywhere, e.g. unit tests), log to the Python logger.
     """
+    coro_kwargs = dict(
+        session_id=session_id,
+        event_type=event_type,
+        payload=payload,
+        idempotency_key=idempotency_key,
+        trace_context=trace_context,
+    )
+
+    # Case 1 — a loop is running in the current thread.
     try:
         loop = asyncio.get_running_loop()
     except RuntimeError:
         loop = None
-
-    if loop is None or not loop.is_running():
-        # Fall straight to the Python logger — keeps unit tests trivial.
-        envelope = _build_envelope(
-            session_id=session_id,
-            event_type=event_type,
-            payload=payload,
-            idempotency_key=idempotency_key,
-            trace_context=trace_context,
-        )
-        logger.info(
-            "AUDIT-SYNC-FALLBACK %s session=%s payload=%s",
-            envelope["event_type"],
-            session_id,
-            json.dumps(payload, default=str)[:500],
-        )
+    if loop is not None and loop.is_running():
+        loop.create_task(log_negotiation_event(**coro_kwargs))
         return
 
-    # Fire-and-forget on the running loop.
-    loop.create_task(
-        log_negotiation_event(
-            session_id=session_id,
-            event_type=event_type,
-            payload=payload,
-            idempotency_key=idempotency_key,
-            trace_context=trace_context,
-        )
+    # Case 2 — bridge from a worker thread to the registered main loop.
+    if _main_loop is not None and _main_loop.is_running():
+        try:
+            asyncio.run_coroutine_threadsafe(
+                log_negotiation_event(**coro_kwargs), _main_loop
+            )
+            return
+        except Exception as exc:  # pragma: no cover — defensive
+            logger.warning("Failed to bridge audit event to main loop: %s", exc)
+
+    # Case 3 — no loop available; log-only fallback.
+    _log_fallback(
+        session_id,
+        event_type,
+        payload,
+        idempotency_key=idempotency_key,
+        trace_context=trace_context,
     )
 
 
@@ -330,5 +390,6 @@ __all__ = [
     "POLICY_VIOLATION_EVENT_TYPES",
     "log_negotiation_event",
     "log_negotiation_event_sync",
+    "register_event_loop",
     "shutdown",
 ]

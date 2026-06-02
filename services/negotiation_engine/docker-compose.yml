@@ -89,8 +89,13 @@ services:
     command:
       - redpanda
       - start
-      - --kafka-addr=PLAINTEXT://0.0.0.0:9092
-      - --advertise-kafka-addr=PLAINTEXT://redpanda:9092
+      # Dual listener: INTERNAL for in-network clients (console), EXTERNAL
+      # advertised as localhost:19092 so host-based clients (the uvicorn
+      # negotiation engine) can actually produce. Without the external
+      # listener, host producers connect to the bootstrap port but receive
+      # an unreachable `redpanda:9092` advertised address and fail to send.
+      - --kafka-addr=INTERNAL://0.0.0.0:9092,EXTERNAL://0.0.0.0:19092
+      - --advertise-kafka-addr=INTERNAL://redpanda:9092,EXTERNAL://localhost:19092
       - --pandaproxy-addr=0.0.0.0:8082
       - --advertise-pandaproxy-addr=redpanda:8082
       - --schema-registry-addr=0.0.0.0:8081
@@ -102,9 +107,10 @@ services:
       - --reserve-memory=0M
       - --overprovisioned
     ports:
-      - "9092:9092"   # Kafka API
-      - "8082:8082"   # Pandaproxy (HTTP / REST)
-      - "8081:8081"   # Schema Registry
+      - "9092:9092"     # Kafka API (internal listener — in-network use)
+      - "19092:19092"   # Kafka API (external listener — host use)
+      - "8082:8082"     # Pandaproxy (HTTP / REST)
+      - "8081:8081"     # Schema Registry
     healthcheck:
       test: ["CMD-SHELL", "rpk cluster health | grep -E 'Healthy:.+true'"]
       interval: 10s

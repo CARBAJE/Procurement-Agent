@@ -1,0 +1,16 @@
+# Discovery Engine — runtime dependencies.
+
+# FastAPI + Pydantic v2 stack.
+fastapi>=0.110
+uvicorn[standard]>=0.27
+pydantic>=2.11
+pydantic-settings>=2.0
+
+# Async HTTP — the multi-network fan-out uses a single
+# aiohttp.ClientSession with a bounded TCP connector pool.
+aiohttp>=3.9
+
+# Test.
+pytest>=8.0
+pytest-asyncio>=0.23
+pytest-mock>=3.12

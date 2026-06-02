@@ -68,3 +68,113 @@ export async function getOrderStatus(
   )
   return data
 }
+
+// ── Demo Gateway ────────────────────────────────────────────────────────────
+//
+// These functions hit the Python "Dynamic Mock Gateway" (services/
+// frontend_demo_gateway/) via Next.js proxy routes under /api/demo/*. The
+// gateway runs the *real* Phase-2 PyTorch ranker and the *real* Phase-3
+// LangGraph state machine — only the external infrastructure (MLflow,
+// Postgres, Redis, Kafka, live Beckn networks) is replaced with fast
+// deterministic simulators. Use these instead of the static JSON mocks
+// when showcasing the production sorting and negotiation behaviour.
+
+export interface DemoScoreSupplier {
+  id: string
+  supplier_name?: string
+  price: number
+  delivery_time_hours: number
+  risk_score?: number
+}
+
+export interface DemoRankedSupplier extends DemoScoreSupplier {
+  rank: number
+  score: number
+  features: { price: number; speed: number; risk: number }
+}
+
+export interface DemoScoreResponse {
+  transaction_id: string | null
+  recommended_id: string
+  ranked: DemoRankedSupplier[]
+  model_version: string
+  model_weights: { w_price: number; w_speed: number; w_risk: number; bias: number }
+  latency_ms: number
+  pipeline: string
+}
+
+export interface DemoNegotiateOffer {
+  provider_id: string
+  item_id: string
+  price: number
+  currency?: string
+  delivery_hours: number
+  quantity: number
+  score?: number
+}
+
+export interface DemoNegotiateRequest {
+  transaction_id?: string
+  category?: string
+  ranked_offers: DemoNegotiateOffer[]
+  policy?: Record<string, unknown>
+  max_rounds?: number
+  simulated_outcome?: "accepted" | "counter" | "escalate"
+  callback_delay_s?: number
+}
+
+export interface DemoNegotiateAccepted {
+  thread_id: string
+  status: string
+  paused_at: string | null
+  interrupt: Record<string, unknown> | null
+  final_outcome: string | null
+  callback_delay_s: number
+  simulated_outcome: string
+}
+
+export interface DemoNegotiateSnapshot {
+  thread_id: string
+  next: string[]
+  final_outcome: string | null
+  awaiting_on_select: boolean | null
+  current_target: Record<string, unknown> | null
+  current_counter_offer: Record<string, unknown> | null
+  last_on_select_payload: Record<string, unknown> | null
+  negotiation_round: number
+  audit_event_count: number
+  resumed: boolean
+}
+
+/** Run the real Phase-2 LTR ranker against a list of candidate suppliers. */
+export async function scoreSuppliers(
+  items: DemoScoreSupplier[],
+  transactionId?: string,
+): Promise<DemoScoreResponse> {
+  const { data } = await axios.post<DemoScoreResponse>("/api/demo/score", {
+    items,
+    transaction_id: transactionId,
+  })
+  return data
+}
+
+/** Kick off a real LangGraph negotiation session; returns 202 + thread_id. */
+export async function kickoffNegotiation(
+  payload: DemoNegotiateRequest,
+): Promise<DemoNegotiateAccepted> {
+  const { data } = await axios.post<DemoNegotiateAccepted>(
+    "/api/demo/negotiate",
+    payload,
+  )
+  return data
+}
+
+/** Poll the LangGraph state for a running negotiation. */
+export async function pollNegotiation(
+  threadId: string,
+): Promise<DemoNegotiateSnapshot> {
+  const { data } = await axios.get<DemoNegotiateSnapshot>(
+    `/api/demo/negotiate/${encodeURIComponent(threadId)}`,
+  )
+  return data
+}

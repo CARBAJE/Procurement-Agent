@@ -33,6 +33,7 @@ from contextlib import asynccontextmanager
 from typing import Any, AsyncIterator, Optional
 
 from fastapi import FastAPI, HTTPException, Request, status
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -174,6 +175,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     async with build_graph_async() as graph:
         app.state.graph = graph
 
+        # Capture the running loop so audit events emitted from LangGraph
+        # sync-node worker threads can bridge back to it (and reach Kafka)
+        # instead of falling through to the logger.
+        audit.register_event_loop()
+
         # Spawn the broker listener as a supervised background task.
         # ``_safe_listener_runner`` swallows its own exceptions so the
         # lifespan stays clean if Redis is down.
@@ -210,6 +216,30 @@ app = FastAPI(
     ),
     version="0.4.0",  # Step 4 — observability + entrypoint
     lifespan=lifespan,
+)
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# CORS — mounted first so it is the outermost middleware layer.
+#
+# NOTE: the Next.js frontend reaches this service *server-side* (Node →
+# FastAPI proxy routes), where CORS does not apply. This middleware is
+# therefore defense-in-depth for any future direct browser→engine call
+# (e.g. a dashboard polling /negotiate/{id} from the client), not a fix
+# for the current server-proxy architecture.
+# ─────────────────────────────────────────────────────────────────────────
+
+_FRONTEND_ORIGINS: list[str] = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_FRONTEND_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 
@@ -302,7 +332,7 @@ async def negotiate(req: NegotiateRequest, request: Request) -> NegotiateAccepte
         return NegotiateAccepted(
             thread_id=transaction_id,
             status="accepted",
-            paused_at=_first_pending_node(graph, config),
+            paused_at=await _first_pending_node(graph, config),
             interrupt=getattr(head, "value", None) or {},
             final_outcome=None,
         )
@@ -333,7 +363,10 @@ async def get_negotiation(transaction_id: str, request: Request) -> dict[str, An
     """
     graph = request.app.state.graph
     config = {"configurable": {"thread_id": transaction_id}}
-    snapshot = graph.get_state(config)
+    # Use the ASYNC state API: AsyncPostgresSaver forbids synchronous
+    # ``get_state`` from the main thread (raises InvalidStateError). The
+    # async form works for both AsyncPostgresSaver and MemorySaver.
+    snapshot = await graph.aget_state(config)
     if not snapshot or not snapshot.values:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -355,10 +388,14 @@ async def get_negotiation(transaction_id: str, request: Request) -> dict[str, An
 # ─────────────────────────────────────────────────────────────────────────
 
 
-def _first_pending_node(graph: Any, config: dict) -> Optional[str]:
-    """Return the first pending node name (used for the 202 response)."""
+async def _first_pending_node(graph: Any, config: dict) -> Optional[str]:
+    """Return the first pending node name (used for the 202 response).
+
+    Uses the async state API so it is compatible with AsyncPostgresSaver
+    (the sync ``get_state`` raises InvalidStateError from the main thread).
+    """
     try:
-        snapshot = graph.get_state(config)
+        snapshot = await graph.aget_state(config)
     except Exception:  # pragma: no cover — defensive
         return None
     pending = snapshot.next if snapshot else None
