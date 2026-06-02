@@ -10,7 +10,7 @@ export interface BecknIntent {
   quantity: number
   unit: string
   location_coordinates: string  // "lat,lon"
-  delivery_timeline: number     // hours (72 = 3 days)
+  delivery_timeline: number     // hours
   budget_constraints: BudgetConstraints
 }
 
@@ -253,10 +253,3 @@ export interface BenchmarkReport {
 // ── Auth ────────────────────────────────────────────────────────────────────
 
 export type UserRole = "requester" | "approver" | "admin"
-
-export interface StubUser {
-  id: string
-  name: string
-  email: string
-  role: UserRole
-}
