@@ -20,6 +20,7 @@ Service URLs are read from env vars so the orchestrator works both in Docker
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os
@@ -248,17 +249,28 @@ async def _post(session: aiohttp.ClientSession, url: str, body: dict) -> dict:
 
 
 async def _persist(session: aiohttp.ClientSession, path: str, body: dict) -> dict:
-    """Fire-and-forget POST to Data Normalizer. Never raises — logs on failure."""
+    """POST to Data Normalizer with retries. Never raises — logs on failure."""
     if not DATA_NORMALIZER_URL:
         return {}
-    try:
-        async with session.post(
-            f"{DATA_NORMALIZER_URL}{path}", json=body, timeout=aiohttp.ClientTimeout(total=5)
-        ) as resp:
-            if resp.status < 300:
-                return await resp.json()
-    except Exception as exc:
-        logger.debug("[data-normalizer] %s skipped: %s", path, exc)
+    for attempt in range(1, 4):  # 3 attempts
+        try:
+            async with session.post(
+                f"{DATA_NORMALIZER_URL}{path}", json=body, timeout=aiohttp.ClientTimeout(total=5)
+            ) as resp:
+                if resp.status < 300:
+                    return await resp.json()
+                logger.warning(
+                    "[data-normalizer] %s returned HTTP %s (attempt %s/3)",
+                    path, resp.status, attempt,
+                )
+        except Exception as exc:
+            logger.warning(
+                "[data-normalizer] %s failed (attempt %s/3): %s",
+                path, attempt, exc,
+            )
+        if attempt < 3:
+            await asyncio.sleep(attempt)  # 1s, 2s entre reintentos
+    logger.warning("[data-normalizer] %s gave up after 3 attempts — audit record lost", path)
     return {}
 
 
@@ -735,130 +747,131 @@ async def compare(request: web.Request) -> web.Response:
             )
             selected: dict | None = score_result.get("selected")
 
-        recommended_item_id = selected["item_id"] if selected else None
-        messages = [
-            f"[discover] txn={transaction_id} found {len(offerings)} offering(s)",
-            f"[rank_and_select] recommended {selected['provider_name']!r} ₹{selected['price_value']}"
-            if selected else "[rank_and_select] no offering selected",
-        ]
-        reasoning_steps = [
-            {
-                "node": "discover",
-                "role": "act",
-                "summary": f"Discovered {len(offerings)} offering(s) on the Beckn network",
-                "details": {
-                    "transaction_id": transaction_id,
-                    "offering_count": len(offerings),
-                    "providers": [o["provider_name"] for o in offerings],
+            recommended_item_id = selected["item_id"] if selected else None
+            messages = [
+                f"[discover] txn={transaction_id} found {len(offerings)} offering(s)",
+                f"[rank_and_select] recommended {selected['provider_name']!r} ₹{selected['price_value']}"
+                if selected else "[rank_and_select] no offering selected",
+            ]
+            reasoning_steps = [
+                {
+                    "node": "discover",
+                    "role": "act",
+                    "summary": f"Discovered {len(offerings)} offering(s) on the Beckn network",
+                    "details": {
+                        "transaction_id": transaction_id,
+                        "offering_count": len(offerings),
+                        "providers": [o["provider_name"] for o in offerings],
+                    },
+                    "timestamp": _now_iso(),
                 },
-                "timestamp": _now_iso(),
-            },
-        ]
-        if selected:
-            prices = [float(o["price_value"]) for o in offerings]
-            prices_sorted = sorted(prices)
-            savings = f"{prices_sorted[1] - prices_sorted[0]:.2f}" if len(prices_sorted) > 1 else None
-            reasoning_steps.append({
-                "node": "rank_and_select",
-                "role": "reason",
-                "summary": f"Recommended {selected['provider_name']} — cheapest of {len(offerings)}",
-                "details": {
-                    "strategy": "price_only",
-                    "recommended_item_id": selected["item_id"],
-                    "recommended_provider": selected["provider_name"],
-                    "recommended_price": selected["price_value"],
-                    "savings_vs_next_cheapest": savings,
-                    "offering_count": len(offerings),
-                },
-                "timestamp": _now_iso(),
-            })
-        else:
-            reasoning_steps.append({
-                "node": "rank_and_select",
-                "role": "reason",
-                "summary": "No offerings to rank",
-                "details": {},
-                "timestamp": _now_iso(),
-            })
-
-        # ── Persist: request + intent + discovery + scoring ──────────────────
-        request_id = ""
-        beckn_intent_id = ""
-        query_id = ""
-        offering_ids_map: dict[str, str] = {}
-        score_ids_map: dict[str, str] = {}
-
-        nr = await _persist(session, "/normalize/request", {
-            "raw_input_text": body.get("item", "compare-request"),
-            "channel": "web",
-        })
-        request_id = nr.get("request_id", "")
-        if request_id:
-            ir = await _persist(session, "/normalize/intent", {
-                "request_id":    request_id,
-                "intent_class":  "procurement",
-                "confidence":    1.0,
-                "model_version": "direct",
-                "beckn_intent":  body,
-            })
-            beckn_intent_id = ir.get("beckn_intent_id", "")
-            await _persist_status(session, request_id, "discovering")
-
-        if beckn_intent_id and offerings:
-            dr = await _persist(session, "/normalize/discovery", {
-                "beckn_intent_id": beckn_intent_id,
-                "network_id": "beckn-default",
-                "offerings": offerings,
-            })
-            query_id = dr.get("query_id", "")
-            offering_ids_map = {
-                o["item_id"]: o["offering_id"]
-                for o in dr.get("offering_ids", [])
-            }
-            await _persist_status(session, request_id, "scoring")
-
-        if query_id and offering_ids_map:
-            local_scoring = _build_scoring(offerings, recommended_item_id)
-            scores_payload = []
-            for rank_item in local_scoring.get("ranking", []):
-                item_id = rank_item["item_id"]
-                offering_id = offering_ids_map.get(item_id)
-                if not offering_id:
-                    continue
-                price_val = next(
-                    (o["price_value"] for o in offerings if o["item_id"] == item_id),
-                    "0",
-                )
-                scores_payload.append({
-                    "offering_id":     offering_id,
-                    "rank":            rank_item["rank"],
-                    "composite_score": rank_item["composite_score"],
-                    "price_value":     price_val,
+            ]
+            if selected:
+                prices = [float(o["price_value"]) for o in offerings]
+                prices_sorted = sorted(prices)
+                savings = f"{prices_sorted[1] - prices_sorted[0]:.2f}" if len(prices_sorted) > 1 else None
+                reasoning_steps.append({
+                    "node": "rank_and_select",
+                    "role": "reason",
+                    "summary": f"Recommended {selected['provider_name']} — cheapest of {len(offerings)}",
+                    "details": {
+                        "strategy": "price_only",
+                        "recommended_item_id": selected["item_id"],
+                        "recommended_provider": selected["provider_name"],
+                        "recommended_price": selected["price_value"],
+                        "savings_vs_next_cheapest": savings,
+                        "offering_count": len(offerings),
+                    },
+                    "timestamp": _now_iso(),
                 })
-            sr = await _persist(session, "/normalize/scoring", {
-                "query_id": query_id,
-                "scores":   scores_payload,
-            })
-            score_ids_map = {
-                s["offering_id"]: s["score_id"]
-                for s in sr.get("score_ids", [])
-            }
-            await _persist_status(session, request_id, "negotiating")
+            else:
+                reasoning_steps.append({
+                    "node": "rank_and_select",
+                    "role": "reason",
+                    "summary": "No offerings to rank",
+                    "details": {},
+                    "timestamp": _now_iso(),
+                })
 
-        _session_put(transaction_id, {
-            "transaction_id":  transaction_id,
-            "offerings":       offerings,
-            "selected":        selected,
-            "intent":          body,
-            "request_id":      request_id,
-            "beckn_intent_id": beckn_intent_id,
-            "query_id":        query_id,
-            "offering_ids_map": offering_ids_map,
-            "score_ids_map":   score_ids_map,
-        })
+            # ── Persist: request + intent + discovery + scoring ──────────────
+            request_id = ""
+            beckn_intent_id = ""
+            query_id = ""
+            offering_ids_map: dict[str, str] = {}
+            score_ids_map: dict[str, str] = {}
+
+            nr = await _persist(session, "/normalize/request", {
+                "raw_input_text": body.get("item", "compare-request"),
+                "channel": "web",
+            })
+            request_id = nr.get("request_id", "")
+            if request_id:
+                ir = await _persist(session, "/normalize/intent", {
+                    "request_id":    request_id,
+                    "intent_class":  "procurement",
+                    "confidence":    1.0,
+                    "model_version": "direct",
+                    "beckn_intent":  body,
+                })
+                beckn_intent_id = ir.get("beckn_intent_id", "")
+                await _persist_status(session, request_id, "discovering")
+
+            if beckn_intent_id and offerings:
+                dr = await _persist(session, "/normalize/discovery", {
+                    "beckn_intent_id": beckn_intent_id,
+                    "network_id": "beckn-default",
+                    "offerings": offerings,
+                })
+                query_id = dr.get("query_id", "")
+                offering_ids_map = {
+                    o["item_id"]: o["offering_id"]
+                    for o in dr.get("offering_ids", [])
+                }
+                await _persist_status(session, request_id, "scoring")
+
+            if query_id and offering_ids_map:
+                local_scoring = _build_scoring(offerings, recommended_item_id)
+                scores_payload = []
+                for rank_item in local_scoring.get("ranking", []):
+                    item_id = rank_item["item_id"]
+                    offering_id = offering_ids_map.get(item_id)
+                    if not offering_id:
+                        continue
+                    price_val = next(
+                        (o["price_value"] for o in offerings if o["item_id"] == item_id),
+                        "0",
+                    )
+                    scores_payload.append({
+                        "offering_id":     offering_id,
+                        "rank":            rank_item["rank"],
+                        "composite_score": rank_item["composite_score"],
+                        "price_value":     price_val,
+                    })
+                sr = await _persist(session, "/normalize/scoring", {
+                    "query_id": query_id,
+                    "scores":   scores_payload,
+                })
+                score_ids_map = {
+                    s["offering_id"]: s["score_id"]
+                    for s in sr.get("score_ids", [])
+                }
+                await _persist_status(session, request_id, "negotiating")
+
+            _session_put(transaction_id, {
+                "transaction_id":  transaction_id,
+                "offerings":       offerings,
+                "selected":        selected,
+                "intent":          body,
+                "request_id":      request_id,
+                "beckn_intent_id": beckn_intent_id,
+                "query_id":        query_id,
+                "offering_ids_map": offering_ids_map,
+                "score_ids_map":   score_ids_map,
+            })
 
         return web.json_response({
             "transaction_id":      transaction_id,
+            "request_id":          request_id,
             "offerings":           offerings,
             "recommended_item_id": recommended_item_id,
             "scoring":             _build_scoring(offerings, recommended_item_id),
@@ -1264,6 +1277,32 @@ async def run(request: web.Request) -> web.Response:
     return web.json_response(result)
 
 
+async def cancel(request: web.Request) -> web.Response:
+    """PATCH /cancel — mark a procurement request as cancelled.
+
+    Accepts request_id directly (returned by /compare and stored in the
+    frontend session) — no dependency on the orchestrator in-memory session.
+
+    Body:     { "request_id": "<uuid>" }
+    Response: { "request_id": "<uuid>", "status": "cancelled" }
+    """
+    try:
+        body = await request.json()
+    except json.JSONDecodeError:
+        raise web.HTTPBadRequest(reason="Invalid JSON")
+
+    request_id = body.get("request_id", "").strip()
+    if not request_id:
+        raise web.HTTPBadRequest(reason="request_id is required")
+
+    async with aiohttp.ClientSession(
+        headers={"Content-Type": "application/json"}
+    ) as session:
+        await _persist_status(session, request_id, "cancelled")
+
+    return web.json_response({"request_id": request_id, "status": "cancelled"})
+
+
 # ── App factory ───────────────────────────────────────────────────────────────
 
 
@@ -1275,6 +1314,7 @@ def create_app() -> web.Application:
     app.router.add_post("/discover",                       discover)
     app.router.add_post("/compare",                        compare)
     app.router.add_post("/commit",                         commit)
+    app.router.add_route("PATCH", "/cancel",               cancel)
     app.router.add_get("/status/{txn_id}/{order_id}",      order_status)
     return app
 

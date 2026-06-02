@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import React, { useMemo, useState } from "react"
 import {
   ArrowDown, ArrowUp, ArrowUpDown,
   Trophy, Star, Timer, Package,
@@ -173,9 +173,8 @@ export default function ComparisonTable({
             const specs         = o.specifications ?? []
 
             return (
-              <>
+              <React.Fragment key={o.item_id}>
                 <TableRow
-                  key={o.item_id}
                   data-row-index={idx}
                   tabIndex={0}
                   onKeyDown={(e) => onRowKeyDown(e, o.item_id, idx)}
@@ -271,7 +270,7 @@ export default function ComparisonTable({
                     </TableCell>
                   </TableRow>
                 )}
-              </>
+              </React.Fragment>
             )
           })}
         </TableBody>

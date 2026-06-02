@@ -34,6 +34,12 @@ export async function commitOrder(
   return data
 }
 
+// ── /cancel — mark procurement request as cancelled ─────────────────────────
+
+export async function cancelRequest(requestId: string): Promise<void> {
+  await axios.patch("/api/procurement/cancel", { request_id: requestId })
+}
+
 // ── /status — poll order lifecycle ──────────────────────────────────────────
 
 export async function getOrderStatus(

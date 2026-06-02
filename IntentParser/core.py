@@ -31,6 +31,7 @@ If the query is a greeting, general question, or unrelated to procurement, retur
 _BECKN_PROMPT = """
 You are a procurement data extractor for the Beckn protocol. Extract structured data from the user query.
 - descriptions: all technical specs (e.g. "80gsm", "A4", "Cat6", "2 inch")
+- unit: measurement unit for the quantity (e.g. "reams", "units", "pieces", "kg", "meters", "liters"); default "units"
 - delivery_timeline: convert to hours — 1 day=24h, 1 week=168h
 - budget: numeric values only, no currency symbols; if only upper bound given, set min=0
 - location lookup: Bangalore/Bengaluru=12.9716,77.5946 | Mumbai=19.0760,72.8777 |

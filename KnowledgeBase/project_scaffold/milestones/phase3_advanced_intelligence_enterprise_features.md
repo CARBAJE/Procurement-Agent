@@ -12,14 +12,14 @@ related: ["[[negotiation_engine]]", "[[agent_memory_learning]]", "[[audit_trail_
 
 ## Milestones & Deliverables
 
-| Milestone | Deliverable | Skills Required | Acceptance Criteria |
-|---|---|---|---|
-| [[negotiation_engine\|Negotiation Engine]] | Strategy-based `/select` with term modifications | AI strategy, Beckn protocol | Agent negotiates price and delivery; configurable strategies work |
-| Multi-Network Search | Concurrent queries to 2+ Beckn networks | Distributed systems, async coordination | Search spans multiple networks; graceful degradation when one is down |
-| [[agent_memory_learning\|Agent Memory]] | [[vector_db_qdrant_pinecone\|Vector DB]] storing past procurement patterns | Vector databases, RAG, [[embedding_models\|embeddings]] | Agent references past orders in recommendations; similarity search works |
-| [[audit_trail_system\|Audit Trail System]] | Complete decision log with reasoning at every step | [[event_streaming_kafka\|Event streaming]], Kafka, logging | Every agent action logged; full decision chain reconstructable |
-| [[analytics_dashboard\|Analytics Dashboard]] | Spend analysis, savings tracking, supplier metrics | [[data_visualization\|Data visualization]], Recharts/D3 | Dashboard shows **6+ metrics** with drill-down capability |
-| [[erp_integration\|ERP Integration]] | Bidirectional sync with SAP/Oracle | ERP APIs, OData, middleware | POs appear in ERP; budget checks validated in real-time |
+| Milestone                                          | Deliverable                                                                | Skills Required                                            | Acceptance Criteria                                                      |
+| -------------------------------------------------- | -------------------------------------------------------------------------- | ---------------------------------------------------------- | ------------------------------------------------------------------------ |
+| [[negotiation_engine\|Negotiation Engine]]: Emi    | Strategy-based `/select` with term modifications                           | AI strategy, Beckn protocol                                | Agent negotiates price and delivery; configurable strategies work        |
+| Multi-Network Search: Emi                          | Concurrent queries to 2+ Beckn networks                                    | Distributed systems, async coordination                    | Search spans multiple networks; graceful degradation when one is down    |
+| [[agent_memory_learning\|Agent Memory]]: Cris      | [[vector_db_qdrant_pinecone\|Vector DB]] storing past procurement patterns | Vector databases, RAG, [[embedding_models\|embeddings]]    | Agent references past orders in recommendations; similarity search works |
+| [[audit_trail_system\|Audit Trail System]]: Cris   | Complete decision log with reasoning at every step                         | [[event_streaming_kafka\|Event streaming]], Kafka, logging | Every agent action logged; full decision chain reconstructable           |
+| [[analytics_dashboard\|Analytics Dashboard]]: Lalo | Spend analysis, savings tracking, supplier metrics                         | [[data_visualization\|Data visualization]], Recharts/D3    | Dashboard shows **6+ metrics** with drill-down capability                |
+| [[erp_integration\|ERP Integration]]: Lalo         | Bidirectional sync with SAP/Oracle                                         | ERP APIs, OData, middleware                                | POs appear in ERP; budget checks validated in real-time                  |
 
 > [!architecture] Technical Focus Areas
 > - [[negotiation_engine|Negotiation strategy engine]] with per-category configurable policies.

@@ -33,6 +33,7 @@ class BecknIntent(BaseModel):
     - location_coordinates: "lat,lon" decimal string
     - delivery_timeline:    positive int in HOURS (1 day=24, 1 week=168)
     - descriptions:         atomic technical specs, e.g. ["80gsm", "A4", "Cat6"]
+    - unit:                 measurement unit for quantity, e.g. "reams", "kg", "pieces"
     - budget_constraints:   typed range, not a raw string amount
     """
 
@@ -42,6 +43,10 @@ class BecknIntent(BaseModel):
         description="Tech specs, e.g. ['80gsm', 'A4', 'Cat6']",
     )
     quantity: int
+    unit: str = Field(
+        default="units",
+        description="Measurement unit, e.g. 'reams', 'units', 'pieces', 'kg', 'meters'",
+    )
     location_coordinates: Optional[str] = Field(
         default=None,
         description="'lat,lon' decimal string",

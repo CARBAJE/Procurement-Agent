@@ -19,7 +19,8 @@ related: ["[[comparison_scoring_engine]]", "[[beckn_bap_client]]", "[[approval_w
 | [[comparison_scoring_engine\|Comparison Engine]] | Multi-criteria scoring with explainable reasoning     | ML/AI, scoring algorithms        | Ranks sellers correctly for 10+ test scenarios with clear explanations |
 | [[approval_workflow\|Approval Workflow]]         | Configurable threshold-based routing                  | Workflow engine, RBAC            | Orders above threshold require and receive approval before `/confirm`  |
 | Comparison UI                                    | Side-by-side offer comparison with agent reasoning    | React, data visualization        | Users can view, compare, and act on agent recommendations              |
-| [[real_time_tracking\|Real-time Tracking]]       | Order status updates via `/status` polling + webhooks | WebSockets, event handling       | Dashboard reflects status within **30 seconds** of change              |
+| [[real_time_tracking\|Real-time Tracking]]: Cris | Order status updates via `/status` polling + webhooks | WebSockets, event handling       | Dashboard reflects status within **30 seconds** of change              |
+| Data Normalizer: Cris                            | *Pending: Do tests*                                   |                                  |                                                                        |
 
 > [!architecture] Technical Focus Areas
 > - State management for multi-step Beckn v2 transaction lifecycle: `discover` → `select` → `init` → `confirm` → `status`.

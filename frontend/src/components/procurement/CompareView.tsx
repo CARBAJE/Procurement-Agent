@@ -11,7 +11,7 @@ import ComparisonTable      from "@/components/procurement/ComparisonTable"
 import ScoringPanel         from "@/components/procurement/ScoringPanel"
 import ReasoningPanel       from "@/components/procurement/ReasoningPanel"
 import ConfirmCommitDialog  from "@/components/procurement/ConfirmCommitDialog"
-import { commitOrder } from "@/lib/api"
+import { commitOrder, cancelRequest } from "@/lib/api"
 import { clearSession, loadSession, patchSession } from "@/lib/session-store"
 import type { ComparisonResult, BecknIntent } from "@/lib/types"
 
@@ -46,7 +46,15 @@ export default function CompareView({ txnId }: CompareViewProps) {
     patchSession(txnId, { chosenItemId: selectedId })
   }, [selectedId, hydrated, comparison, txnId])
 
-  function cancel() {
+  async function cancel() {
+    const requestId = comparison?.request_id
+    if (requestId) {
+      try {
+        await cancelRequest(requestId)
+      } catch (err) {
+        console.error("[cancel] failed for requestId:", requestId, err)
+      }
+    }
     clearSession(txnId)
     router.push("/request/new")
   }

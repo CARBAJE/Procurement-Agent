@@ -28,14 +28,14 @@ related: ["[[beckn_bap_client]]", "[[nl_intent_parser]]", "[[agent_react_framewo
 
 ## Service Map
 
-| Service | Port | HTTP Endpoints | Lambda Equivalent | Agent Embedded |
-|---------|------|---------------|-------------------|----------------|
-| `intention-parser` | 8001 | `POST /parse` | Lambda 1 | Parser Agent (qwen3:1.7b) |
-| `beckn-bap-client` | 8002 | `POST /discover`, `POST /select`, `POST /init`, `POST /confirm`, `POST /status`, `POST /bpp/discover`, `POST /bap/receiver/{action}` | Lambda 2 | Normalizer Agent |
-| `comparative-scoring` | 8003 | `POST /score` | Lambda 3 | — (deterministic) |
-| `orchestrator` | 8004 | `POST /run`, `POST /parse`, `POST /discover`, `POST /compare`, `POST /commit`, `GET /status/{txn}/{order}` | Step Functions simulator | — |
-| `catalog-normalizer` | 8005 | `POST /normalize`, `GET /health` | Lambda 4 | CatalogNormalizer (qwen3:1.7b LLM fallback) |
-| `data-normalizer` | 8006 | `POST /normalize/request`, `POST /normalize/intent`, `POST /normalize/discovery`, `POST /normalize/scoring`, `POST /normalize/order`, `PATCH /normalize/status` | Lambda 5 | — (asyncpg → PostgreSQL) |
+| Service               | Port | HTTP Endpoints                                                                                                                                                  | Lambda Equivalent        | Agent Embedded                              |
+| --------------------- | ---- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------ | ------------------------------------------- |
+| `intention-parser`    | 8001 | `POST /parse`                                                                                                                                                   | Lambda 1                 | Parser Agent (qwen3:1.7b)                   |
+| `beckn-bap-client`    | 8002 | `POST /discover`, `POST /select`, `POST /init`, `POST /confirm`, `POST /status`, `POST /bpp/discover`, `POST /bap/receiver/{action}`                            | Lambda 2                 | Normalizer Agent                            |
+| `comparative-scoring` | 8003 | `POST /score`                                                                                                                                                   | Lambda 3                 | — (deterministic)                           |
+| `orchestrator`        | 8004 | `POST /run`, `POST /parse`, `POST /discover`, `POST /compare`, `POST /commit`, `GET /status/{txn}/{order}`                                                      | Step Functions simulator | —                                           |
+| `catalog-normalizer`  | 8005 | `POST /normalize`, `GET /health`                                                                                                                                | Lambda 4                 | CatalogNormalizer (qwen3:1.7b LLM fallback) |
+| `data-normalizer`     | 8006 | `POST /normalize/request`, `POST /normalize/intent`, `POST /normalize/discovery`, `POST /normalize/scoring`, `POST /normalize/order`, `PATCH /normalize/status` | Lambda 5                 | — (asyncpg → PostgreSQL)                    |
 
 ### ONIX Stack (included in docker-compose.yml)
 
