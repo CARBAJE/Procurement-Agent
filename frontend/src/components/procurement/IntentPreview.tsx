@@ -84,7 +84,9 @@ export default function IntentPreview({ result, originalQuery }: IntentPreviewPr
           <Clock className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
           <div>
             <p className="text-xs text-muted-foreground">Delivery timeline</p>
-            <p className="font-medium">{hoursToLabel(intent.delivery_timeline)}</p>
+            <p className="font-medium">
+              {intent.delivery_timeline != null ? hoursToLabel(intent.delivery_timeline) : "Not specified"}
+            </p>
           </div>
         </div>
 
@@ -92,7 +94,11 @@ export default function IntentPreview({ result, originalQuery }: IntentPreviewPr
           <Wallet className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
           <div>
             <p className="text-xs text-muted-foreground">Max budget</p>
-            <p className="font-medium">₹{intent.budget_constraints.max.toLocaleString()}</p>
+            <p className="font-medium">
+              {intent.budget_constraints?.max != null
+                ? `₹${intent.budget_constraints.max.toLocaleString()}`
+                : "Not specified"}
+            </p>
           </div>
         </div>
 

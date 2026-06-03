@@ -210,12 +210,15 @@ class BecknProtocolAdapter:
 
     def _settlement_dict(self, payment: dict) -> dict:
         """Convert snake_case payment dict → camelCase Beckn settlement entry."""
+        # Settlement.status enum (Beckn v2.0.0): DRAFT | COMMITTED | COMPLETE.
+        # "NOT-PAID" is rejected by the onix schema validator — at /confirm the
+        # buyer has committed to pay, so COMMITTED is the correct default.
         out: dict = {
             "id": f"settlement-{uuid4().hex[:8]}",
             "type": payment.get("type", "ON_FULFILLMENT"),
             "collectedBy": payment.get("collected_by", "BPP"),
             "currency": payment.get("currency", "INR"),
-            "status": payment.get("status", "NOT-PAID"),
+            "status": payment.get("status", "COMMITTED"),
         }
         if payment.get("uri"):
             out["uri"] = payment["uri"]

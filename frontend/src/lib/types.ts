@@ -1,7 +1,7 @@
 // Mirrors Bap-1/src/beckn/models.py and IntentParser/schemas.py
 export interface BudgetConstraints {
-  max: number
-  min?: number
+  max: number | null
+  min?: number | null
 }
 
 export interface BecknIntent {
@@ -10,8 +10,9 @@ export interface BecknIntent {
   quantity: number
   unit: string
   location_coordinates: string  // "lat,lon"
-  delivery_timeline: number     // hours
-  budget_constraints: BudgetConstraints
+  // Nullable: a minimal query (e.g. just "Laptop") leaves these unspecified.
+  delivery_timeline: number | null   // hours
+  budget_constraints: BudgetConstraints | null
 }
 
 export type ParsedIntentType = "procurement" | "unknown"

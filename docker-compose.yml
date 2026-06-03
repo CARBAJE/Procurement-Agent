@@ -235,18 +235,30 @@ services:
       - ./config:/app/config
     command: ["./server", "--config=/app/config/generic-bpp.yaml"]
 
-  # ── sandbox-bpp — mock BPP application ────────────────────────────────────
-  #   Receives action requests at: http://sandbox-bpp:3002/api/webhook
-  sandbox-bpp:
-    container_name: sandbox-bpp
-    image: fidedocker/sandbox-2.0:latest
+  # ── sim-bpp — unified simulated Beckn v2.0.0 BPP ──────────────────────────
+  #   Replaces the transaction-only sandbox-2.0 image. Answers the FULL
+  #   lifecycle (discover + transactions) behind onix-bpp, so discovery now
+  #   travels the same signed + schema-validated path as a real Beckn network.
+  #   Receives action requests at: http://sim-bpp:3002/api/webhook/{action}
+  #   Emits on_{action} callbacks to onix-bpp:8082/bpp/caller/on_{action}.
+  #   Edit catalog.json (bind-mounted) to change the catalog without a rebuild.
+  sim-bpp:
+    container_name: sim-bpp
+    build:
+      context: .
+      dockerfile: ./services/sim-bpp/Dockerfile
     environment:
-      - NODE_ENV=production
       - PORT=3002
+      - ONIX_BPP_CALLER=http://onix-bpp:8082/bpp/caller
+      - BPP_ID=bpp.example.com
+      - BPP_URI=http://onix-bpp:8082/bpp/receiver
+      - CATALOG_PATH=/app/catalog.json
     ports:
       - "3002:3002"
+    volumes:
+      - ./services/sim-bpp/catalog.json:/app/catalog.json
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:3002/api/health"]
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:3002/api/health').status==200 else 1)"]
       interval: 10s
       timeout: 3s
       retries: 5

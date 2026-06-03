@@ -15,7 +15,6 @@ ONIX callback receiver:
 """
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 import os
@@ -25,7 +24,6 @@ import uuid
 # Ensure /app is in path so 'shared' package is importable
 sys.path.insert(0, "/app")
 
-import aiohttp
 import redis.asyncio as aioredis
 from aiohttp import web
 
@@ -51,33 +49,6 @@ config = BecknConfig()
 collector = CallbackCollector(default_timeout=config.callback_timeout)
 
 SUPPORTED_CALLBACKS = {"on_discover", "on_select", "on_init", "on_confirm", "on_status"}
-
-# ── Local catalog — returned for every /bpp/discover request ──────────────────
-# Mirrors the data in Bap-1/src/server.py so the two stay in sync.
-
-_LOCAL_CATALOG = [
-    {
-        "id": "item-a4-80gsm",
-        "descriptor": {"name": "A4 Paper 80gsm (500 sheets)", "shortDesc": "A4 paper 80gsm ream 500 sheets"},
-        "provider": {"id": "PROV-OFFICEWORLD-01", "descriptor": {"name": "OfficeWorld Supplies"}},
-        "price": {"value": "195.00", "currency": "INR"},
-        "rating": {"ratingValue": 4.8},
-    },
-    {
-        "id": "item-a4-ream",
-        "descriptor": {"name": "A4 Paper 80gsm Ream", "shortDesc": "A4 80gsm ream 500 sheets"},
-        "provider": {"id": "PROV-PAPERDIRECT-01", "descriptor": {"name": "PaperDirect India"}},
-        "price": {"value": "189.00", "currency": "INR"},
-        "rating": {"ratingValue": 4.5},
-    },
-    {
-        "id": "item-a4-premium",
-        "descriptor": {"name": "A4 Paper Premium 80gsm", "shortDesc": "Premium A4 paper 80gsm high brightness"},
-        "provider": {"id": "PROV-STATHUB-01", "descriptor": {"name": "Stationery Hub"}},
-        "price": {"value": "201.00", "currency": "INR"},
-        "rating": {"ratingValue": 4.9},
-    },
-]
 
 
 # ── Health ────────────────────────────────────────────────────────────────────
@@ -248,78 +219,6 @@ async def bap_receiver(request: web.Request) -> web.Response:
     return web.json_response(ack)
 
 
-# ── Local BPP catalog endpoint (for ONIX discover routing) ───────────────────
-
-
-async def bpp_discover(request: web.Request) -> web.Response:
-    """POST /bpp/discover — local BPP catalog handler for ONIX discover routing.
-
-    onix-bap routes discover here (via generic-routing-BAPCaller.yaml) instead
-    of an external Discover Service. Immediately ACKs and fires an async
-    on_discover callback back to our own /on_discover route, which publishes to
-    Redis and feeds the CallbackCollector.
-
-        orchestrator → beckn-bap-client /discover
-          → BecknClient.discover_async() → onix-bap
-            → POST /bpp/discover (here)
-              → async POST /on_discover (here, via asyncio task)
-                → Redis publish + CallbackCollector → discover_async() wakes up
-    """
-    try:
-        payload = await request.json()
-    except json.JSONDecodeError:
-        raise web.HTTPBadRequest(reason="Invalid JSON")
-
-    ctx = payload.get("context", {})
-    txn_id = ctx.get("transactionId") or ctx.get("transaction_id", "unknown")
-    logger.debug("bpp/discover received | txn=%s", txn_id)
-
-    asyncio.create_task(_send_local_on_discover(ctx))
-
-    return web.json_response({"message": {"ack": {"status": "ACK"}}})
-
-
-async def _send_local_on_discover(context: dict) -> None:
-    """Build on_discover payload from the local catalog and POST to our own callback route.
-
-    Posts to localhost:8002 (self) so the CallbackCollector receives the response
-    and wakes up whatever discover_async() is waiting on this transaction_id.
-    """
-    await asyncio.sleep(0.1)
-
-    on_discover_payload = {
-        "context": {
-            **context,
-            "action": "on_discover",
-            "bppId": "bpp.example.com",
-            "bppUri": "http://onix-bpp:8082/bpp/receiver",
-        },
-        "message": {
-            "catalogs": [
-                {
-                    "bppId": "bpp.example.com",
-                    "bppUri": "http://onix-bpp:8082/bpp/receiver",
-                    "resources": _LOCAL_CATALOG,
-                }
-            ]
-        },
-    }
-
-    port = int(os.getenv("PORT", "8002"))
-    callback_url = f"http://localhost:{port}/on_discover"
-
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.post(
-                callback_url,
-                json=on_discover_payload,
-                headers={"Content-Type": "application/json"},
-            ) as resp:
-                logger.debug("on_discover sent locally | HTTP=%d", resp.status)
-    except Exception as exc:
-        logger.error("Failed to send local on_discover: %s", exc)
-
-
 # ── Transactional routes: init / confirm / status ─────────────────────────────
 
 
@@ -414,7 +313,7 @@ async def beckn_confirm(request: web.Request) -> web.Response:
         "type": "ON_FULFILLMENT",
         "collected_by": "BPP",
         "currency": "INR",
-        "status": "NOT-PAID",
+        "status": "COMMITTED",  # Settlement.status enum: DRAFT | COMMITTED | COMPLETE
     }
 
     try:
@@ -516,9 +415,8 @@ def create_app() -> web.Application:
     app.router.add_post("/init",                 beckn_init)
     app.router.add_post("/confirm",              beckn_confirm)
     app.router.add_post("/status",               beckn_status)
-    app.router.add_post("/on_discover",           on_discover)    # MCP sidecar Redis Pub/Sub path
+    app.router.add_post("/on_discover",           on_discover)    # real on_discover callback (Redis Pub/Sub + collector)
     app.router.add_post("/bap/receiver/{action}", bap_receiver)
-    app.router.add_post("/bpp/discover",         bpp_discover)   # ONIX discover routing target
     app.router.add_post("/{action}",             bap_receiver)   # real Beckn network callbacks
     return app
 

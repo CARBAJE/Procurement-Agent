@@ -38,7 +38,7 @@ export default function OrderSummaryCard({ commit, offering, quantity }: OrderSu
         <div className="flex items-center gap-2 flex-wrap">
           <Badge variant="outline" className="font-mono text-xs">
             <Hash className="h-3 w-3 mr-1" />
-            {commit.order_id}
+            {commit.order_id ?? "Pending"}
           </Badge>
           {commit.status === "mock" && (
             <Badge variant="secondary" className="text-xs">Local Catalog</Badge>
