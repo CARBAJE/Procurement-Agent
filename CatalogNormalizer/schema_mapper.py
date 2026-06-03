@@ -55,6 +55,11 @@ class SchemaMapper:
                     price_value=str(price.get("value", "0")),
                     price_currency=price.get("currency", "INR"),
                     rating=rating,
+                    available_quantity=_available_count(resource),
+                    specifications=_tags_to_specs(resource.get("tags", [])),
+                    # fulfillment_hours intentionally left None: a real Beckn
+                    # network does not carry a delivery ETA in the discovery
+                    # catalog — it is resolved at /select or /init (fulfillment).
                 )
             )
         return offerings
@@ -157,6 +162,39 @@ class SchemaMapper:
                     )
                 )
         return offerings
+
+
+def _available_count(resource: dict) -> int | None:
+    """Extract stock from a Beckn v2 resource: quantity.available.count."""
+    avail = (resource.get("quantity", {}) or {}).get("available", {}) or {}
+    count = avail.get("count")
+    if count is None:
+        return None
+    try:
+        return int(count)
+    except (TypeError, ValueError):
+        return None
+
+
+def _tags_to_specs(tags: list) -> list[str]:
+    """Flatten Beckn v2 item tags[] into human-readable spec strings.
+
+    Each tag is {descriptor:{name}, value}. Produces "name: value" when both
+    are present, else whichever exists.
+    """
+    specs: list[str] = []
+    for tag in tags or []:
+        if not isinstance(tag, dict):
+            continue
+        name = (tag.get("descriptor", {}) or {}).get("name")
+        value = tag.get("value")
+        if name and value and name.lower() not in ("specification", "spec"):
+            specs.append(f"{name}: {value}")
+        elif value:
+            specs.append(str(value))
+        elif name:
+            specs.append(str(name))
+    return specs
 
 
 def _iso_duration_to_hours(s: str) -> int:

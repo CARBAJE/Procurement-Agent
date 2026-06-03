@@ -143,7 +143,10 @@ export default function CompareView({ txnId }: CompareViewProps) {
 
       {/* ── Table + scoring panel ──────────────────────────────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 space-y-3">
+        {/* min-w-0: lets this grid column shrink to its track width instead of
+            growing to the table's intrinsic width (default min-width:auto),
+            which is what caused the table to overflow / scroll horizontally. */}
+        <div className="lg:col-span-2 space-y-3 min-w-0">
           <div className="flex items-center justify-between flex-wrap gap-2">
             <div className="flex items-center gap-2">
               <span className="h-4 w-0.5 rounded-full bg-primary shrink-0" aria-hidden="true" />

@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react"
 import {
   ArrowDown, ArrowUp, ArrowUpDown,
-  Trophy, Star, Timer, Package,
+  Trophy, Star, Package,
   CheckCircle2, ChevronDown, ChevronRight,
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
@@ -16,7 +16,7 @@ import type { Offering } from "@/lib/types"
 
 // ── Sort ────────────────────────────────────────────────────────────────────
 
-type SortKey = "provider_name" | "price_value" | "rating" | "fulfillment_hours" | "available_quantity"
+type SortKey = "provider_name" | "price_value" | "rating" | "available_quantity"
 type SortDir = "asc" | "desc"
 
 function compare(a: Offering, b: Offering, key: SortKey, dir: SortDir): number {
@@ -40,16 +40,8 @@ function getSortable(o: Offering, key: SortKey): string | number | null {
     case "provider_name":      return o.provider_name
     case "price_value":        return parseFloat(o.price_value)
     case "rating":             return o.rating ? parseFloat(o.rating) : null
-    case "fulfillment_hours":  return o.fulfillment_hours ?? null
     case "available_quantity": return o.available_quantity ?? null
   }
-}
-
-function formatETA(hours?: number | null): string {
-  if (hours == null) return "—"
-  if (hours < 24) return `${hours}h`
-  const days = Math.round(hours / 24)
-  return days === 1 ? "1 day" : `${days} days`
 }
 
 function formatStock(q?: number | null): string {
@@ -118,7 +110,7 @@ export default function ComparisonTable({
       setSortDir(sortDir === "asc" ? "desc" : "asc")
     } else {
       setSortKey(key)
-      // Numeric columns default to ascending for price/ETA, descending for rating/stock.
+      // Numeric columns default to ascending for price, descending for rating/stock.
       setSortDir(key === "rating" || key === "available_quantity" ? "desc" : "asc")
     }
   }
@@ -161,17 +153,18 @@ export default function ComparisonTable({
 
   return (
     <div className="rounded-lg border bg-card">
-      <Table>
+      {/* table-fixed + per-column widths keep everything inside the card — no
+          horizontal scroll. Long provider/item text truncates with a title tooltip. */}
+      <Table className="table-fixed">
         <TableHeader>
           <TableRow>
-            <TableHead className="w-8" aria-hidden="true" />
-            <SortableHeader label="Provider" sortKey="provider_name" currentKey={sortKey} currentDir={sortDir} onSort={onSort} />
-            <SortableHeader label="Price"    sortKey="price_value"   currentKey={sortKey} currentDir={sortDir} onSort={onSort} className="text-right" />
-            <SortableHeader label="Rating"   sortKey="rating"        currentKey={sortKey} currentDir={sortDir} onSort={onSort} />
-            <SortableHeader label="ETA"      sortKey="fulfillment_hours" currentKey={sortKey} currentDir={sortDir} onSort={onSort} />
-            <SortableHeader label="Stock"    sortKey="available_quantity" currentKey={sortKey} currentDir={sortDir} onSort={onSort} />
-            <TableHead>Specs</TableHead>
-            <TableHead className="text-right">Action</TableHead>
+            <TableHead className="w-[5%]" aria-hidden="true" />
+            <SortableHeader label="Provider" sortKey="provider_name" currentKey={sortKey} currentDir={sortDir} onSort={onSort} className="w-[33%]" />
+            <SortableHeader label="Price"    sortKey="price_value"   currentKey={sortKey} currentDir={sortDir} onSort={onSort} className="w-[15%] text-right" />
+            <SortableHeader label="Rating"   sortKey="rating"        currentKey={sortKey} currentDir={sortDir} onSort={onSort} className="w-[12%]" />
+            <SortableHeader label="Stock"    sortKey="available_quantity" currentKey={sortKey} currentDir={sortDir} onSort={onSort} className="w-[12%]" />
+            <TableHead className="w-[13%]">Specs</TableHead>
+            <TableHead className="w-[10%] text-right">Action</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -208,17 +201,20 @@ export default function ComparisonTable({
                     )}
                   </TableCell>
                   <TableCell>
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className={cn("font-semibold text-sm", isRecommended && "text-primary")}>
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span
+                        className={cn("font-semibold text-sm truncate", isRecommended && "text-primary")}
+                        title={o.provider_name}
+                      >
                         {o.provider_name}
                       </span>
                       {isRecommended && (
-                        <Badge className="text-[10px] h-4 px-1.5 py-0">Recommended</Badge>
+                        <Badge className="text-[10px] h-4 px-1.5 py-0 shrink-0">Recommended</Badge>
                       )}
                     </div>
-                    <p className="text-xs text-muted-foreground truncate max-w-xs">{o.item_name}</p>
+                    <p className="text-xs text-muted-foreground truncate" title={o.item_name}>{o.item_name}</p>
                   </TableCell>
-                  <TableCell className="text-right font-bold tabular-nums">
+                  <TableCell className="text-right font-bold tabular-nums whitespace-nowrap">
                     {o.price_currency} {o.price_value}
                   </TableCell>
                   <TableCell>
@@ -230,12 +226,6 @@ export default function ComparisonTable({
                     ) : (
                       <span className="text-xs text-muted-foreground">—</span>
                     )}
-                  </TableCell>
-                  <TableCell>
-                    <span className="inline-flex items-center gap-1 text-sm">
-                      <Timer className="h-3.5 w-3.5 text-muted-foreground" />
-                      {formatETA(o.fulfillment_hours)}
-                    </span>
                   </TableCell>
                   <TableCell>
                     <span className="text-sm tabular-nums">{formatStock(o.available_quantity)}</span>
@@ -269,7 +259,7 @@ export default function ComparisonTable({
                 {specsOpen && specs.length > 0 && (
                   <TableRow key={`${o.item_id}-specs`} className="bg-muted/30 hover:bg-muted/30">
                     <TableCell />
-                    <TableCell colSpan={7} id={`specs-${o.item_id}`}>
+                    <TableCell colSpan={6} id={`specs-${o.item_id}`}>
                       <div className="flex flex-wrap gap-1.5 py-1">
                         {specs.map((s) => (
                           <Badge key={s} variant="outline" className="text-xs font-normal">
