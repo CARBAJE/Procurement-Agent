@@ -48,12 +48,25 @@ export default function CompareView({ txnId }: CompareViewProps) {
 
   async function cancel() {
     const requestId = comparison?.request_id
-    if (requestId) {
-      try {
-        await cancelRequest(requestId)
-      } catch (err) {
-        console.error("[cancel] failed for requestId:", requestId, err)
-      }
+    if (!requestId) {
+      setError(
+        "No request_id available for this comparison — the DB row was never created. " +
+        "Check that the data-normalizer container is running.",
+      )
+      return
+    }
+    setSubmitting(true)
+    setError("")
+    try {
+      await cancelRequest(requestId)
+    } catch (err) {
+      console.error("[cancel] failed for requestId:", requestId, err)
+      setError(
+        "Could not mark the request as cancelled in the database. " +
+        "The data-normalizer may be offline — check the logs.",
+      )
+      setSubmitting(false)
+      return
     }
     clearSession(txnId)
     router.push("/request/new")
@@ -141,7 +154,21 @@ export default function CompareView({ txnId }: CompareViewProps) {
           <h1 className="text-3xl font-bold">Compare Offers</h1>
           <div className="flex items-center gap-1.5 mt-1">
             <Hash className="h-3 w-3 text-muted-foreground" />
-            <span className="text-xs text-muted-foreground font-mono">{comparison.transaction_id}</span>
+            <span className="text-xs text-muted-foreground font-mono">
+              txn: {comparison.transaction_id}
+            </span>
+          </div>
+          <div className="flex items-center gap-1.5 mt-0.5">
+            <Hash className="h-3 w-3 text-muted-foreground" />
+            {comparison.request_id ? (
+              <span className="text-xs text-muted-foreground font-mono">
+                req: {comparison.request_id}
+              </span>
+            ) : (
+              <span className="text-xs text-destructive font-mono">
+                req: (not persisted — data-normalizer offline)
+              </span>
+            )}
           </div>
         </div>
         <Badge variant={status === "live" ? "default" : "secondary"} className="text-sm px-3 py-1">

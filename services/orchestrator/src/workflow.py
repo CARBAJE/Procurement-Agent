@@ -275,7 +275,13 @@ async def _persist(session: aiohttp.ClientSession, path: str, body: dict) -> dic
 
 
 async def _persist_status(session: aiohttp.ClientSession, request_id: str, status: str) -> None:
-    """PATCH /normalize/status — update procurement lifecycle."""
+    """PATCH /normalize/status — fire-and-forget update of procurement lifecycle.
+
+    Used during the happy path (parsing → discovering → scoring → negotiating →
+    confirmed). Silent on failure so an audit hiccup never derails the live
+    user-facing flow. For user-triggered status changes (cancel), use
+    _patch_status_strict instead so failures bubble up.
+    """
     if not DATA_NORMALIZER_URL or not request_id:
         return
     try:
@@ -284,9 +290,40 @@ async def _persist_status(session: aiohttp.ClientSession, request_id: str, statu
             json={"request_id": request_id, "status": status},
             timeout=aiohttp.ClientTimeout(total=5),
         ) as resp:
-            pass
+            if resp.status >= 400:
+                body = await resp.text()
+                logger.warning(
+                    "[data-normalizer] status=%s for %s returned HTTP %s: %s",
+                    status, request_id, resp.status, body[:200],
+                )
     except Exception as exc:
-        logger.debug("[data-normalizer] status update skipped: %s", exc)
+        logger.warning("[data-normalizer] status update skipped: %s", exc)
+
+
+async def _patch_status_strict(
+    session: aiohttp.ClientSession,
+    request_id: str,
+    status: str,
+) -> None:
+    """PATCH /normalize/status and raise on any failure.
+
+    Used by the user-triggered /cancel route so a silent DB miss never returns
+    a fake success to the frontend.
+    """
+    if not DATA_NORMALIZER_URL:
+        raise RuntimeError("DATA_NORMALIZER_URL is not configured")
+    if not request_id:
+        raise ValueError("request_id is required")
+    async with session.patch(
+        f"{DATA_NORMALIZER_URL}/normalize/status",
+        json={"request_id": request_id, "status": status},
+        timeout=aiohttp.ClientTimeout(total=5),
+    ) as resp:
+        if resp.status >= 400:
+            body = await resp.text()
+            raise RuntimeError(
+                f"/normalize/status returned HTTP {resp.status}: {body[:200]}"
+            )
 
 
 async def run_pipeline_from_intent(beckn_intent: dict, request_id: str | None = None) -> dict:
@@ -725,6 +762,11 @@ async def compare(request: web.Request) -> web.Response:
     except json.JSONDecodeError:
         raise web.HTTPBadRequest(reason="Invalid JSON")
 
+    # raw_query is the user's original NL prompt from /parse — preferred for the
+    # raw_input_text audit column. Pop it before forwarding to /discover so it
+    # doesn't leak into the Beckn payload.
+    raw_query = (body.pop("raw_query", None) or "").strip()
+
     if not body.get("item"):
         raise web.HTTPBadRequest(reason="item is required in BecknIntent body")
 
@@ -801,7 +843,7 @@ async def compare(request: web.Request) -> web.Response:
             score_ids_map: dict[str, str] = {}
 
             nr = await _persist(session, "/normalize/request", {
-                "raw_input_text": body.get("item", "compare-request"),
+                "raw_input_text": raw_query or body.get("item", "compare-request"),
                 "channel": "web",
             })
             request_id = nr.get("request_id", "")
@@ -1298,7 +1340,18 @@ async def cancel(request: web.Request) -> web.Response:
     async with aiohttp.ClientSession(
         headers={"Content-Type": "application/json"}
     ) as session:
-        await _persist_status(session, request_id, "cancelled")
+        try:
+            await _patch_status_strict(session, request_id, "cancelled")
+        except Exception as exc:
+            logger.error("[/cancel] failed for request_id=%s: %s", request_id, exc)
+            return web.json_response(
+                {
+                    "error": "Could not persist cancellation",
+                    "detail": str(exc),
+                    "request_id": request_id,
+                },
+                status=502,
+            )
 
     return web.json_response({"request_id": request_id, "status": "cancelled"})
 

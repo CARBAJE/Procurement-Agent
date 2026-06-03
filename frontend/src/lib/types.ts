@@ -83,7 +83,7 @@ export interface Scoring {
 
 export interface ComparisonResult {
   transaction_id: string
-  request_id?: string
+  request_id: string
   offerings: Offering[]
   recommended_item_id: string | null
   scoring: Scoring
@@ -112,6 +112,7 @@ export interface PaymentTerms {
 
 export interface CommitResult {
   transaction_id: string
+  request_id: string
   order_id: string | null
   order_state: OrderState | null
   payment_terms: PaymentTerms | null

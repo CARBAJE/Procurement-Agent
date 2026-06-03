@@ -16,8 +16,12 @@ export async function parseIntent(query: string): Promise<ParseResult> {
 
 // ── /compare — run discover + rank, return offerings + scoring ──────────────
 
-export async function compareOfferings(intent: BecknIntent): Promise<ComparisonResult> {
-  const { data } = await axios.post<ComparisonResult>("/api/procurement/compare", intent)
+export async function compareOfferings(
+  intent: BecknIntent,
+  rawQuery?: string,
+): Promise<ComparisonResult> {
+  const body = rawQuery ? { ...intent, raw_query: rawQuery } : intent
+  const { data } = await axios.post<ComparisonResult>("/api/procurement/compare", body)
   return data
 }
 
