@@ -41,17 +41,30 @@ services:
 
   # ── MLflow tracking + model registry server ────────────────────────────
   mlflow-server:
-    image: ghcr.io/mlflow/mlflow:v2.16.0
+    # v3.13.0 para coincidir con el cliente mlflow (3.13.0) de las imágenes
+    # prediction/training — el server 2.16.0 no tiene el endpoint
+    # /api/2.0/mlflow/logged-models que usa el cliente 3.x (causaba 404 al registrar).
+    image: ghcr.io/mlflow/mlflow:v3.13.0
     container_name: mlflow-server
     ports:
       - "5000:5000"
-    command: >
-      mlflow server
-      --host 0.0.0.0
-      --port 5000
-      --backend-store-uri postgresql://mlflow:mlflow@mlflow-db:5432/mlflow
-      --default-artifact-root /mlflow/artifacts
-      --serve-artifacts
+    # La imagen oficial de mlflow no incluye psycopg2 (necesario para el
+    # backend Postgres) — se instala al arrancar antes de lanzar el server.
+    command:
+      - /bin/sh
+      - -c
+      - >
+        pip install --no-cache-dir psycopg2-binary > /tmp/psycopg2_install.log 2>&1 &&
+        exec mlflow server
+        --host 0.0.0.0
+        --port 5000
+        --backend-store-uri postgresql://mlflow:mlflow@mlflow-db:5432/mlflow
+        --artifacts-destination /mlflow/artifacts
+        --serve-artifacts
+    environment:
+      # MLflow 3.x valida el header Host (anti DNS-rebinding) y rechaza
+      # "mlflow-server:5000". Permitir todos los hosts (red interna de dev).
+      MLFLOW_SERVER_ALLOWED_HOSTS: "*"
     volumes:
       - mlflow_artifacts:/mlflow/artifacts
     depends_on:
@@ -61,7 +74,8 @@ services:
       - mlops_network
       - beckn_network
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://localhost:5000/health || exit 1"]
+      # python en vez de curl (la imagen mlflow no trae curl).
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:5000/health').status==200 else 1)\""]
       interval: 30s
       timeout: 5s
       retries: 5
@@ -75,7 +89,10 @@ services:
       dockerfile: Dockerfile.prediction
     container_name: comparative-scoring-prediction-api
     ports:
-      - "8004:8004"
+      # Host :8010 → contenedor :8004. El contenedor sigue en 8004 para las
+      # llamadas in-network (comparative-scoring → prediction-api:8004). Se
+      # publica en :8010 para evitar el choque host con el orchestrator (:8004).
+      - "8010:8004"
     environment:
       MLFLOW_TRACKING_URI: http://mlflow-server:5000
       MODEL_NAME: ProcurementRanker
@@ -88,7 +105,7 @@ services:
       - mlops_network
       - beckn_network
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://localhost:8004/health || exit 1"]
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8004/health').status==200 else 1)\""]
       interval: 30s
       timeout: 5s
       retries: 5

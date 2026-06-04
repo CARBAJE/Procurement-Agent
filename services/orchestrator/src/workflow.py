@@ -198,6 +198,64 @@ def _build_fulfillment_info(intent: dict) -> dict:
     return out
 
 
+def _build_ml_scoring(
+    offerings: list[dict],
+    ml_scoring: dict,
+    recommended_item_id: str | None,
+) -> dict:
+    """Build the frontend ``Scoring`` shape from the ML model's ranking.
+
+    Uses the RankNet scores returned by prediction-api (via the
+    comparative-scoring adapter) instead of the price heuristic. Same shape
+    the frontend renders — ``{recommended_item_id, criteria[], ranking[]}`` —
+    with a single "ML Score (RankNet)" criterion (direction=max).
+    """
+    ranking_in = ml_scoring.get("ranking") or []
+    by_id = {r["item_id"]: r for r in ranking_in}
+    scores = [float(r.get("score", 0.0)) for r in ranking_in] or [0.0]
+    s_min, s_max = min(scores), max(scores)
+    spread = (s_max - s_min) or 1.0
+
+    rank_scores = []
+    for o in offerings:
+        r = by_id.get(o["item_id"])
+        raw = float(r["score"]) if r else 0.0
+        normalized = (raw - s_min) / spread  # higher ML score → closer to 1
+        rank_no = r["rank"] if r else len(offerings)
+        rank_scores.append({
+            "item_id": o["item_id"],
+            "raw": f"{raw:.4f}",
+            "normalized": round(normalized, 4),
+            "explanation": (
+                f"RankNet score {raw:.3f} (rank #{rank_no})"
+                + (" — recommended" if o["item_id"] == recommended_item_id else "")
+            ),
+        })
+
+    ranking = sorted(
+        [{"item_id": s["item_id"], "composite_score": s["normalized"], "rank": 0}
+         for s in rank_scores],
+        key=lambda r: -r["composite_score"],
+    )
+    for idx, row in enumerate(ranking, start=1):
+        row["rank"] = idx
+
+    model_version = ml_scoring.get("model_version") or "unknown"
+    return {
+        "recommended_item_id": recommended_item_id,
+        "criteria": [
+            {
+                "key": "ml_score",
+                "label": f"ML Score · RankNet ({model_version})",
+                "weight": 1.0,
+                "direction": "max",
+                "scores": rank_scores,
+            }
+        ],
+        "ranking": ranking,
+    }
+
+
 def _build_scoring(offerings: list[dict], recommended_item_id: str | None) -> dict:
     """Price-based scoring — lower price = higher score.
 
@@ -677,13 +735,33 @@ async def compare(request: web.Request) -> web.Response:
                 session, f"{COMPARATIVE_SCORING_URL}/score", {"offerings": offerings}
             )
             selected: dict | None = score_result.get("selected")
+            # The comparative-scoring adapter reports which engine scored:
+            #   {"engine":"ml", model_version, pipeline, ranking[]}  (RankNet)
+            #   {"engine":"heuristic_min_price"}                      (fallback)
+            adapter_scoring: dict = score_result.get("scoring") or {}
 
         recommended_item_id = selected["item_id"] if selected else None
+        engine = adapter_scoring.get("engine")
+        used_ml = engine == "ml" and bool(adapter_scoring.get("ranking"))
+        model_version = adapter_scoring.get("model_version") or "unknown"
+
+        if selected and used_ml:
+            select_msg = (
+                f"[rank_and_select] ML model {model_version} recommended "
+                f"{selected['provider_name']!r} ₹{selected['price_value']}"
+            )
+        elif selected:
+            select_msg = (
+                f"[rank_and_select] (fallback heurístico) recommended "
+                f"{selected['provider_name']!r} ₹{selected['price_value']}"
+            )
+        else:
+            select_msg = "[rank_and_select] no offering selected"
         messages = [
             f"[discover] txn={transaction_id} found {len(offerings)} offering(s)",
-            f"[rank_and_select] recommended {selected['provider_name']!r} ₹{selected['price_value']}"
-            if selected else "[rank_and_select] no offering selected",
+            select_msg,
         ]
+
         reasoning_steps = [
             {
                 "node": "discover",
@@ -697,16 +775,49 @@ async def compare(request: web.Request) -> web.Response:
                 "timestamp": _now_iso(),
             },
         ]
-        if selected:
+        if selected and used_ml:
+            # Build the ML ranking presentation + reason step from RankNet scores.
+            scoring_block = _build_ml_scoring(offerings, adapter_scoring, recommended_item_id)
+            ranked_provider = {o["item_id"]: o["provider_name"] for o in offerings}
+            top = scoring_block["ranking"][0] if scoring_block["ranking"] else {}
+            reasoning_steps.append({
+                "node": "rank_and_select",
+                "role": "reason",
+                "summary": (
+                    f"RankNet ({model_version}) ranked {len(offerings)} offering(s); "
+                    f"recommended {selected['provider_name']}"
+                ),
+                "details": {
+                    "strategy": "ml_ranknet",
+                    "model_version": model_version,
+                    "pipeline": adapter_scoring.get("pipeline"),
+                    "recommended_item_id": selected["item_id"],
+                    "recommended_provider": selected["provider_name"],
+                    "recommended_price": selected["price_value"],
+                    "ml_ranking": [
+                        {
+                            "rank": r["rank"],
+                            "provider": ranked_provider.get(r["item_id"], r["item_id"]),
+                            "ml_score": r["composite_score"],
+                        }
+                        for r in scoring_block["ranking"]
+                    ],
+                    "offering_count": len(offerings),
+                },
+                "timestamp": _now_iso(),
+            })
+        elif selected:
+            # Genuine fallback path (ML unavailable) — price-only narrative.
+            scoring_block = _build_scoring(offerings, recommended_item_id)
             prices = [float(o["price_value"]) for o in offerings]
             prices_sorted = sorted(prices)
             savings = f"{prices_sorted[1] - prices_sorted[0]:.2f}" if len(prices_sorted) > 1 else None
             reasoning_steps.append({
                 "node": "rank_and_select",
                 "role": "reason",
-                "summary": f"Recommended {selected['provider_name']} — cheapest of {len(offerings)}",
+                "summary": f"Recommended {selected['provider_name']} — cheapest of {len(offerings)} (fallback)",
                 "details": {
-                    "strategy": "price_only",
+                    "strategy": "price_only_fallback",
                     "recommended_item_id": selected["item_id"],
                     "recommended_provider": selected["provider_name"],
                     "recommended_price": selected["price_value"],
@@ -716,6 +827,7 @@ async def compare(request: web.Request) -> web.Response:
                 "timestamp": _now_iso(),
             })
         else:
+            scoring_block = _build_scoring(offerings, recommended_item_id)
             reasoning_steps.append({
                 "node": "rank_and_select",
                 "role": "reason",
@@ -735,7 +847,7 @@ async def compare(request: web.Request) -> web.Response:
             "transaction_id":      transaction_id,
             "offerings":           offerings,
             "recommended_item_id": recommended_item_id,
-            "scoring":             _build_scoring(offerings, recommended_item_id),
+            "scoring":             scoring_block,
             "reasoning_steps":     reasoning_steps,
             "messages":            messages,
             "status":              "live",

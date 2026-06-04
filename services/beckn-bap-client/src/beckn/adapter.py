@@ -311,7 +311,15 @@ class BecknProtocolAdapter:
         }
         # Real Beckn v2 Intent schema: {textSearch, filters, spatial, mediaSearch}
         # additionalProperties: false — item/fulfillment/payment are NOT supported
-        search_terms = [intent.item] + intent.descriptions
+        #
+        # Discovery searches by PRODUCT IDENTITY (intent.item) only — the spec
+        # descriptions (e.g. "500 sheets") are deliberately NOT folded into the
+        # query. Concatenating every spec makes the BPP's token-AND match
+        # require all of them, collapsing the result to a single provider whose
+        # listing happens to contain those exact words. Searching by the product
+        # returns all competing providers of that product; the specs are used
+        # downstream by the ML scorer to RANK them, not to filter discovery.
+        search_terms = [intent.item]
         intent_obj: dict = {"textSearch": " ".join(search_terms)}
 
         payload = {"context": context, "message": {"intent": intent_obj}}

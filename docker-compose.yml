@@ -9,10 +9,12 @@ services:
       - ./IntentParser:/app/IntentParser    # repo module mounted at runtime
       - ./shared:/app/shared                # shared models
     environment:
-      - OLLAMA_URL=http://host.docker.internal:11434/v1
+      - OLLAMA_URL=http://ollama:11434/v1
       - COMPLEX_MODEL=qwen3:1.7b
       - SIMPLE_MODEL=qwen3:1.7b
       - PYTHONPATH=/app
+    extra_hosts:
+      - "host.docker.internal:host-gateway"   # Linux: resolver Ollama del host
     networks:
       - beckn_network
 
@@ -50,9 +52,11 @@ services:
       - ./CatalogNormalizer:/app/CatalogNormalizer   # repo module mounted at runtime
       - ./shared:/app/shared                          # shared models
     environment:
-      - OLLAMA_URL=http://host.docker.internal:11434/v1
+      - OLLAMA_URL=http://ollama:11434/v1
       - NORMALIZER_MODEL=qwen3:1.7b
       - PYTHONPATH=/app
+    extra_hosts:
+      - "host.docker.internal:host-gateway"   # Linux: resolver Ollama del host
     networks:
       - beckn_network
 
