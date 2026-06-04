@@ -20,7 +20,16 @@ from aiohttp import web
 from DataNormalizer import DataNormalizer
 from DataNormalizer.db import close_pool
 
-from .error_middleware import db_error_middleware
+# Absolute import (no leading dot): handler.py is launched as a script in
+# Docker (`python src/handler.py`), so `src` is not a package there. Tests
+# import as `from src.handler import create_app` after adding the service
+# root to sys.path — `src.error_middleware` resolves as a namespace package
+# in that context.
+try:
+    from src.error_middleware import db_error_middleware
+except ModuleNotFoundError:
+    # Docker entrypoint adds `src/` to sys.path automatically.
+    from error_middleware import db_error_middleware  # type: ignore
 
 logger = logging.getLogger(__name__)
 
