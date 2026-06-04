@@ -69,6 +69,24 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
 
 
+# Maps the Beckn order state (BPP-reported) to our po_status_type enum.
+# Unknown states return None so the caller can skip the persist call.
+_BECKN_STATE_TO_PO_STATUS = {
+    "CREATED":           "pending",
+    "ACCEPTED":          "confirmed",
+    "PACKED":            "confirmed",
+    "SHIPPED":           "shipped",
+    "OUT_FOR_DELIVERY":  "shipped",
+    "DELIVERED":         "delivered",
+    "CANCELLED":         "cancelled",
+}
+
+
+def _beckn_state_to_po_status(beckn_state: str) -> str | None:
+    """Return the po_status_type value for a Beckn order state, or None."""
+    return _BECKN_STATE_TO_PO_STATUS.get((beckn_state or "").upper())
+
+
 def _build_scoring(offerings: list[dict], recommended_item_id: str | None) -> dict:
     """Price-based scoring — lower price = higher score.
 
@@ -326,6 +344,51 @@ async def _patch_status_strict(
             )
 
 
+async def _persist_audit(
+    session: aiohttp.ClientSession,
+    event_type: str,
+    agent_action: str,
+    reasoning_payload: dict | None = None,
+    request_id: str | None = None,
+    po_id: str | None = None,
+    actor_id: str | None = None,
+) -> None:
+    """POST /normalize/audit — fire-and-forget compliance event log.
+
+    event_type must be one of the audit_event_type enum values (discover,
+    normalize, score, negotiate, approve, confirm, override, erp_sync,
+    notification). Silent on failure so audit hiccups never break the flow.
+    """
+    if not DATA_NORMALIZER_URL:
+        return
+    body: dict = {
+        "event_type":        event_type,
+        "agent_action":      agent_action,
+        "reasoning_payload": reasoning_payload or {},
+        "kafka_offset":      0,  # TODO(kafka): real offset when topic is wired
+    }
+    if request_id:
+        body["request_id"] = request_id
+    if po_id:
+        body["po_id"] = po_id
+    if actor_id:
+        body["actor_id"] = actor_id
+    try:
+        async with session.post(
+            f"{DATA_NORMALIZER_URL}/normalize/audit",
+            json=body,
+            timeout=aiohttp.ClientTimeout(total=5),
+        ) as resp:
+            if resp.status >= 400:
+                text = await resp.text()
+                logger.warning(
+                    "[data-normalizer] audit %s returned HTTP %s: %s",
+                    event_type, resp.status, text[:200],
+                )
+    except Exception as exc:
+        logger.warning("[data-normalizer] audit skipped: %s", exc)
+
+
 async def run_pipeline_from_intent(beckn_intent: dict, request_id: str | None = None) -> dict:
     """Execute Steps 2→3→4 of the state machine with a pre-parsed BecknIntent.
 
@@ -347,6 +410,12 @@ async def run_pipeline_from_intent(beckn_intent: dict, request_id: str | None = 
                 "channel": "web",
             })
             request_id = nr.get("request_id", "")
+            if request_id:
+                await _persist_audit(
+                    session, "normalize", "request_created",
+                    reasoning_payload={"item": beckn_intent.get("item")},
+                    request_id=request_id,
+                )
 
         # ── Persist: normalize intent (pre-parsed — no NL classification) ─────
         beckn_intent_id = ""
@@ -359,6 +428,12 @@ async def run_pipeline_from_intent(beckn_intent: dict, request_id: str | None = 
                 "beckn_intent": beckn_intent,
             })
             beckn_intent_id = ir.get("beckn_intent_id", "")
+            if beckn_intent_id:
+                await _persist_audit(
+                    session, "normalize", "intent_persisted",
+                    reasoning_payload={"beckn_intent_id": beckn_intent_id, "intent": beckn_intent},
+                    request_id=request_id,
+                )
             await _persist_status(session, request_id, "discovering")
 
         # ── Step 2: Beckn BAP Client Lambda (discover) ───────────────────────
@@ -443,6 +518,15 @@ async def run_pipeline_from_intent(beckn_intent: dict, request_id: str | None = 
                 s["offering_id"]: s["score_id"]
                 for s in sr.get("score_ids", [])
             }
+            await _persist_audit(
+                session, "score", f"scored {len(scores_payload)} offerings",
+                reasoning_payload={
+                    "recommended_item_id": selected.get("item_id") if selected else None,
+                    "recommended_provider": (selected or {}).get("provider_name"),
+                    "score_count": len(scores_payload),
+                },
+                request_id=request_id,
+            )
             await _persist_status(session, request_id, "negotiating")
 
         if not selected:
@@ -518,6 +602,12 @@ async def run_pipeline(query: str) -> dict:
             "channel": "web",
         })
         request_id = nr.get("request_id", "")
+        if request_id:
+            await _persist_audit(
+                session, "normalize", "request_created",
+                reasoning_payload={"raw_query": query},
+                request_id=request_id,
+            )
 
         # ── Step 1: Intention Parser Lambda ──────────────────────────────────
         logger.info("Step 1 — Intention Parser")
@@ -559,6 +649,17 @@ async def run_pipeline(query: str) -> dict:
                 "beckn_intent":  beckn_intent,
             })
             beckn_intent_id = ir.get("beckn_intent_id", "")
+            if beckn_intent_id:
+                await _persist_audit(
+                    session, "normalize", "intent_persisted",
+                    reasoning_payload={
+                        "beckn_intent_id": beckn_intent_id,
+                        "intent_class": parse_result.get("intent"),
+                        "confidence": parse_result.get("confidence"),
+                        "model_version": parse_result.get("model_version"),
+                    },
+                    request_id=request_id,
+                )
             await _persist_status(session, request_id, "discovering")
 
         # ── Step 2: Beckn BAP Client Lambda (discover) ───────────────────────
@@ -587,6 +688,16 @@ async def run_pipeline(query: str) -> dict:
                 o["item_id"]: o["offering_id"]
                 for o in dr.get("offering_ids", [])
             }
+            if query_id:
+                await _persist_audit(
+                    session, "discover", f"discovery_completed: {len(offerings)} offerings",
+                    reasoning_payload={
+                        "query_id": query_id,
+                        "transaction_id": transaction_id,
+                        "offering_count": len(offerings),
+                    },
+                    request_id=request_id,
+                )
             await _persist_status(session, request_id, "scoring")
 
         if not offerings:
@@ -644,6 +755,15 @@ async def run_pipeline(query: str) -> dict:
                 s["offering_id"]: s["score_id"]
                 for s in sr.get("score_ids", [])
             }
+            await _persist_audit(
+                session, "score", f"scored {len(scores_payload)} offerings",
+                reasoning_payload={
+                    "recommended_item_id": selected.get("item_id") if selected else None,
+                    "recommended_provider": (selected or {}).get("provider_name"),
+                    "score_count": len(scores_payload),
+                },
+                request_id=request_id,
+            )
             await _persist_status(session, request_id, "negotiating")
 
         if not selected:
@@ -848,6 +968,11 @@ async def compare(request: web.Request) -> web.Response:
             })
             request_id = nr.get("request_id", "")
             if request_id:
+                await _persist_audit(
+                    session, "normalize", "request_created",
+                    reasoning_payload={"raw_query": raw_query, "item": body.get("item")},
+                    request_id=request_id,
+                )
                 ir = await _persist(session, "/normalize/intent", {
                     "request_id":    request_id,
                     "intent_class":  "procurement",
@@ -856,6 +981,12 @@ async def compare(request: web.Request) -> web.Response:
                     "beckn_intent":  body,
                 })
                 beckn_intent_id = ir.get("beckn_intent_id", "")
+                if beckn_intent_id:
+                    await _persist_audit(
+                        session, "normalize", "intent_persisted",
+                        reasoning_payload={"beckn_intent_id": beckn_intent_id, "intent": body},
+                        request_id=request_id,
+                    )
                 await _persist_status(session, request_id, "discovering")
 
             if beckn_intent_id and offerings:
@@ -869,6 +1000,16 @@ async def compare(request: web.Request) -> web.Response:
                     o["item_id"]: o["offering_id"]
                     for o in dr.get("offering_ids", [])
                 }
+                if query_id:
+                    await _persist_audit(
+                        session, "discover", f"discovery_completed: {len(offerings)} offerings",
+                        reasoning_payload={
+                            "query_id": query_id,
+                            "offering_count": len(offerings),
+                            "providers": [o.get("provider_name") for o in offerings],
+                        },
+                        request_id=request_id,
+                    )
                 await _persist_status(session, request_id, "scoring")
 
             if query_id and offering_ids_map:
@@ -897,6 +1038,15 @@ async def compare(request: web.Request) -> web.Response:
                     s["offering_id"]: s["score_id"]
                     for s in sr.get("score_ids", [])
                 }
+                await _persist_audit(
+                    session, "score", f"scored {len(scores_payload)} offerings",
+                    reasoning_payload={
+                        "recommended_item_id": recommended_item_id,
+                        "recommended_provider": (selected or {}).get("provider_name"),
+                        "score_count": len(scores_payload),
+                    },
+                    request_id=request_id,
+                )
                 await _persist_status(session, request_id, "negotiating")
 
             _session_put(transaction_id, {
@@ -1058,6 +1208,7 @@ async def commit(request: web.Request) -> web.Response:
             state_offering_ids_map: dict[str, str] = state.get("offering_ids_map", {})
             chosen_offering_id = state_offering_ids_map.get(chosen_item_id, "")
             chosen_score_id = state_score_ids_map.get(chosen_offering_id, "")
+            committed_request_id = state.get("request_id", "")
             if chosen_score_id:
                 await _persist(session, "/normalize/order", {
                     "score_id":          chosen_score_id,
@@ -1069,8 +1220,22 @@ async def commit(request: web.Request) -> web.Response:
                     "delivery_terms":    "Standard delivery",
                     "currency":          chosen.get("price_currency", "INR"),
                 })
+                await _persist_audit(
+                    session, "confirm", f"order_confirmed: {order_id}",
+                    reasoning_payload={
+                        "order_id":      order_id,
+                        "contract_id":   contract_id,
+                        "bpp_id":        bpp_id,
+                        "provider_name": chosen.get("provider_name"),
+                        "item_id":       chosen["item_id"],
+                        "quantity":      quantity,
+                        "agreed_price":  float(chosen.get("price_value", "0")),
+                        "currency":      chosen.get("price_currency", "INR"),
+                    },
+                    request_id=committed_request_id,
+                )
                 await _persist_status(
-                    session, state.get("request_id", ""), "confirmed"
+                    session, committed_request_id, "confirmed"
                 )
 
         reasoning_steps = [
@@ -1241,6 +1406,32 @@ async def order_status(request: web.Request) -> web.Response:
             }
             result = await _post(session, f"{BECKN_BAP_URL}/status", status_body)
 
+            # Persist po lifecycle and audit only when the BPP-reported state
+            # differs from what we last saw (avoid spamming on every poll).
+            new_state = result.get("state", last_state)
+            if new_state and new_state != last_state:
+                po_state = _beckn_state_to_po_status(new_state)
+                if po_state:
+                    await _persist(session, "/normalize/po_status", {
+                        "beckn_confirm_ref": order_id,
+                        "state":             po_state,
+                    })
+                    await _persist_audit(
+                        session, "confirm",
+                        f"order state {last_state} → {new_state}",
+                        reasoning_payload={
+                            "transaction_id": txn_id,
+                            "order_id":       order_id,
+                            "previous_state": last_state,
+                            "new_state":      new_state,
+                            "po_status":      po_state,
+                        },
+                        request_id=(state or {}).get("request_id"),
+                    )
+                # Update session so subsequent polls don't re-fire the audit.
+                if state is not None:
+                    state["order_state"] = new_state
+
         return web.json_response({
             "transaction_id": txn_id,
             "order_id":       order_id,
@@ -1352,6 +1543,11 @@ async def cancel(request: web.Request) -> web.Response:
                 },
                 status=502,
             )
+        await _persist_audit(
+            session, "override", "user_cancelled",
+            reasoning_payload={"reason": "user_cancelled"},
+            request_id=request_id,
+        )
 
     return web.json_response({"request_id": request_id, "status": "cancelled"})
 

@@ -2,9 +2,12 @@
 from __future__ import annotations
 
 import json
+import logging
 import uuid as _uuid
 
 from ..db import get_pool
+
+logger = logging.getLogger(__name__)
 
 
 async def _upsert_bpp(
@@ -80,11 +83,31 @@ async def create_discovery(
                     network_id or "beckn-default",
                 )
 
-                price_raw = off.get("price_value") or "0"
-                price = float(price_raw) if price_raw else 0.0
-                delivery_hours = int(off.get("fulfillment_hours") or 24)
+                price_raw = off.get("price_value")
+                try:
+                    price = float(price_raw) if price_raw else 0.0
+                except (TypeError, ValueError):
+                    logger.warning(
+                        "[discovery_repo] non-numeric price_value %r on item %r — defaulting to 0.0",
+                        price_raw, off.get("item_id"),
+                    )
+                    price = 0.0
+                delivery_raw = off.get("fulfillment_hours")
+                try:
+                    delivery_hours = int(delivery_raw) if delivery_raw is not None else 24
+                except (TypeError, ValueError):
+                    logger.warning(
+                        "[discovery_repo] non-integer fulfillment_hours %r on item %r — defaulting to 24",
+                        delivery_raw, off.get("item_id"),
+                    )
+                    delivery_hours = 24
                 # delivery_eta_hours CHECK > 0
-                delivery_hours = max(1, delivery_hours)
+                if delivery_hours < 1:
+                    logger.warning(
+                        "[discovery_repo] fulfillment_hours %s on item %r is < 1 — clamping to 1",
+                        delivery_hours, off.get("item_id"),
+                    )
+                    delivery_hours = 1
 
                 rating_raw = off.get("rating")
                 quality_rating = float(rating_raw) if rating_raw else None

@@ -43,7 +43,14 @@ async def create_request(
     pool = await get_pool()
     # Validate channel — DB accepts 'web', 'slack', 'teams'
     valid_channels = {"web", "slack", "teams"}
-    ch = channel if channel in valid_channels else "web"
+    if channel in valid_channels:
+        ch = channel
+    else:
+        logger.warning(
+            "[request_repo] channel %r is not in %s — defaulting to 'web'",
+            channel, sorted(valid_channels),
+        )
+        ch = "web"
     async with pool.acquire() as conn:
         await _ensure_system_user(conn)
         rid = _uuid.UUID(requester_id) if requester_id else _uuid.UUID(SYSTEM_USER_ID)

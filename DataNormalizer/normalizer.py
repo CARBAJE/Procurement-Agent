@@ -7,7 +7,14 @@ from __future__ import annotations
 import logging
 
 from .db import get_pool
-from .repositories import discovery_repo, intent_repo, order_repo, request_repo, scoring_repo
+from .repositories import (
+    audit_repo,
+    discovery_repo,
+    intent_repo,
+    order_repo,
+    request_repo,
+    scoring_repo,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -129,6 +136,46 @@ class DataNormalizer:
         )
         logger.info("[normalizer] created purchase_order %s", po_id)
         return {"po_id": po_id}
+
+    # ── /normalize/audit ──────────────────────────────────────────────────────
+
+    async def normalize_audit(
+        self,
+        event_type: str,
+        agent_action: str,
+        reasoning_payload: dict | None = None,
+        request_id: str | None = None,
+        po_id: str | None = None,
+        actor_id: str | None = None,
+        kafka_offset: int = 0,
+    ) -> dict:
+        """Append a row to audit_trail_events. Returns {"event_id": str}.
+
+        Raises ValueError if event_type is outside audit_event_type enum.
+        """
+        event_id = await audit_repo.create_audit_event(
+            event_type=event_type,
+            agent_action=agent_action,
+            reasoning_payload=reasoning_payload,
+            request_id=request_id,
+            po_id=po_id,
+            actor_id=actor_id,
+            kafka_offset=kafka_offset,
+        )
+        logger.info("[normalizer] audit %s (%s) → %s", event_type, agent_action, event_id)
+        return {"event_id": event_id}
+
+    # ── /normalize/po_status ──────────────────────────────────────────────────
+
+    async def normalize_po_status(self, beckn_confirm_ref: str, state: str) -> dict:
+        """Update purchase_orders.status by beckn_confirm_ref.
+
+        Valid states: pending, confirmed, shipped, delivered, cancelled.
+        Returns: {"po_id": str, "status": str} or {"po_id": None, "status": state}
+        when no row matched.
+        """
+        po_id = await order_repo.update_po_status(beckn_confirm_ref, state)
+        return {"po_id": po_id, "status": state}
 
     # ── PATCH /normalize/status ───────────────────────────────────────────────
 

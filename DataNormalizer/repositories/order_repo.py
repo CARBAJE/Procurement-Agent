@@ -11,6 +11,8 @@ logger = logging.getLogger(__name__)
 
 SYSTEM_USER_ID = os.getenv("SYSTEM_USER_ID", "00000000-0000-0000-0000-000000000001")
 
+VALID_PO_STATUSES = {"pending", "confirmed", "shipped", "delivered", "cancelled"}
+
 
 async def create_order(
     score_id: str,
@@ -90,3 +92,29 @@ async def create_order(
                 beckn_confirm_ref,
             )
             return str(po["po_id"])
+
+
+async def update_po_status(beckn_confirm_ref: str, state: str) -> str | None:
+    """UPDATE purchase_orders.status by beckn_confirm_ref. Returns po_id or None.
+
+    Raises ValueError if state is not a valid po_status_type enum value.
+    Returns None when no row matched the beckn_confirm_ref (caller decides
+    whether that should be a 404 or silent).
+    """
+    if state not in VALID_PO_STATUSES:
+        raise ValueError(
+            f"state {state!r} is not in {sorted(VALID_PO_STATUSES)}"
+        )
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            """
+            UPDATE purchase_orders
+            SET status = $1::po_status_type
+            WHERE beckn_confirm_ref = $2
+            RETURNING po_id
+            """,
+            state,
+            beckn_confirm_ref,
+        )
+        return str(row["po_id"]) if row else None

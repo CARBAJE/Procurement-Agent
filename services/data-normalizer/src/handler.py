@@ -20,6 +20,8 @@ from aiohttp import web
 from DataNormalizer import DataNormalizer
 from DataNormalizer.db import close_pool
 
+from .error_middleware import db_error_middleware
+
 logger = logging.getLogger(__name__)
 
 _normalizer = DataNormalizer()
@@ -159,6 +161,69 @@ async def normalize_order(request: web.Request) -> web.Response:
     return web.json_response(result, status=201)
 
 
+# ── /normalize/audit ──────────────────────────────────────────────────────────
+
+async def normalize_audit(request: web.Request) -> web.Response:
+    """POST /normalize/audit
+    Body: {event_type, agent_action, reasoning_payload?, request_id?, po_id?,
+           actor_id?, kafka_offset?}
+    Returns: {event_id}
+
+    event_type must be one of: discover, normalize, score, negotiate, approve,
+    confirm, override, erp_sync, notification.
+    """
+    try:
+        body = await request.json()
+    except json.JSONDecodeError:
+        raise web.HTTPBadRequest(reason="Invalid JSON")
+
+    for field in ("event_type", "agent_action"):
+        if not body.get(field):
+            raise web.HTTPBadRequest(reason=f"{field} is required")
+
+    try:
+        result = await _normalizer.normalize_audit(
+            event_type=body["event_type"],
+            agent_action=body["agent_action"],
+            reasoning_payload=body.get("reasoning_payload") or {},
+            request_id=body.get("request_id"),
+            po_id=body.get("po_id"),
+            actor_id=body.get("actor_id"),
+            kafka_offset=int(body.get("kafka_offset", 0)),
+        )
+    except ValueError as exc:
+        raise web.HTTPBadRequest(reason=str(exc))
+    return web.json_response(result, status=201)
+
+
+# ── PATCH /normalize/po_status ────────────────────────────────────────────────
+
+async def normalize_po_status(request: web.Request) -> web.Response:
+    """PATCH /normalize/po_status
+    Body: {beckn_confirm_ref, state}
+    Returns: {po_id, status}  — po_id is None if no row matched.
+
+    state must be one of: pending, confirmed, shipped, delivered, cancelled.
+    """
+    try:
+        body = await request.json()
+    except json.JSONDecodeError:
+        raise web.HTTPBadRequest(reason="Invalid JSON")
+
+    for field in ("beckn_confirm_ref", "state"):
+        if not body.get(field):
+            raise web.HTTPBadRequest(reason=f"{field} is required")
+
+    try:
+        result = await _normalizer.normalize_po_status(
+            beckn_confirm_ref=body["beckn_confirm_ref"],
+            state=body["state"],
+        )
+    except ValueError as exc:
+        raise web.HTTPBadRequest(reason=str(exc))
+    return web.json_response(result)
+
+
 # ── PATCH /normalize/status ───────────────────────────────────────────────────
 
 async def normalize_status(request: web.Request) -> web.Response:
@@ -189,14 +254,16 @@ async def _on_shutdown(app: web.Application) -> None:
 
 
 def create_app() -> web.Application:
-    app = web.Application()
+    app = web.Application(middlewares=[db_error_middleware])
     app.router.add_get("/health",               health)
     app.router.add_post("/normalize/request",   normalize_request)
     app.router.add_post("/normalize/intent",    normalize_intent)
     app.router.add_post("/normalize/discovery", normalize_discovery)
     app.router.add_post("/normalize/scoring",   normalize_scoring)
     app.router.add_post("/normalize/order",     normalize_order)
-    app.router.add_route("PATCH", "/normalize/status", normalize_status)
+    app.router.add_post("/normalize/audit",     normalize_audit)
+    app.router.add_route("PATCH", "/normalize/status",    normalize_status)
+    app.router.add_route("PATCH", "/normalize/po_status", normalize_po_status)
     app.on_shutdown.append(_on_shutdown)
     return app
 

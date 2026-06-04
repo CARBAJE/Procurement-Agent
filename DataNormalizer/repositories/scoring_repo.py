@@ -1,9 +1,12 @@
 """scored_offers table — persist scoring engine output."""
 from __future__ import annotations
 
+import logging
 import uuid as _uuid
 
 from ..db import get_pool
+
+logger = logging.getLogger(__name__)
 
 
 async def create_scores(query_id: str, scores: list[dict]) -> list[dict]:
@@ -32,11 +35,20 @@ async def create_scores(query_id: str, scores: list[dict]) -> list[dict]:
             # composite_score 0–1 → total_score 0–100
             raw_score = float(s.get("composite_score", s.get("total_score", 0)))
             total_score = min(100.0, max(0.0, raw_score * 100))
+            if total_score != raw_score * 100:
+                logger.warning(
+                    "[scoring_repo] composite_score %s on offering %s clamped to %s",
+                    raw_score, offering_id, total_score / 100,
+                )
 
             tco_raw = s.get("price_value") or s.get("tco_value") or "0"
             try:
                 tco = float(tco_raw)
             except (ValueError, TypeError):
+                logger.warning(
+                    "[scoring_repo] non-numeric tco %r on offering %s — defaulting to 0.0",
+                    tco_raw, offering_id,
+                )
                 tco = 0.0
 
             row = await conn.fetchrow(

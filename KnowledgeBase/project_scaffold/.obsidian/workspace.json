@@ -27,12 +27,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "tests/phase1_bap_monolith.md",
+                "file": "tests/phase2/phase2_data_normalizer.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "phase1_bap_monolith"
+              "title": "phase2_data_normalizer"
             }
           },
           {
@@ -55,7 +55,7 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "tests/phase2_microservices.md",
+                "file": "tests/phase2/phase2_microservices.md",
                 "mode": "source",
                 "source": false
               },
@@ -228,7 +228,10 @@
   },
   "active": "27c86b62e68d1740",
   "lastOpenFiles": [
-    "milestones/phase2_core_intelligence_transaction_flow.md",
+    "tests/phase2/phase2_microservices.md",
+    "tests/phase2/phase2_data_normalizer.md",
+    "tests/phase2",
+    "tests/phase1_bap_monolith.md",
     "components/data_normalizer.md",
     "ai_models/intent_parsing_model.md",
     "ai_models/intent_parsing_classification_notebook.md",
@@ -250,22 +253,19 @@
     "ai_models/comparasion_scoring_model/phase1_hybrid_react.md",
     "ai_models/comparasion_scoring_model/_comparison_engine_index.md",
     "ai_models/comparasion_scoring_model",
-    "ai_models/IntentParser/Production_Transition/06_End_to_End_Production_Data_Flow.md",
-    "ai_models/IntentParser/Production_Transition/05_Database_Connection_Pooling.md",
-    "ai_models/IntentParser/Production_Transition/04_Async_Event_Driven_Cache_Writes.md",
-    "ai_models/IntentParser/Production_Transition/03_Real_CatalogNormalizer_Integration.md",
-    "ai_models/IntentParser/Production_Transition/02_Connecting_MCP_to_ONIX_BPP.md",
-    "ai_models/IntentParser/Production_Transition/01_Real_MCP_Server_Integration.md",
-    "ai_models/IntentParser/Production_Transition/00_Production_Transition_MOC.md",
     "ai_models/IntentParser/MCP_Sidecar_Design/04_Timeouts_and_Failure_Handling.md",
     "ai_models/IntentParser/MCP_Sidecar_Design/03_BAP_Client_and_ONIX_Integration.md",
-    "ai_models/IntentParser/Production_Transition",
+    "ai_models/IntentParser/MCP_Sidecar_Design/02_search_bpp_catalog_Tool_Schema.md",
+    "ai_models/IntentParser/MCP_Sidecar_Design/01_Sidecar_Architecture_and_Transport.md",
+    "ai_models/IntentParser/MCP_Sidecar_Design/00_MCP_Sidecar_Design_MOC.md",
+    "ai_models/IntentParser/Production_Transition/06_End_to_End_Production_Data_Flow.md",
+    "ai_models/IntentParser/Production_Transition/05_Database_Connection_Pooling.md",
     "ai_models/IntentParser/MCP_Sidecar_Design",
+    "ai_models/IntentParser/Production_Transition",
     "ai_models/IntentParser/Core_Logic",
     "ai_models/IntentParser/BPP_Item_Validation",
     "ai_models/IntentParser",
     "Captura de pantalla 2026-04-14 a la(s) 4.16.56 p.m..png",
-    "tests",
     "architecture/Architecture.jpeg",
     "Architecture/Architecture.jpeg"
   ]

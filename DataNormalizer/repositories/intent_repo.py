@@ -2,9 +2,12 @@
 from __future__ import annotations
 
 import json
+import logging
 import uuid as _uuid
 
 from ..db import get_pool
+
+logger = logging.getLogger(__name__)
 
 
 async def create_parsed_intent(
@@ -16,10 +19,23 @@ async def create_parsed_intent(
     """INSERT into parsed_intents, return intent_id (str UUID)."""
     pool = await get_pool()
     # Clamp confidence to valid range
-    confidence = max(0.0, min(1.0, float(confidence)))
+    original_confidence = float(confidence)
+    confidence = max(0.0, min(1.0, original_confidence))
+    if confidence != original_confidence:
+        logger.warning(
+            "[intent_repo] confidence %s clamped to %s",
+            original_confidence, confidence,
+        )
     # Validate intent_class enum
     valid = {"procurement", "query", "support", "out_of_scope"}
-    ic = intent_class if intent_class in valid else "out_of_scope"
+    if intent_class in valid:
+        ic = intent_class
+    else:
+        logger.warning(
+            "[intent_repo] intent_class %r is not in %s — defaulting to 'out_of_scope'",
+            intent_class, sorted(valid),
+        )
+        ic = "out_of_scope"
     async with pool.acquire() as conn:
         row = await conn.fetchrow(
             """
@@ -48,6 +64,16 @@ async def create_beckn_intent(intent_id: str, beckn: dict) -> str:
     budget = beckn.get("budget_constraints") or {}
     budget_min = budget.get("min") if budget else None
     budget_max = budget.get("max") if budget else None
+
+    # Log defaults silently applied to required fields — helps catch upstream bugs.
+    if not beckn.get("item"):
+        logger.warning("[intent_repo] beckn.item missing — defaulting to 'unknown'")
+    if not beckn.get("unit"):
+        logger.warning("[intent_repo] beckn.unit missing — defaulting to 'units'")
+    if not beckn.get("location_coordinates"):
+        logger.warning("[intent_repo] beckn.location_coordinates missing — defaulting to '0.0,0.0'")
+    if not beckn.get("delivery_timeline"):
+        logger.warning("[intent_repo] beckn.delivery_timeline missing — defaulting to 72h")
 
     async with pool.acquire() as conn:
         row = await conn.fetchrow(
