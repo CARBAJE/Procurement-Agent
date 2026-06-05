@@ -155,20 +155,8 @@ export default function CompareView({ txnId }: CompareViewProps) {
           <div className="flex items-center gap-1.5 mt-1">
             <Hash className="h-3 w-3 text-muted-foreground" />
             <span className="text-xs text-muted-foreground font-mono">
-              txn: {comparison.transaction_id}
+              {comparison.transaction_id}
             </span>
-          </div>
-          <div className="flex items-center gap-1.5 mt-0.5">
-            <Hash className="h-3 w-3 text-muted-foreground" />
-            {comparison.request_id ? (
-              <span className="text-xs text-muted-foreground font-mono">
-                req: {comparison.request_id}
-              </span>
-            ) : (
-              <span className="text-xs text-destructive font-mono">
-                req: (not persisted — data-normalizer offline)
-              </span>
-            )}
           </div>
         </div>
         <Badge variant={status === "live" ? "default" : "secondary"} className="text-sm px-3 py-1">
