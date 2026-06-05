@@ -12,10 +12,10 @@ related: ["[[erp_sap_oracle]]", "[[event_streaming_kafka]]", "[[databases_postgr
 
 ## Supported ERPs
 
-| System | API Protocol | Integration Type |
-|---|---|---|
-| SAP S/4HANA | OData APIs | Bidirectional |
-| Oracle ERP Cloud | REST APIs | Bidirectional |
+| System           | API Protocol | Integration Type |
+| ---------------- | ------------ | ---------------- |
+| SAP S/4HANA      | OData APIs   | Bidirectional    |
+| Oracle ERP Cloud | REST APIs    | Bidirectional    |
 
 Full integration specification: [[erp_sap_oracle]].
 

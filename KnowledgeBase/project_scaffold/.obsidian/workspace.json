@@ -13,15 +13,58 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "components/microservices_architecture.md",
+                "file": "milestones/phase3_advanced_intelligence_enterprise_features.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "microservices_architecture"
+              "title": "phase3_advanced_intelligence_enterprise_features"
+            }
+          },
+          {
+            "id": "27c86b62e68d1740",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "tests/phase2/phase2_data_normalizer.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "phase2_data_normalizer"
+            }
+          },
+          {
+            "id": "0c231389c36afd32",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "milestones/phase2_core_intelligence_transaction_flow.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "phase2_core_intelligence_transaction_flow"
+            }
+          },
+          {
+            "id": "31c8fabbf0fb18c4",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "tests/phase2/phase2_microservices.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "phase2_microservices"
             }
           }
-        ]
+        ],
+        "currentTab": 2
       }
     ],
     "direction": "vertical"
@@ -78,8 +121,7 @@
       }
     ],
     "direction": "horizontal",
-    "width": 212.50247192382812,
-    "collapsed": true
+    "width": 212.50247192382812
   },
   "right": {
     "id": "707d49ecd1b271f3",
@@ -184,38 +226,47 @@
       "bases:Crear nueva base": false
     }
   },
-  "active": "5a0845e96356f9e2",
+  "active": "0c231389c36afd32",
   "lastOpenFiles": [
-    "components/catalog_normalizer.md",
-    "tests/phase2_microservices.md",
+    "components/real_time_tracking.md",
+    "tests/phase2/phase2_microservices.md",
+    "tests/phase2/phase2_data_normalizer.md",
+    "tests/phase2",
     "tests/phase1_bap_monolith.md",
-    "tests",
-    "components/microservices_architecture.md",
-    "system_architecture_diagram_en.md",
-    "system_architecture_diagram.md",
-    "milestones/phase1_foundation_protocol_integration.md",
-    "milestones/phase2_core_intelligence_transaction_flow.md",
-    "components/beckn_bap_client.md",
-    "components/nl_intent_parser.md",
-    "technologies/beckn_client.md",
-    "technologies/embedding_models.md",
-    "architecture/Architecture.md",
-    "architecture/Architecture.jpeg",
+    "components/data_normalizer.md",
+    "ai_models/intent_parsing_model.md",
+    "ai_models/intent_parsing_classification_notebook.md",
+    "Captura de pantalla 2026-05-04 a la(s) 11.59.32 a.m..png",
+    "architecture/negotiation_engine/_negotiation_engine_index.md",
+    "architecture/negotiation_engine/04_resilience_and_mlops.md",
+    "architecture/negotiation_engine/03_hard_guardrails_policy.md",
+    "architecture/negotiation_engine/02_decision_intelligence_rl.md",
+    "architecture/negotiation_engine/01_langgraph_state_machine.md",
+    "architecture/discovery_engine/_discovery_engine_index.md",
+    "architecture/discovery_engine/03_catalog_deduplication.md",
+    "architecture/discovery_engine/02_graceful_degradation.md",
+    "architecture/discovery_engine/01_multi_network_fan_out.md",
+    "architecture/negotiation_engine",
+    "architecture/discovery_engine",
     "architecture",
-    "components/agent_react_framework.md",
-    "README.md",
-    "Architecture/Architecture.jpeg",
-    "Architecture/Architecture.md",
-    "Architecture",
-    "technologies/frontend_react_nextjs.md",
-    "data_dictionary_er_model.md",
-    "components/approval_workflow.md",
-    "milestones/phase4_hardening_testing_production.md",
-    "milestones/phase3_advanced_intelligence_enterprise_features.md",
-    "infrastructure/postgresql_local_setup.md",
-    "technologies/agent_framework_langchain_langgraph.md",
-    "components/negotiation_engine.md",
-    "components/erp_integration.md",
-    "Captura de pantalla 2026-04-14 a la(s) 4.16.56 p.m..png"
+    "ai_models/comparasion_scoring_model/phase3_optnet_e2e.md",
+    "ai_models/comparasion_scoring_model/phase2_learning_to_rank.md",
+    "ai_models/comparasion_scoring_model/phase1_hybrid_react.md",
+    "ai_models/comparasion_scoring_model/_comparison_engine_index.md",
+    "ai_models/comparasion_scoring_model",
+    "ai_models/IntentParser/MCP_Sidecar_Design/04_Timeouts_and_Failure_Handling.md",
+    "ai_models/IntentParser/MCP_Sidecar_Design/03_BAP_Client_and_ONIX_Integration.md",
+    "ai_models/IntentParser/MCP_Sidecar_Design/02_search_bpp_catalog_Tool_Schema.md",
+    "ai_models/IntentParser/MCP_Sidecar_Design/01_Sidecar_Architecture_and_Transport.md",
+    "ai_models/IntentParser/MCP_Sidecar_Design/00_MCP_Sidecar_Design_MOC.md",
+    "ai_models/IntentParser/Production_Transition/06_End_to_End_Production_Data_Flow.md",
+    "ai_models/IntentParser/MCP_Sidecar_Design",
+    "ai_models/IntentParser/Production_Transition",
+    "ai_models/IntentParser/Core_Logic",
+    "ai_models/IntentParser/BPP_Item_Validation",
+    "ai_models/IntentParser",
+    "Captura de pantalla 2026-04-14 a la(s) 4.16.56 p.m..png",
+    "architecture/Architecture.jpeg",
+    "Architecture/Architecture.jpeg"
   ]
 }

@@ -18,7 +18,32 @@ Generated from: `Procurement_Agent_Beckn_Protocol.md`
 > - **$30–100M** Infosys pipeline from 15–20 enterprise deployments
 > - **45 seconds** vs. 5–7 days for routine procurement ([[story1_routine_office_supply|Story 1]])
 > - **16 weeks** from kickoff to production-ready prototype
-> - **5 AI models**, **10 components**, **14 technologies**, **4 phases**
+> - **5 AI models**, **10 business components**, **14 technologies**, **4 phases**
+> - **6 microservices** live (ports 8001–8006) + full ONIX stack (ports 8081, 8082, 3002)
+> - **16 PostgreSQL tables** — schema complete, persistence layer now active
+
+---
+
+## Implementation Status (as of Phase 2)
+
+> [!milestone] What Is Running Today
+> A single `docker compose up --build` starts the full stack. An NL query flows from the browser through 4 microservice hops to a Beckn-confirmed order, and every step is persisted to PostgreSQL via the Data Normalizer.
+
+| Layer | Component | Status |
+|---|---|---|
+| Frontend | Next.js (port 3000) | ✅ Running |
+| Lambda 1 | `intention-parser` (port 8001) | ✅ Running |
+| Lambda 2 | `beckn-bap-client` (port 8002) | ✅ Running |
+| Lambda 3 | `comparative-scoring` (port 8003) | ✅ Running |
+| Step Functions | `orchestrator` (port 8004) | ✅ Running |
+| Lambda 4 | `catalog-normalizer` (port 8005) | ✅ Running |
+| Lambda 5 | `data-normalizer` (port 8006) | ✅ Running |
+| ONIX stack | `onix-bap`, `onix-bpp`, `sandbox-bpp`, `redis` | ✅ Running |
+| Database | PostgreSQL — 16 tables (schema complete) | ✅ Schema applied |
+| Persistence | Full FK chain procurement_requests → purchase_orders | ✅ Active |
+| Negotiation Engine | `services/negotiation-engine/` | ⏳ Phase 3 |
+| Approval Engine | `services/approval-engine/` | ⏳ Phase 3 |
+| Agent Memory (RAG) | Qdrant + pgvector | ⏳ Phase 3 |
 
 ---
 
@@ -28,7 +53,7 @@ Generated from: `Procurement_Agent_Beckn_Protocol.md`
 project_scaffold/
 ├── .obsidian/snippets/project-theme.css   ← CSS callout theme (5 custom types)
 ├── technologies/     (14 files) — languages, frameworks, databases, APIs
-├── components/       (10 files) — architectural modules and microservices
+├── components/       (14 files) — architectural modules and microservices
 ├── milestones/       (4 files)  — 16-week implementation roadmap
 ├── infrastructure/   (5 files)  — deployment, CI/CD, cloud, data pipeline
 ├── integrations/     (4 files)  — ERP, identity, audit, communication
@@ -62,18 +87,22 @@ project_scaffold/
 
 ## components/
 
-| File | Contents |
-|---|---|
-| [[nl_intent_parser]] | NL → Beckn JSON; GPT-4o with schema-constrained decoding; ≥ 95% accuracy |
-| [[beckn_bap_client]] | All 6 Beckn flows via ONIX adapter; ED25519 signing; catalog normalization layer |
-| [[comparison_scoring_engine]] | Hybrid scoring (Python + ReAct); explainability; ≥ 85% quality |
-| [[negotiation_engine]] | Strategy-based /select; 20% discount cap; per-category config |
-| [[agent_memory_learning]] | Vector DB RAG; < 100ms retrieval; cross-enterprise learning |
-| [[approval_workflow]] | Threshold RBAC routing; emergency countdown; L1 government mode |
-| [[audit_trail_system]] | Kafka → Splunk; full reasoning capture; SOX/GDPR/RTI |
-| [[analytics_dashboard]] | Spend analysis, benchmarking reports; CPO use case |
-| [[erp_integration]] | SAP OData + Oracle REST; real-time budget checks; PO sync |
-| [[real_time_tracking]] | /status polling + WebSocket push; 30-second SLA |
+| File | Contents | Status |
+|---|---|---|
+| [[nl_intent_parser]] | NL → BecknIntent; qwen3:1.7b via Ollama; schema-constrained decoding; ≥ 95% accuracy | ✅ Implemented |
+| [[beckn_bap_client]] | All 6 Beckn flows via ONIX adapter; ED25519 signing; callback collector | ✅ Implemented |
+| [[catalog_normalizer]] | 5-format catalog normalization (4 deterministic + LLM fallback); standalone service port 8005 | ✅ Implemented |
+| [[comparison_scoring_engine]] | Price-based scoring; ranked offerings; explainable results; port 8003 | ✅ Implemented |
+| [[microservices_architecture]] | 6-service Step Functions model; docker-compose; ONIX stack | ✅ Implemented |
+| [[agent_react_framework]] | ReAct loop; LangGraph; 3 operating modes | ✅ Documented |
+| [[data_normalizer]] | Persistence bridge → PostgreSQL; asyncpg; 6 routes; port 8006 | ✅ Implemented |
+| [[negotiation_engine]] | Strategy-based /select; 20% discount cap; per-category config | ⏳ Phase 3 |
+| [[agent_memory_learning]] | Vector DB RAG; < 100ms retrieval; cross-enterprise learning | ⏳ Phase 3 |
+| [[approval_workflow]] | Threshold RBAC routing; emergency countdown; L1 government mode | ⏳ Phase 3 |
+| [[audit_trail_system]] | Kafka → Splunk; full reasoning capture; SOX/GDPR/RTI | ⏳ Phase 3 |
+| [[analytics_dashboard]] | Spend analysis, benchmarking reports; CPO use case | ⏳ Phase 4 |
+| [[erp_integration]] | SAP OData + Oracle REST; real-time budget checks; PO sync | ⏳ Phase 4 |
+| [[real_time_tracking]] | /status polling + WebSocket push; 30-second SLA | ⏳ Phase 4 |
 
 ---
 
@@ -82,7 +111,7 @@ project_scaffold/
 | File | Timeline | Key Deliverables |
 |---|---|---|
 | [[phase1_foundation_protocol_integration]] | Weeks 1–4 | Beckn sandbox, NL parser, agent framework, data model |
-| [[phase2_core_intelligence_transaction_flow]] | Weeks 5–8 | Full Beckn lifecycle, comparison engine, approval workflow |
+| [[phase2_core_intelligence_transaction_flow]] | Weeks 5–8 | Full Beckn lifecycle, comparison engine, catalog normalizer, data normalizer, PostgreSQL persistence |
 | [[phase3_advanced_intelligence_enterprise_features]] | Weeks 9–12 | Negotiation, memory, ERP integration, audit trail |
 | [[phase4_hardening_testing_production]] | Weeks 13–16 | Security hardening, containerization, 85% eval accuracy |
 
@@ -142,6 +171,33 @@ project_scaffold/
 | [[technical_performance_metrics]] | P95 < 5s; Beckn API ≥ 99.5%; intent accuracy ≥ 95% |
 | [[business_impact_metrics]] | 70–90% cycle time reduction; 8–15% cost savings; $30–100M pipeline |
 | [[user_adoption_metrics]] | 500+ users at 12 months; NPS ≥ 50; override rate < 25% |
+
+---
+
+## Repository Layout (current)
+
+```
+Procurement-Agent/
+├── services/
+│   ├── intention-parser/     Lambda 1 — POST /parse                         :8001
+│   ├── beckn-bap-client/     Lambda 2 — POST /discover /select /init /confirm :8002
+│   ├── comparative-scoring/  Lambda 3 — POST /score                          :8003
+│   ├── orchestrator/         Step Functions simulator — POST /run /compare /commit :8004
+│   ├── catalog-normalizer/   Lambda 4 — POST /normalize (catalog formats)    :8005
+│   └── data-normalizer/      Lambda 5 — POST /normalize/* (PostgreSQL bridge):8006
+├── IntentParser/             NL intent parsing module (volume-mounted)
+├── CatalogNormalizer/        Catalog format normalization module (volume-mounted)
+├── ComparativeScoring/       Price scoring module (volume-mounted)
+├── DataNormalizer/           Persistence bridge module (volume-mounted)
+│   ├── repositories/         request, intent, discovery, scoring, order repos
+│   └── transformers/         offering, intent, score transformers
+├── shared/models.py          Source of truth: BecknIntent, DiscoverOffering
+├── database/sql/             16 SQL files — full PostgreSQL schema
+├── config/                   ONIX adapter routing YAML (onix-bap, onix-bpp)
+├── docker-compose.yml        10 containers: 6 Lambdas + ONIX stack
+├── frontend/                 Next.js — apunta a puertos 8001 y 8004
+└── Bap-1/                    Monolito legacy — preservado como referencia
+```
 
 ---
 

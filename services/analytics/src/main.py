@@ -5,7 +5,7 @@ Falls back to deterministic mock data when the DB is unavailable or empty.
 
 Environment variables:
   DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD
-  PORT  (default 8006)
+  PORT  (default 8009)
 """
 from __future__ import annotations
 
@@ -91,5 +91,5 @@ def create_app() -> web.Application:
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
-    port = int(os.getenv("PORT", "8006"))
+    port = int(os.getenv("PORT", "8009"))
     web.run_app(create_app(), host="0.0.0.0", port=port)

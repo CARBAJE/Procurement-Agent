@@ -62,7 +62,7 @@ export default function ProcurementForm() {
     setError("")
     setLoading(true)
     try {
-      const comparison = await compareOfferings(parseResult.beckn_intent)
+      const comparison = await compareOfferings(parseResult.beckn_intent, query)
       // Persist intent + comparison under the transaction id. CompareView
       // will overwrite with the user's pick and the commit result.
       saveSession(comparison.transaction_id, {

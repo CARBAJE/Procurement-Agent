@@ -11,7 +11,7 @@ import ComparisonTable      from "@/components/procurement/ComparisonTable"
 import ScoringPanel         from "@/components/procurement/ScoringPanel"
 import ReasoningPanel       from "@/components/procurement/ReasoningPanel"
 import ConfirmCommitDialog  from "@/components/procurement/ConfirmCommitDialog"
-import { commitOrder } from "@/lib/api"
+import { commitOrder, cancelRequest } from "@/lib/api"
 import { clearSession, loadSession, patchSession } from "@/lib/session-store"
 import type { ComparisonResult, BecknIntent } from "@/lib/types"
 
@@ -46,7 +46,28 @@ export default function CompareView({ txnId }: CompareViewProps) {
     patchSession(txnId, { chosenItemId: selectedId })
   }, [selectedId, hydrated, comparison, txnId])
 
-  function cancel() {
+  async function cancel() {
+    const requestId = comparison?.request_id
+    if (!requestId) {
+      setError(
+        "No request_id available for this comparison — the DB row was never created. " +
+        "Check that the data-normalizer container is running.",
+      )
+      return
+    }
+    setSubmitting(true)
+    setError("")
+    try {
+      await cancelRequest(requestId)
+    } catch (err) {
+      console.error("[cancel] failed for requestId:", requestId, err)
+      setError(
+        "Could not mark the request as cancelled in the database. " +
+        "The data-normalizer may be offline — check the logs.",
+      )
+      setSubmitting(false)
+      return
+    }
     clearSession(txnId)
     router.push("/request/new")
   }
@@ -133,7 +154,9 @@ export default function CompareView({ txnId }: CompareViewProps) {
           <h1 className="text-4xl font-extrabold tracking-tight">Compare Offers</h1>
           <div className="flex items-center gap-1.5 mt-1">
             <Hash className="h-3 w-3 text-muted-foreground" />
-            <span className="text-xs text-muted-foreground font-mono">{comparison.transaction_id}</span>
+            <span className="text-xs text-muted-foreground font-mono">
+              {comparison.transaction_id}
+            </span>
           </div>
         </div>
         <Badge variant={status === "live" ? "default" : "secondary"} className="text-sm px-3 py-1">

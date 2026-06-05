@@ -19,8 +19,12 @@ export async function parseIntent(query: string): Promise<ParseResult> {
 
 // ── /compare — run discover + rank, return offerings + scoring ──────────────
 
-export async function compareOfferings(intent: BecknIntent): Promise<ComparisonResult> {
-  const { data } = await axios.post<ComparisonResult>("/api/procurement/compare", intent)
+export async function compareOfferings(
+  intent: BecknIntent,
+  rawQuery?: string,
+): Promise<ComparisonResult> {
+  const body = rawQuery ? { ...intent, raw_query: rawQuery } : intent
+  const { data } = await axios.post<ComparisonResult>("/api/procurement/compare", body)
   return data
 }
 
@@ -49,6 +53,12 @@ export async function fetchAnalytics(period: AnalyticsPeriod = "90d"): Promise<A
 export async function fetchBenchmark(): Promise<BenchmarkReport> {
   const { data } = await axios.get<BenchmarkReport>("/api/analytics/benchmark")
   return data
+}
+
+// ── /cancel — mark procurement request as cancelled ─────────────────────────
+
+export async function cancelRequest(requestId: string): Promise<void> {
+  await axios.patch("/api/procurement/cancel", { request_id: requestId })
 }
 
 // ── /status — poll order lifecycle ──────────────────────────────────────────
