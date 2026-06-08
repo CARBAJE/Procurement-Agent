@@ -1078,10 +1078,50 @@ async def compare(request: web.Request) -> web.Response:
     if not body.get("item"):
         raise web.HTTPBadRequest(reason="item is required in BecknIntent body")
 
+    # Declared outside the try so the except can mark the row as cancelled
+    # when discover/score fails mid-flow (avoids orphan draft rows).
+    request_id = ""
+
     try:
         async with aiohttp.ClientSession(
             headers={"Content-Type": "application/json"}
         ) as session:
+
+            # ── Persist request + intent BEFORE external calls ───────────────
+            # The row appears in procurement_requests immediately so the
+            # frontend wait shows a visible row transitioning through
+            # discovering → scoring → negotiating in real time, instead of
+            # all states flashing past in <50ms at the very end.
+            beckn_intent_id = ""
+            nr = await _persist(session, "/normalize/request", {
+                "raw_input_text": raw_query or body.get("item", "compare-request"),
+                "channel": "web",
+            })
+            request_id = nr.get("request_id", "")
+            if request_id:
+                await _persist_audit(
+                    session, "normalize", "request_created",
+                    reasoning_payload={"raw_query": raw_query, "item": body.get("item")},
+                    request_id=request_id,
+                )
+                ir = await _persist(session, "/normalize/intent", {
+                    "request_id":    request_id,
+                    "intent_class":  "procurement",
+                    "confidence":    1.0,
+                    "model_version": "direct",
+                    "beckn_intent":  body,
+                })
+                beckn_intent_id = ir.get("beckn_intent_id", "")
+                if beckn_intent_id:
+                    await _persist_audit(
+                        session, "normalize", "intent_persisted",
+                        reasoning_payload={"beckn_intent_id": beckn_intent_id, "intent": body},
+                        request_id=request_id,
+                    )
+                # Status → 'discovering' BEFORE the external call. The DB
+                # now reflects the phase that's running, not the one that
+                # just finished.
+                await _persist_status(session, request_id, "discovering")
 
             # Step 2: discover
             discover_result = await _post(session, f"{BECKN_BAP_URL}/discover", body)
@@ -1090,6 +1130,34 @@ async def compare(request: web.Request) -> web.Response:
 
             if not offerings:
                 raise ValueError("No offerings returned from discovery")
+
+            # ── Persist discovery, then advance status to 'scoring' BEFORE
+            # the external score call ────────────────────────────────────────
+            query_id = ""
+            offering_ids_map: dict[str, str] = {}
+            if beckn_intent_id and offerings:
+                dr = await _persist(session, "/normalize/discovery", {
+                    "beckn_intent_id": beckn_intent_id,
+                    "network_id": "beckn-default",
+                    "offerings": offerings,
+                })
+                query_id = dr.get("query_id", "")
+                offering_ids_map = {
+                    o["item_id"]: o["offering_id"]
+                    for o in dr.get("offering_ids", [])
+                }
+                if query_id:
+                    await _persist_audit(
+                        session, "discover", f"discovery_completed: {len(offerings)} offerings",
+                        reasoning_payload={
+                            "query_id": query_id,
+                            "offering_count": len(offerings),
+                            "providers": [o.get("provider_name") for o in offerings],
+                        },
+                        request_id=request_id,
+                    )
+            if request_id:
+                await _persist_status(session, request_id, "scoring")
 
             # Step 3: score (rank-only, no select)
             score_result = await _post(
@@ -1197,63 +1265,8 @@ async def compare(request: web.Request) -> web.Response:
                     "timestamp": _now_iso(),
                 })
 
-            # ── Persist: request + intent + discovery + scoring ──────────────
-            request_id = ""
-            beckn_intent_id = ""
-            query_id = ""
-            offering_ids_map: dict[str, str] = {}
+            # ── Persist scoring + final status (depends on score result) ────
             score_ids_map: dict[str, str] = {}
-
-            nr = await _persist(session, "/normalize/request", {
-                "raw_input_text": raw_query or body.get("item", "compare-request"),
-                "channel": "web",
-            })
-            request_id = nr.get("request_id", "")
-            if request_id:
-                await _persist_audit(
-                    session, "normalize", "request_created",
-                    reasoning_payload={"raw_query": raw_query, "item": body.get("item")},
-                    request_id=request_id,
-                )
-                ir = await _persist(session, "/normalize/intent", {
-                    "request_id":    request_id,
-                    "intent_class":  "procurement",
-                    "confidence":    1.0,
-                    "model_version": "direct",
-                    "beckn_intent":  body,
-                })
-                beckn_intent_id = ir.get("beckn_intent_id", "")
-                if beckn_intent_id:
-                    await _persist_audit(
-                        session, "normalize", "intent_persisted",
-                        reasoning_payload={"beckn_intent_id": beckn_intent_id, "intent": body},
-                        request_id=request_id,
-                    )
-                await _persist_status(session, request_id, "discovering")
-
-            if beckn_intent_id and offerings:
-                dr = await _persist(session, "/normalize/discovery", {
-                    "beckn_intent_id": beckn_intent_id,
-                    "network_id": "beckn-default",
-                    "offerings": offerings,
-                })
-                query_id = dr.get("query_id", "")
-                offering_ids_map = {
-                    o["item_id"]: o["offering_id"]
-                    for o in dr.get("offering_ids", [])
-                }
-                if query_id:
-                    await _persist_audit(
-                        session, "discover", f"discovery_completed: {len(offerings)} offerings",
-                        reasoning_payload={
-                            "query_id": query_id,
-                            "offering_count": len(offerings),
-                            "providers": [o.get("provider_name") for o in offerings],
-                        },
-                        request_id=request_id,
-                    )
-                await _persist_status(session, request_id, "scoring")
-
             if query_id and offering_ids_map:
                 local_scoring = _build_scoring(offerings, recommended_item_id)
                 scores_payload = []
@@ -1315,6 +1328,18 @@ async def compare(request: web.Request) -> web.Response:
         })
 
     except Exception as exc:
+        # If a row was already created but discover/score failed, mark it
+        # cancelled so it doesn't linger in draft/discovering/scoring forever.
+        # The original session was closed when the async-with exited on the
+        # exception, so we open a short-lived one just for the cleanup PATCH.
+        if request_id:
+            try:
+                async with aiohttp.ClientSession(
+                    headers={"Content-Type": "application/json"}
+                ) as cleanup_session:
+                    await _persist_status(cleanup_session, request_id, "cancelled")
+            except Exception:
+                pass
         logger.warning("compare live path failed (%s) — returning mock", exc)
         return _mock_compare_response()
 
