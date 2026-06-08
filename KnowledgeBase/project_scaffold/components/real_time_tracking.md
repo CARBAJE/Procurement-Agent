@@ -38,11 +38,11 @@ PostgreSQL   WebSocket push    Notification
 
 ## Notification Channels
 
-| Channel | Events Pushed |
-|---|---|
+| Channel                                      | Events Pushed                                                              |
+| -------------------------------------------- | -------------------------------------------------------------------------- |
 | [[communication_slack_teams\|Slack / Teams]] | Approval requests, order confirmations, delivery updates, exception alerts |
-| Email | Order confirmation, delivery updates |
-| Dashboard | All events in real-time via WebSocket |
+| Email                                        | Order confirmation, delivery updates                                       |
+| Dashboard                                    | All events in real-time via WebSocket                                      |
 
 ## User Experience ([[story2_high_value_it_equipment|Story 2 — IT Equipment]])
 
