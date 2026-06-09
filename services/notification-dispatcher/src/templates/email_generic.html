@@ -1,0 +1,12 @@
+<!DOCTYPE html>
+<html>
+<body style="font-family: -apple-system, BlinkMacSystemFont, sans-serif; max-width: 560px; margin: 0 auto; color: #1a1a1a;">
+  <h2>Order status update — {{ state }}</h2>
+  <p>Order <strong>{{ order_id }}</strong> changed status.</p>
+  <table style="border-collapse: collapse; margin-top: 16px;">
+    <tr><td style="padding: 4px 12px 4px 0; color: #666;">Transaction</td><td><code>{{ transaction_id }}</code></td></tr>
+    <tr><td style="padding: 4px 12px 4px 0; color: #666;">State</td><td>{{ state }}</td></tr>
+    <tr><td style="padding: 4px 12px 4px 0; color: #666;">Observed at</td><td>{{ observed_at }}</td></tr>
+  </table>
+</body>
+</html>

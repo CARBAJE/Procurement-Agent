@@ -365,19 +365,35 @@ async def _handle_webhook(request: web.Request, vendor: str) -> web.Response:
         logger.warning("outbox update on webhook failed txn=%s vendor=%s err=%s",
                        inbound.transaction_id, vendor, exc)
 
+    # Build the canonical event payload (used by both Kafka and Redis).
+    event_payload = {
+        "vendor": vendor,
+        "transaction_id": inbound.transaction_id,
+        "erp_reference_id": inbound.erp_reference_id,
+        "state": inbound.state,
+        "event_ts": inbound.event_ts.isoformat(),
+        "vendor_event_id": inbound.vendor_event_id,
+        "source": "erp_webhook",
+    }
+
+    # Kafka (primary path — orchestrator WS broker + notification-dispatcher)
+    kafka_producer = request.app.get("kafka_producer")
+    settings = request.app["settings"]
+    if kafka_producer is not None:
+        try:
+            await kafka_producer.send_and_wait(
+                settings.kafka_topic,
+                value=json.dumps(event_payload).encode("utf-8"),
+            )
+        except Exception as exc:
+            logger.warning("kafka publish on webhook failed err=%s", exc)
+
+    # Redis (legacy fallback — kept for any subscriber that hasn't migrated)
     redis = request.app.get("redis")
     if redis is not None:
         try:
             channel = f"po.status_changed:{inbound.transaction_id}"
-            msg = json.dumps({
-                "vendor": vendor,
-                "transaction_id": inbound.transaction_id,
-                "erp_reference_id": inbound.erp_reference_id,
-                "state": inbound.state,
-                "event_ts": inbound.event_ts.isoformat(),
-                "vendor_event_id": inbound.vendor_event_id,
-            })
-            await redis.publish(channel, msg)
+            await redis.publish(channel, json.dumps(event_payload))
         except Exception as exc:
             logger.warning("redis publish on webhook failed err=%s", exc)
 

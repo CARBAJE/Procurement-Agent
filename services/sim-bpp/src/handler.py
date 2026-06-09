@@ -45,6 +45,41 @@ CATALOG_PATH = os.getenv("CATALOG_PATH", "/app/catalog.json")
 # Actions we accept inbound and answer with an on_{action} callback.
 TRANSACTIONAL = {"select", "init", "confirm", "status", "track", "update", "cancel", "rate", "support"}
 
+# ── Auto-advance (real-time-tracking demo) ───────────────────────────────────
+# When ON, sim-bpp emits the Beckn fulfillment lifecycle autonomously after a
+# /confirm: ACCEPTED → PACKED → SHIPPED → OUT_FOR_DELIVERY → DELIVERED, one
+# state every SIM_BPP_ADVANCE_INTERVAL_SECS seconds. Each transition is
+# PATCHed to the data-normalizer (updates purchase_orders) AND published to
+# Kafka (triggers WebSocket fan-out + Slack/Teams/Email).
+#
+# This mimics a real BPP that pushes status changes as the order physically
+# progresses through the supplier's warehouse. Default OFF preserves existing
+# manual-test workflows (curl webhook, kafka-console-producer).
+SIM_BPP_AUTO_ADVANCE = os.getenv("SIM_BPP_AUTO_ADVANCE", "false").lower() == "true"
+SIM_BPP_ADVANCE_INTERVAL_SECS = int(os.getenv("SIM_BPP_ADVANCE_INTERVAL_SECS", "5"))
+KAFKA_BOOTSTRAP = os.getenv("KAFKA_BOOTSTRAP", "")
+KAFKA_TOPIC = os.getenv("KAFKA_TOPIC", "po.status.changed")
+DATA_NORMALIZER_URL = os.getenv("DATA_NORMALIZER_URL", "http://data-normalizer:8006")
+
+# Fulfillment lifecycle. (Beckn fulfillment state → po_status_type enum value).
+# Aligned with the orchestrator's _BECKN_STATE_TO_PO_STATUS mapping so the row
+# in `purchase_orders` transitions: pending → confirmed → shipped → delivered.
+_LIFECYCLE: list[tuple[str, str]] = [
+    ("ACCEPTED",         "confirmed"),
+    ("PACKED",           "confirmed"),
+    ("SHIPPED",          "shipped"),
+    ("OUT_FOR_DELIVERY", "shipped"),
+    ("DELIVERED",        "delivered"),
+]
+
+# In-memory registry of orders being auto-advanced. Keyed by order_id (=
+# contract.id = purchase_orders.beckn_confirm_ref). Value is the asyncio.Task
+# so we can cancel on /cancel.
+_advancing_orders: dict[str, asyncio.Task] = {}
+
+# Lazy-initialised Kafka producer (first auto-advance event triggers it).
+_kafka_producer = None
+
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -226,6 +261,120 @@ def build_transactional(action: str, ctx: dict, msg: dict) -> dict:
     return {"context": _resp_context(ctx, f"on_{action}"), "message": {"contract": contract}}
 
 
+# ── Auto-advance helpers ─────────────────────────────────────────────────────
+
+
+async def _get_kafka_producer():
+    """Lazy singleton — only connect on first publish. Returns None if Kafka
+    is unconfigured or unreachable; callers must tolerate that."""
+    global _kafka_producer
+    if _kafka_producer is not None:
+        return _kafka_producer
+    if not KAFKA_BOOTSTRAP:
+        return None
+    try:
+        from aiokafka import AIOKafkaProducer
+        producer = AIOKafkaProducer(bootstrap_servers=KAFKA_BOOTSTRAP)
+        await producer.start()
+        _kafka_producer = producer
+        logger.info("kafka producer connected (%s)", KAFKA_BOOTSTRAP)
+        return _kafka_producer
+    except Exception as exc:
+        logger.warning("kafka producer init failed (%s) — auto-advance Kafka path disabled", exc)
+        return None
+
+
+async def _publish_event(payload: dict) -> None:
+    """Fire-and-forget publish to po.status.changed. Never raises."""
+    producer = await _get_kafka_producer()
+    if producer is None:
+        return
+    try:
+        await producer.send_and_wait(
+            KAFKA_TOPIC, value=json.dumps(payload).encode("utf-8"),
+        )
+        logger.info("kafka published state=%s order=%s",
+                    payload.get("state"), payload.get("order_id"))
+    except Exception as exc:
+        logger.warning("kafka publish failed: %s", exc)
+
+
+async def _persist_po_status(order_id: str, po_status: str) -> None:
+    """PATCH /normalize/po_status against the data-normalizer. Never raises.
+
+    This keeps `purchase_orders.status` in sync with the lifecycle so the
+    dashboard, audit, and analytics all see the same state.
+    """
+    if not DATA_NORMALIZER_URL or not order_id:
+        return
+    url = f"{DATA_NORMALIZER_URL}/normalize/po_status"
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.patch(
+                url,
+                json={"beckn_confirm_ref": order_id, "state": po_status},
+                timeout=aiohttp.ClientTimeout(total=5),
+            ) as resp:
+                if resp.status >= 300:
+                    logger.warning("persist po_status returned HTTP %d for order=%s",
+                                   resp.status, order_id)
+    except Exception as exc:
+        logger.warning("persist po_status failed order=%s: %s", order_id, exc)
+
+
+async def _auto_advance_lifecycle(order_id: str, txn_id: str) -> None:
+    """Background task: walk through _LIFECYCLE one state at a time. For each
+    state, persist to data-normalizer AND publish to Kafka. Cancellable via
+    `_cancel_auto_advance` (triggered by an inbound /cancel)."""
+    logger.info("auto-advance: started order=%s txn=%s interval=%ds",
+                order_id, txn_id, SIM_BPP_ADVANCE_INTERVAL_SECS)
+    try:
+        for beckn_state, po_status in _LIFECYCLE:
+            await asyncio.sleep(SIM_BPP_ADVANCE_INTERVAL_SECS)
+            payload = {
+                "transaction_id": txn_id,
+                "order_id":       order_id,
+                "state":          beckn_state,
+                "po_status":      po_status,
+                "observed_at":    _now(),
+                "source":         "sim_bpp_auto_advance",
+            }
+            # Persist first so DB matches Kafka event by the time it lands.
+            await _persist_po_status(order_id, po_status)
+            await _publish_event(payload)
+            logger.info("auto-advance: order=%s → %s (%s)",
+                        order_id, beckn_state, po_status)
+    except asyncio.CancelledError:
+        logger.info("auto-advance: cancelled order=%s", order_id)
+        raise
+    finally:
+        _advancing_orders.pop(order_id, None)
+
+
+def _schedule_auto_advance(order_id: str | None, txn_id: str | None) -> None:
+    """Idempotent — won't double-schedule the same order_id."""
+    if not SIM_BPP_AUTO_ADVANCE:
+        return
+    if not order_id or not txn_id:
+        logger.warning("auto-advance: missing order_id or txn_id — skipping")
+        return
+    if order_id in _advancing_orders:
+        return
+    _advancing_orders[order_id] = asyncio.create_task(
+        _auto_advance_lifecycle(order_id, txn_id),
+        name=f"auto-advance-{order_id}",
+    )
+
+
+def _cancel_auto_advance(order_id: str | None) -> None:
+    """Stop the lifecycle task for this order, if running."""
+    if not order_id:
+        return
+    task = _advancing_orders.pop(order_id, None)
+    if task is not None:
+        task.cancel()
+
+
 # ── HTTP layer ───────────────────────────────────────────────────────────────
 
 
@@ -247,6 +396,18 @@ async def _emit_callback(action: str, ctx: dict, msg: dict) -> None:
                 logger.info("on_%s -> onix-bpp HTTP %d", action, resp.status)
     except Exception as exc:
         logger.error("failed to send on_%s to %s: %s", action, url, exc)
+
+    # ── Auto-advance lifecycle hooks ────────────────────────────────────────
+    # Read the (potentially synthesised) contract.id from the body we just
+    # sent — that's what the BAP will see as `order_id` and what ends up in
+    # `purchase_orders.beckn_confirm_ref`. Using that key keeps the Kafka
+    # event aligned with the DB row the orchestrator persisted on /commit.
+    if action == "confirm":
+        contract = (body.get("message") or {}).get("contract") or {}
+        _schedule_auto_advance(contract.get("id"), ctx.get("transactionId"))
+    elif action == "cancel":
+        contract = (body.get("message") or {}).get("contract") or {}
+        _cancel_auto_advance(contract.get("id"))
 
 
 async def webhook(request: web.Request) -> web.Response:
