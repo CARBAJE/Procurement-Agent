@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useRef, useState } from "react"
-import { RefreshCw, Radio, AlertCircle } from "lucide-react"
+import { RefreshCw, Radio, AlertCircle, Wifi, WifiOff } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { getOrderStatus } from "@/lib/api"
@@ -20,11 +20,13 @@ interface StatusPollerProps {
   className?: string
 }
 
+type Mode = "ws" | "poll" | "connecting"
+
 /**
- * TODO(realtime-ws): replace the setInterval + getOrderStatus call below with
- * a WebSocket subscription to /ws/status/{order_id}. Keep the onUpdate shape
- * (StatusSnapshot) identical so parent components don't need changes.
- * See: Bap-1/docs/ARCHITECTURE.md §7.4 #11.
+ * Status tracker — opens a WebSocket to /ws/status/{txn_id} for live push.
+ * Falls back to 30-second polling if the WS can't connect or drops. Keeps
+ * the same `onUpdate(StatusSnapshot)` callback so parent components don't
+ * need changes.
  */
 export default function StatusPoller({
   transactionId,
@@ -35,61 +37,157 @@ export default function StatusPoller({
   onUpdate,
   className,
 }: StatusPollerProps) {
-  const [lastCheckedAt, setLastCheckedAt] = useState<Date | null>(null)
+  const [lastUpdateAt, setLastUpdateAt] = useState<Date | null>(null)
   const [ago, setAgo] = useState<string>("never")
-  const [isPolling, setIsPolling] = useState(false)
+  const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string>("")
   const [currentState, setCurrentState] = useState<OrderState | null>(initialState)
+  const [mode, setMode] = useState<Mode>("connecting")
 
-  // Keep a ref to the callback so our interval closure doesn't go stale.
+  // Keep callbacks current so closures don't go stale.
   const onUpdateRef = useRef(onUpdate)
   useEffect(() => { onUpdateRef.current = onUpdate }, [onUpdate])
 
+  const wsRef = useRef<WebSocket | null>(null)
+  const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
   const isTerminal = currentState != null && TERMINAL_STATES.includes(currentState)
 
-  const poll = useCallback(async () => {
-    setIsPolling(true)
+  // ── Manual / fallback poll ─────────────────────────────────────────────────
+  const pollOnce = useCallback(async () => {
+    setBusy(true)
     setError("")
     try {
       const snap = await getOrderStatus(transactionId, orderId, bppId, bppUri)
-      setLastCheckedAt(new Date())
+      setLastUpdateAt(new Date())
       setCurrentState(snap.state)
       onUpdateRef.current(snap)
     } catch (e) {
-      setError("Poll failed — will retry")
+      setError("Update failed — will retry")
       // eslint-disable-next-line no-console
       console.warn("[StatusPoller] poll error", e)
     } finally {
-      setIsPolling(false)
+      setBusy(false)
     }
   }, [transactionId, orderId, bppId, bppUri])
 
-  // Kick off polling; stop on terminal state.
-  useEffect(() => {
-    if (isTerminal) return
-    // Run once immediately so the first snapshot lands fast.
-    poll()
-    const id = setInterval(poll, POLL_MS)
-    return () => clearInterval(id)
-  }, [poll, isTerminal])
+  const startPollingFallback = useCallback(() => {
+    if (pollTimerRef.current) return
+    setMode("poll")
+    // Fire once immediately so the user sees a fresh snapshot.
+    pollOnce()
+    pollTimerRef.current = setInterval(pollOnce, POLL_MS)
+  }, [pollOnce])
 
-  // Humanized "Ns ago" tick every second.
+  const stopPolling = useCallback(() => {
+    if (pollTimerRef.current) {
+      clearInterval(pollTimerRef.current)
+      pollTimerRef.current = null
+    }
+  }, [])
+
+  // ── WebSocket lifecycle ────────────────────────────────────────────────────
+  useEffect(() => {
+    if (isTerminal) return  // Don't open WS for already-finished orders
+
+    // Compute the WS URL based on the current location. In dev the page is
+    // served from :3000 but the orchestrator is on :8004.
+    const protocol = window.location.protocol === "https:" ? "wss" : "ws"
+    // Frontend dev: orchestrator runs on host port 8004. In production the
+    // reverse proxy should expose /ws/status under the same origin.
+    const host = window.location.hostname
+    const orchestratorPort = process.env.NEXT_PUBLIC_ORCHESTRATOR_PORT || "8004"
+    const url = `${protocol}://${host}:${orchestratorPort}/ws/status/${encodeURIComponent(transactionId)}`
+
+    let cancelled = false
+    setMode("connecting")
+    setError("")
+
+    let ws: WebSocket
+    try {
+      ws = new WebSocket(url)
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.warn("[StatusPoller] WS construction failed; using polling", e)
+      startPollingFallback()
+      return
+    }
+
+    wsRef.current = ws
+
+    ws.onopen = () => {
+      if (cancelled) return
+      setMode("ws")
+      stopPolling()
+    }
+
+    ws.onmessage = (e: MessageEvent) => {
+      try {
+        const data = JSON.parse(e.data) as Partial<StatusSnapshot> & { state?: OrderState }
+        if (!data.state) return  // Initial snapshot may have null state — ignore
+        const snap: StatusSnapshot = {
+          transaction_id: data.transaction_id ?? transactionId,
+          order_id: data.order_id ?? orderId,
+          state: data.state,
+          fulfillment_eta: data.fulfillment_eta ?? null,
+          tracking_url: data.tracking_url ?? null,
+          observed_at: data.observed_at ?? new Date().toISOString(),
+          status: data.status ?? "live",
+        }
+        setLastUpdateAt(new Date())
+        setCurrentState(snap.state)
+        onUpdateRef.current(snap)
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.warn("[StatusPoller] bad WS message", err)
+      }
+    }
+
+    ws.onerror = () => {
+      // eslint-disable-next-line no-console
+      console.warn("[StatusPoller] WS error — falling back to polling")
+      setError("Live connection lost — polling instead")
+    }
+
+    ws.onclose = () => {
+      if (cancelled || isTerminal) return
+      // Drop to polling so the user keeps getting updates.
+      startPollingFallback()
+    }
+
+    return () => {
+      cancelled = true
+      try { ws.close() } catch { /* noop */ }
+      wsRef.current = null
+      stopPolling()
+    }
+  }, [transactionId, orderId, isTerminal, startPollingFallback, stopPolling])
+
+  // Stop polling once the order reaches a terminal state.
+  useEffect(() => {
+    if (isTerminal) {
+      stopPolling()
+      try { wsRef.current?.close() } catch { /* noop */ }
+    }
+  }, [isTerminal, stopPolling])
+
+  // ── "Ns ago" tick ──────────────────────────────────────────────────────────
   useEffect(() => {
     function tick() {
-      if (!lastCheckedAt) {
+      if (!lastUpdateAt) {
         setAgo("never")
         return
       }
-      const secs = Math.floor((Date.now() - lastCheckedAt.getTime()) / 1000)
-      if (secs < 5)   setAgo("just now")
-      else if (secs < 60)   setAgo(`${secs}s ago`)
+      const secs = Math.floor((Date.now() - lastUpdateAt.getTime()) / 1000)
+      if (secs < 5)        setAgo("just now")
+      else if (secs < 60)  setAgo(`${secs}s ago`)
       else if (secs < 3600) setAgo(`${Math.floor(secs / 60)}m ago`)
       else                  setAgo(`${Math.floor(secs / 3600)}h ago`)
     }
     tick()
     const id = setInterval(tick, 1000)
     return () => clearInterval(id)
-  }, [lastCheckedAt])
+  }, [lastUpdateAt])
 
   return (
     <div className={cn(
@@ -97,18 +195,27 @@ export default function StatusPoller({
       className,
     )}>
       <div className="flex items-center gap-2 min-w-0">
-        <Radio className={cn(
-          "h-4 w-4 shrink-0",
-          isTerminal ? "text-muted-foreground" :
-          isPolling  ? "text-primary animate-pulse" :
-                       "text-muted-foreground",
-        )} />
+        {mode === "ws" ? (
+          <Wifi className="h-4 w-4 shrink-0 text-emerald-500" aria-label="Live" />
+        ) : mode === "poll" ? (
+          <Radio className={cn(
+            "h-4 w-4 shrink-0",
+            isTerminal ? "text-muted-foreground" :
+            busy ? "text-primary animate-pulse" : "text-muted-foreground",
+          )} />
+        ) : (
+          <WifiOff className="h-4 w-4 shrink-0 text-muted-foreground" aria-label="Connecting" />
+        )}
         <div className="min-w-0">
           <p className="text-xs text-muted-foreground">
             {isTerminal ? (
               <>Tracking stopped — order {currentState?.toLowerCase().replace(/_/g, " ")}</>
+            ) : mode === "ws" ? (
+              <><span className="text-foreground font-medium">🟢 Live</span> · last update <span className="text-foreground">{ago}</span></>
+            ) : mode === "poll" ? (
+              <>Polling every {POLL_MS / 1000}s · last update <span className="text-foreground">{ago}</span></>
             ) : (
-              <>Polling every {POLL_MS / 1000}s · last checked <span className="text-foreground">{ago}</span></>
+              <>Connecting…</>
             )}
           </p>
           {error && (
@@ -122,12 +229,12 @@ export default function StatusPoller({
       <Button
         size="sm"
         variant="ghost"
-        onClick={poll}
-        disabled={isPolling || isTerminal}
+        onClick={pollOnce}
+        disabled={busy || isTerminal}
         aria-label="Refresh now"
         className="shrink-0"
       >
-        <RefreshCw className={cn("h-4 w-4", isPolling && "animate-spin")} />
+        <RefreshCw className={cn("h-4 w-4", busy && "animate-spin")} />
       </Button>
     </div>
   )

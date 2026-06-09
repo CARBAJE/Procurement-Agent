@@ -6,3 +6,4 @@ tenacity>=8.2
 pybreaker>=1.0
 prometheus-client>=0.20
 redis>=5.0
+aiokafka>=0.12

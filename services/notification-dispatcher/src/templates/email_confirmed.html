@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+<html>
+<body style="font-family: -apple-system, BlinkMacSystemFont, sans-serif; max-width: 560px; margin: 0 auto; color: #1a1a1a;">
+  <h2 style="color: #0a7d32;">Order confirmed</h2>
+  <p>Your purchase order <strong>{{ order_id }}</strong> has been confirmed by the supplier.</p>
+  <table style="border-collapse: collapse; margin-top: 16px;">
+    <tr><td style="padding: 4px 12px 4px 0; color: #666;">Transaction</td><td><code>{{ transaction_id }}</code></td></tr>
+    <tr><td style="padding: 4px 12px 4px 0; color: #666;">State</td><td>{{ state }}</td></tr>
+    <tr><td style="padding: 4px 12px 4px 0; color: #666;">Observed at</td><td>{{ observed_at }}</td></tr>
+  </table>
+  <p style="margin-top: 24px; color: #666; font-size: 13px;">
+    You'll receive further updates as the order progresses through shipping and delivery.
+  </p>
+</body>
+</html>

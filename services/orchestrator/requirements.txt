@@ -1,2 +1,3 @@
 aiohttp>=3.9
 redis>=5.0
+aiokafka>=0.12

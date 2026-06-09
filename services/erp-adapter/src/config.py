@@ -31,6 +31,10 @@ class Settings(BaseSettings):
     # ── Redis
     redis_url: str = Field(default="redis://redis:6379", alias="REDIS_URL")
 
+    # ── Kafka (real-time tracking event bus)
+    kafka_bootstrap: str = Field(default="", alias="KAFKA_BOOTSTRAP")
+    kafka_topic: str = Field(default="po.status.changed", alias="KAFKA_TOPIC")
+
     # ── Vendor selection — "mock" | "sap" | "oracle" | "sap,oracle"
     erp_vendors_raw: str = Field(default="mock", alias="ERP_VENDORS")
 

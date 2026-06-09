@@ -82,6 +82,19 @@ async def _on_startup(app: web.Application) -> None:
         logger.warning("Redis unavailable (%s) — /readyz will report not-ready", exc)
         app["redis"] = None
 
+    # Kafka producer — best effort (real-time tracking event bus)
+    app["kafka_producer"] = None
+    if settings.kafka_bootstrap:
+        try:
+            from aiokafka import AIOKafkaProducer  # type: ignore
+            producer = AIOKafkaProducer(bootstrap_servers=settings.kafka_bootstrap)
+            await producer.start()
+            app["kafka_producer"] = producer
+            logger.info("Kafka producer connected (%s, topic=%s)",
+                        settings.kafka_bootstrap, settings.kafka_topic)
+        except Exception as exc:
+            logger.warning("Kafka unavailable (%s) — events fall back to Redis only", exc)
+
     # Shared aiohttp session for outbound vendor calls
     app["http"] = ClientSession()
 
@@ -123,6 +136,12 @@ async def _on_cleanup(app: web.Application) -> None:
     redis = app.get("redis")
     if redis is not None:
         await redis.aclose()
+    kafka_producer = app.get("kafka_producer")
+    if kafka_producer is not None:
+        try:
+            await kafka_producer.stop()
+        except Exception:
+            pass
 
 
 def create_app(settings: Settings | None = None) -> web.Application:

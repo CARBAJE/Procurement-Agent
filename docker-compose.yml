@@ -150,16 +150,31 @@ services:
       - BUYER_ADDRESS_STATE=Karnataka
       - BUYER_ADDRESS_AREA_CODE=560100
       - BUYER_ADDRESS_COUNTRY=IND
+      # Kafka (real-time tracking)
+      - KAFKA_BOOTSTRAP=kafka:9092
+      - KAFKA_TOPIC=po.status.changed
+      - KAFKA_GROUP_ID=orchestrator-ws-broker
+      # Seller webhook HMAC secret
+      - SELLER_WEBHOOK_HMAC_SECRET=dev-seller-hmac-CHANGE_ME
     networks:
       - beckn_network
     depends_on:
-      - intention-parser
-      - beckn-bap-client
-      - comparative-scoring
-      - data-normalizer
-      - analytics
-      - erp-adapter
-      - demo-gateway
+      intention-parser:
+        condition: service_started
+      beckn-bap-client:
+        condition: service_started
+      comparative-scoring:
+        condition: service_started
+      data-normalizer:
+        condition: service_started
+      analytics:
+        condition: service_started
+      erp-adapter:
+        condition: service_started
+      demo-gateway:
+        condition: service_started
+      kafka:
+        condition: service_healthy
 
   # ── ERP Adapter (vendor-neutral SAP/Oracle integration) ────────────────────
   erp-adapter:
@@ -192,6 +207,9 @@ services:
       - ORACLE_CLIENT_SECRET=mock-oracle-secret
       - ORACLE_WEBHOOK_HMAC_SECRET=dev-oracle-hmac-CHANGE_ME
       - WORKER_CONCURRENCY=10
+      # Kafka (real-time tracking) — published on inbound webhooks
+      - KAFKA_BOOTSTRAP=kafka:9092
+      - KAFKA_TOPIC=po.status.changed
     networks:
       - beckn_network
     depends_on:
@@ -199,6 +217,8 @@ services:
         condition: service_healthy
       erp-mock:
         condition: service_started
+      kafka:
+        condition: service_healthy
     # Note: requires `procurement-postgres` reachable on the `beckn_network`
     # with the schema already applied. See database/README.md for the
     # one-time manual init step. Falls back to InMemoryOutboxRepo silently
@@ -235,6 +255,71 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
+
+  # ── Kafka — event bus for real-time order tracking (KRaft mode) ────────────
+  # Single broker, no Zookeeper. Topic `po.status.changed` is auto-created.
+  # Producers: orchestrator (/status poll + seller webhook) + erp-adapter.
+  # Consumers: orchestrator (WebSocket broker) + notification-dispatcher.
+  kafka:
+    image: apache/kafka:latest
+    container_name: kafka
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      CLUSTER_ID: 5L6g3nShT-eMCtK--X86sw
+    networks:
+      - beckn_network
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server kafka:9092 >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  # ── Notification Dispatcher — consumes Kafka, fans out to Slack/Teams/Email ─
+  notification-dispatcher:
+    build:
+      context: .
+      dockerfile: ./services/notification-dispatcher/Dockerfile
+    container_name: notification-dispatcher
+    environment:
+      - KAFKA_BOOTSTRAP=kafka:9092
+      - KAFKA_TOPIC=po.status.changed
+      - KAFKA_GROUP_ID=notification-dispatcher
+      # Leave empty to skip that channel. Configure in .env for real delivery.
+      - SLACK_WEBHOOK_URL=${SLACK_WEBHOOK_URL:-}
+      - TEAMS_WEBHOOK_URL=${TEAMS_WEBHOOK_URL:-}
+      - SMTP_HOST=${SMTP_HOST:-}
+      - SMTP_PORT=${SMTP_PORT:-587}
+      - SMTP_USER=${SMTP_USER:-}
+      - SMTP_PASSWORD=${SMTP_PASSWORD:-}
+      - SMTP_FROM=${SMTP_FROM:-noreply@procurement-agent.local}
+      - DB_HOST=host.docker.internal
+      - DB_PORT=5432
+      - DB_NAME=procurement_agent
+      - DB_USER=cristianmontiel
+      - DB_PASSWORD=
+      - PYTHONPATH=/app
+    networks:
+      - beckn_network
+    depends_on:
+      kafka:
+        condition: service_healthy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
   # ── onix-bap — BAP ONIX adapter ────────────────────────────────────────────
   #   Caller  (outbound): http://onix-bap:8081/bap/caller/
@@ -299,6 +384,16 @@ services:
       - BPP_ID=bpp.example.com
       - BPP_URI=http://onix-bpp:8082/bpp/receiver
       - CATALOG_PATH=/app/catalog.json
+      # Auto-advance the Beckn fulfillment lifecycle after /confirm.
+      # Default OFF preserves manual-test workflows (curl webhook, kafka producer).
+      # Set to "true" to demo a realistic BPP that pushes ACCEPTED → PACKED →
+      # SHIPPED → OUT_FOR_DELIVERY → DELIVERED autonomously.
+      - SIM_BPP_AUTO_ADVANCE=${SIM_BPP_AUTO_ADVANCE:-false}
+      - SIM_BPP_ADVANCE_INTERVAL_SECS=${SIM_BPP_ADVANCE_INTERVAL_SECS:-5}
+      # Kafka + data-normalizer endpoints (used only when auto-advance is on)
+      - KAFKA_BOOTSTRAP=kafka:9092
+      - KAFKA_TOPIC=po.status.changed
+      - DATA_NORMALIZER_URL=http://data-normalizer:8006
     ports:
       - "3002:3002"
     volumes:
@@ -311,6 +406,9 @@ services:
       start_period: 10s
     networks:
       - beckn_network
+    depends_on:
+      kafka:
+        condition: service_healthy
 
   # ── PostgreSQL — durable store for the Negotiation Engine ──────────────────
   #   Owns the `negotiation` DB: LangGraph AsyncPostgresSaver checkpoints

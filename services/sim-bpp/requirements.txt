@@ -1,1 +1,2 @@
 aiohttp>=3.9
+aiokafka>=0.12
