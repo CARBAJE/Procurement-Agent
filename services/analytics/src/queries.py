@@ -22,11 +22,13 @@ _BASELINE_HOURS: dict[str, float] = {
 _DEFAULT_BASELINE = 72.0
 
 
-async def fetch_analytics(pool: Any, period: str) -> dict | None:
+async def fetch_analytics(pool: Any, period: str) -> dict:
     """Return live KPIs from PostgreSQL.
 
-    Returns None when the database contains no procurement data,
-    signalling the caller to fall back to mock data.
+    Always returns live data when the DB is reachable — including real zeros and
+    empty series when there are no records yet (an empty DB is a valid state, not
+    a reason to show mock data). Mock is reserved for an UNREACHABLE DB, decided
+    by the caller (main.py: pool is None or the query raises).
     """
     period_days = {"30d": 30, "90d": 90, "180d": 180}[period]
 
@@ -386,9 +388,12 @@ async def fetch_analytics(pool: Any, period: str) -> dict | None:
             for r in req_rows
         ]
 
+    # A reachable-but-empty database is a legitimate "zero records" state, NOT a
+    # reason to fabricate data. Return real zeros / empty series as live data.
+    # Mock is only for an UNREACHABLE DB (handled in main.py: pool is None or the
+    # query raises) — never for an empty one.
     if not recent_requests and total_spend == 0.0:
-        logger.info("DB returned no procurement data — signalling mock fallback")
-        return None
+        logger.info("DB reachable but empty — returning live zeros (no mock fallback)")
 
     savings_pct = round(total_savings / total_spend * 100, 1) if total_spend else 0.0
 

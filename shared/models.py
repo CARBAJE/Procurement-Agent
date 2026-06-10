@@ -90,3 +90,5 @@ class DiscoverOffering(BaseModel):
     rating: Optional[str] = None
     specifications: list[str] = Field(default_factory=list)
     fulfillment_hours: Optional[int] = None
+    # Supplier-declared category (Beckn catalog). None when the BPP omits it.
+    category: Optional[str] = None

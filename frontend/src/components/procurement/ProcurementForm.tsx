@@ -63,6 +63,15 @@ export default function ProcurementForm() {
     setLoading(true)
     try {
       const comparison = await compareOfferings(parseResult.beckn_intent, query)
+      // Honest empty state: discovery ran but no supplier responded. Don't
+      // navigate to an empty comparison — tell the user and let them adjust.
+      if (!comparison.offerings || comparison.offerings.length === 0) {
+        setError(
+          "No suppliers responded for this request. Try adjusting the item, " +
+          "quantity, or delivery window and search again.",
+        )
+        return
+      }
       // Persist intent + comparison under the transaction id. CompareView
       // will overwrite with the user's pick and the commit result.
       saveSession(comparison.transaction_id, {

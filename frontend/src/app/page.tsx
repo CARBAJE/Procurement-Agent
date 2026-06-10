@@ -234,6 +234,11 @@ export default function HomePage() {
       )
     : 0
 
+  // Comparative/achievement figures are only meaningful with real activity. An
+  // empty (but live) DB must not claim "100% faster" or "0% saved" — gate them.
+  const hasSpend = (kpis?.total_spend ?? 0) > 0
+  const hasCycle = (kpis?.avg_cycle_time_hours ?? 0) > 0
+
   // ── Drill-down helpers ────────────────────────────────────────────────────
 
   function openDrill(level: DrillDownLevel) { setDrillStack([level]) }
@@ -377,9 +382,9 @@ export default function HomePage() {
           />
           <KpiCard
             title="Total Savings"
-            value={kpis ? formatINR(kpis.total_savings) : "—"}
-            subtitle={kpis ? `${kpis.savings_percent}% vs market price` : undefined}
-            trend={kpis ? { label: `${kpis.savings_percent}% saved`, positive: true } : undefined}
+            value={hasSpend ? formatINR(kpis!.total_savings) : "—"}
+            subtitle={hasSpend ? `${kpis!.savings_percent}% vs market price` : undefined}
+            trend={hasSpend ? { label: `${kpis!.savings_percent}% saved`, positive: true } : undefined}
             icon={<TrendingUp className="h-4 w-4" />}
             onClick={openSavingsDrillDown}
           />
@@ -399,9 +404,9 @@ export default function HomePage() {
           />
           <KpiCard
             title="Avg Cycle Time"
-            value={kpis ? `${kpis.avg_cycle_time_hours}h` : "—"}
-            subtitle={`vs ${kpis?.baseline_cycle_time_hours ?? 72}h traditional`}
-            trend={kpis ? { label: `${cycleReduction}% faster`, positive: true } : undefined}
+            value={hasCycle ? `${kpis!.avg_cycle_time_hours}h` : "—"}
+            subtitle={hasCycle ? `vs ${kpis!.baseline_cycle_time_hours}h traditional` : "No completed requests yet"}
+            trend={hasCycle ? { label: `${cycleReduction}% faster`, positive: true } : undefined}
             icon={<BarChart2 className="h-4 w-4" />}
             onClick={openCycleDrillDown}
           />

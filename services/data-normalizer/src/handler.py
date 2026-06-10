@@ -14,6 +14,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import uuid as _uuid
 
 from aiohttp import web
 
@@ -62,6 +63,7 @@ async def normalize_request(request: web.Request) -> web.Response:
         raw_input_text=raw,
         channel=body.get("channel", "web"),
         requester_id=body.get("requester_id"),
+        actor=body.get("actor"),
     )
     return web.json_response(result, status=201)
 
@@ -166,8 +168,28 @@ async def normalize_order(request: web.Request) -> web.Response:
         unit=body.get("unit", "units"),
         network_id=body.get("network_id", "beckn-default"),
         requester_id=body.get("requester_id"),
+        fulfillment_eta=body.get("fulfillment_eta"),
     )
     return web.json_response(result, status=201)
+
+
+# ── GET /order/{request_id} ─────────────────────────────────────────────────────
+
+async def get_order(request: web.Request) -> web.Response:
+    """GET /order/{request_id}
+    Returns the full order detail DTO {request, intent, order} reconstructed
+    from the DB. 404 when request_id is unknown; 200 with order=null when the
+    request exists but no purchase_order was persisted.
+    """
+    request_id = request.match_info["request_id"]
+    try:
+        _uuid.UUID(request_id)
+    except (ValueError, AttributeError, TypeError):
+        raise web.HTTPNotFound(reason="request_id is not a valid UUID")
+    detail = await _normalizer.get_order_detail(request_id)
+    if detail is None:
+        raise web.HTTPNotFound(reason="No order found for that request_id")
+    return web.json_response(detail)
 
 
 # ── /normalize/audit ──────────────────────────────────────────────────────────
@@ -252,6 +274,7 @@ async def normalize_status(request: web.Request) -> web.Response:
     result = await _normalizer.update_status(
         request_id=body["request_id"],
         status=body["status"],
+        category=body.get("category"),
     )
     return web.json_response(result)
 
@@ -270,6 +293,7 @@ def create_app() -> web.Application:
     app.router.add_post("/normalize/discovery", normalize_discovery)
     app.router.add_post("/normalize/scoring",   normalize_scoring)
     app.router.add_post("/normalize/order",     normalize_order)
+    app.router.add_get("/order/{request_id}",   get_order)
     app.router.add_post("/normalize/audit",     normalize_audit)
     app.router.add_route("PATCH", "/normalize/status",    normalize_status)
     app.router.add_route("PATCH", "/normalize/po_status", normalize_po_status)

@@ -6,6 +6,7 @@ import type {
   BenchmarkReport,
   CommitResult,
   ComparisonResult,
+  OrderDetail,
   ParseResult,
   StatusSnapshot,
 } from "@/lib/types"
@@ -75,6 +76,15 @@ export async function getOrderStatus(
   const suffix = params.toString() ? `?${params.toString()}` : ""
   const { data } = await axios.get<StatusSnapshot>(
     `/api/procurement/status/${encodeURIComponent(transactionId)}/${encodeURIComponent(orderId)}${suffix}`,
+  )
+  return data
+}
+
+// ── /order/{id} — DB-backed order detail (view past orders, no session) ─────
+
+export async function getOrderDetail(id: string): Promise<OrderDetail> {
+  const { data } = await axios.get<OrderDetail>(
+    `/api/procurement/order/${encodeURIComponent(id)}`,
   )
   return data
 }

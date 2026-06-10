@@ -68,16 +68,32 @@ async def create_request(
         return str(row["request_id"])
 
 
-async def update_status(request_id: str, status: str) -> None:
-    """UPDATE procurement_requests.status lifecycle column."""
+async def update_status(request_id: str, status: str, category: str | None = None) -> None:
+    """UPDATE procurement_requests.status lifecycle column.
+
+    When `category` is provided, also set the (supplier-declared) category —
+    used once discovery resolves the offering category for the request.
+    """
     pool = await get_pool()
     async with pool.acquire() as conn:
-        await conn.execute(
-            """
-            UPDATE procurement_requests
-            SET status = $1::procurement_status, updated_at = NOW()
-            WHERE request_id = $2
-            """,
-            status,
-            _uuid.UUID(request_id),
-        )
+        if category:
+            await conn.execute(
+                """
+                UPDATE procurement_requests
+                SET status = $1::procurement_status, category = $2, updated_at = NOW()
+                WHERE request_id = $3
+                """,
+                status,
+                category,
+                _uuid.UUID(request_id),
+            )
+        else:
+            await conn.execute(
+                """
+                UPDATE procurement_requests
+                SET status = $1::procurement_status, updated_at = NOW()
+                WHERE request_id = $2
+                """,
+                status,
+                _uuid.UUID(request_id),
+            )

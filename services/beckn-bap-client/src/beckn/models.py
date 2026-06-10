@@ -96,6 +96,7 @@ class DiscoverOffering(BaseModel):
     rating: Optional[str] = None
     specifications: list[str] = Field(default_factory=list)
     fulfillment_hours: Optional[int] = None      # delivery lead time in hours
+    category: Optional[str] = None               # supplier-declared category
 
 
 class DiscoverResponse(BaseModel):

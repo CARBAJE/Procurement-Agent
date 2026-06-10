@@ -81,11 +81,12 @@ services:
       - ./DataNormalizer:/app/DataNormalizer   # repo module mounted at runtime
       - ./shared:/app/shared                   # shared models
     environment:
-      - DB_HOST=host.docker.internal
-      - DB_PORT=5432
-      - DB_NAME=procurement_agent
-      - DB_USER=cristianmontiel
-      - DB_PASSWORD=
+      # PostgreSQL — single source of truth: root .env (see .env.example)
+      - DB_HOST=${DB_HOST:-host.docker.internal}
+      - DB_PORT=${DB_PORT:-5432}
+      - DB_NAME=${DB_NAME:-procurement_agent}
+      - DB_USER=${DB_USER:-postgres}
+      - DB_PASSWORD=${DB_PASSWORD:-postgres123}
       - PYTHONPATH=/app
     networks:
       - beckn_network
@@ -97,12 +98,13 @@ services:
     ports:
       - "8009:8009"
     environment:
-      # PostgreSQL — uses real data when available, mock otherwise
-      - DB_HOST=procurement-postgres
-      - DB_PORT=5432
-      - DB_NAME=procurement_agent
-      - DB_USER=postgres
-      - DB_PASSWORD=postgres123
+      # PostgreSQL — single source of truth: root .env (see .env.example).
+      # Uses real data when available, mock otherwise.
+      - DB_HOST=${DB_HOST:-host.docker.internal}
+      - DB_PORT=${DB_PORT:-5432}
+      - DB_NAME=${DB_NAME:-procurement_agent}
+      - DB_USER=${DB_USER:-postgres}
+      - DB_PASSWORD=${DB_PASSWORD:-postgres123}
     networks:
       - beckn_network
     # Note: requires an external `procurement-postgres` container attached to
@@ -156,11 +158,13 @@ services:
     ports:
       - "8007:8007"
     environment:
-      - DB_HOST=procurement-postgres
-      - DB_PORT=5432
-      - DB_NAME=procurement_agent
-      - DB_USER=postgres
-      - DB_PASSWORD=postgres123
+      # PostgreSQL — single source of truth: root .env (see .env.example).
+      # Falls back to InMemoryOutboxRepo silently if the DB is unreachable.
+      - DB_HOST=${DB_HOST:-host.docker.internal}
+      - DB_PORT=${DB_PORT:-5432}
+      - DB_NAME=${DB_NAME:-procurement_agent}
+      - DB_USER=${DB_USER:-postgres}
+      - DB_PASSWORD=${DB_PASSWORD:-postgres123}
       - REDIS_URL=redis://redis:6379
       - ERP_VENDORS=mock                       # override to sap | oracle | sap,oracle
       - ERP_INTERNAL_TOKEN=dev-internal-token-CHANGE_ME

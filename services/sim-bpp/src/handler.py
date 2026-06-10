@@ -108,9 +108,15 @@ def _wire_resource(item: dict, provider: dict) -> dict:
     provider + rating — that is what the BAP catalog-normalizer reads from the
     BECKN_V2_FLAT_RESOURCES shape (resource.provider / resource.rating).
     """
+    # Supplier-declared category rides on descriptor.code — a standard Beckn v2
+    # Descriptor field that onix preserves (unlike a custom resource field or a
+    # 'category' tag, both of which onix strips during schema validation).
+    descriptor = dict(item.get("descriptor", {}))
+    if item.get("category"):
+        descriptor["code"] = item["category"]
     res: dict = {
         "id": item["id"],
-        "descriptor": item.get("descriptor", {}),
+        "descriptor": descriptor,
         "provider": {"id": provider["id"], "descriptor": provider.get("descriptor", {})},
         "price": item.get("price", {}),
     }
@@ -122,7 +128,9 @@ def _wire_resource(item: dict, provider: dict) -> dict:
     # Stock → Beckn v2 quantity.available.count
     if item.get("stock") is not None:
         res["quantity"] = {"available": {"count": item["stock"]}}
-    # Specs → Beckn v2 tags[] (each spec becomes a tag value)
+    # Specs → Beckn v2 tags[] (each spec becomes a tag value). Category travels
+    # as a tag too: onix strips non-schema resource fields, but tags pass
+    # through — and a real Beckn catalog carries the category on the item.
     specs = item.get("specs") or []
     if specs:
         res["tags"] = [{"descriptor": {"name": "specification"}, "value": s} for s in specs]

@@ -239,7 +239,7 @@ export default function ComparisonTable({
                         aria-controls={`specs-${o.item_id}`}
                       >
                         {specsOpen ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
-                        {specs.length} {specs.length === 1 ? "spec" : "specs"}
+                        {specs.length}
                       </button>
                     ) : (
                       <span className="text-xs text-muted-foreground">—</span>

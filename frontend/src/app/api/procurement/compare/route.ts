@@ -8,9 +8,17 @@ export async function POST(req: NextRequest) {
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
   const body = await req.json()
+  // Attach the authenticated Keycloak identity so the backend can JIT-provision
+  // the user and attribute the request to them (not the System Agent).
+  const actor = {
+    keycloak_id: session.user.id,
+    email:       session.user.email,
+    name:        session.user.name,
+    role:        session.user.role,
+  }
   const bapUrl = process.env.BAP_URL ?? "http://localhost:8000"
   try {
-    const { data } = await axios.post(`${bapUrl}/compare`, body)
+    const { data } = await axios.post(`${bapUrl}/compare`, { ...body, actor })
     return NextResponse.json(data)
   } catch (err) {
     console.error("[compare proxy] BAP error:", err)

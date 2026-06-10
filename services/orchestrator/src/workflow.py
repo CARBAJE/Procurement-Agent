@@ -27,7 +27,7 @@ import os
 import sys
 import time
 from decimal import Decimal
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 import aiohttp
@@ -480,20 +480,31 @@ async def _persist(session: aiohttp.ClientSession, path: str, body: dict) -> dic
     return {}
 
 
-async def _persist_status(session: aiohttp.ClientSession, request_id: str, status: str) -> None:
+async def _persist_status(
+    session: aiohttp.ClientSession,
+    request_id: str,
+    status: str,
+    category: str | None = None,
+) -> None:
     """PATCH /normalize/status — fire-and-forget update of procurement lifecycle.
 
     Used during the happy path (parsing → discovering → scoring → negotiating →
     confirmed). Silent on failure so an audit hiccup never derails the live
     user-facing flow. For user-triggered status changes (cancel), use
     _patch_status_strict instead so failures bubble up.
+
+    `category` (optional) sets the supplier-declared category on the request —
+    passed once discovery/scoring resolves the chosen offering's category.
     """
     if not DATA_NORMALIZER_URL or not request_id:
         return
+    body: dict = {"request_id": request_id, "status": status}
+    if category:
+        body["category"] = category
     try:
         async with session.patch(
             f"{DATA_NORMALIZER_URL}/normalize/status",
-            json={"request_id": request_id, "status": status},
+            json=body,
             timeout=aiohttp.ClientTimeout(total=5),
         ) as resp:
             if resp.status >= 400:
@@ -1074,6 +1085,10 @@ async def compare(request: web.Request) -> web.Response:
     # raw_input_text audit column. Pop it before forwarding to /discover so it
     # doesn't leak into the Beckn payload.
     raw_query = (body.pop("raw_query", None) or "").strip()
+    # Authenticated Keycloak identity injected by the frontend proxy. Popped
+    # before the body is forwarded to /discover so it never leaks into the
+    # Beckn payload nor the stored BecknIntent.
+    actor = body.pop("actor", None)
 
     if not body.get("item"):
         raise web.HTTPBadRequest(reason="item is required in BecknIntent body")
@@ -1081,6 +1096,7 @@ async def compare(request: web.Request) -> web.Response:
     # Declared outside the try so the except can mark the row as cancelled
     # when discover/score fails mid-flow (avoids orphan draft rows).
     request_id = ""
+    requester_id: str | None = None
 
     try:
         async with aiohttp.ClientSession(
@@ -1096,8 +1112,10 @@ async def compare(request: web.Request) -> web.Response:
             nr = await _persist(session, "/normalize/request", {
                 "raw_input_text": raw_query or body.get("item", "compare-request"),
                 "channel": "web",
+                "actor": actor,
             })
             request_id = nr.get("request_id", "")
+            requester_id = nr.get("requester_id")
             if request_id:
                 await _persist_audit(
                     session, "normalize", "request_created",
@@ -1129,7 +1147,25 @@ async def compare(request: web.Request) -> web.Response:
             offerings: list[dict] = discover_result.get("offerings", [])
 
             if not offerings:
-                raise ValueError("No offerings returned from discovery")
+                # Honest "no suppliers found" — a valid empty result, NOT an
+                # error and never mock. The frontend shows an empty state.
+                if request_id:
+                    await _persist_audit(
+                        session, "discover", "no_offerings_found",
+                        reasoning_payload={"item": body.get("item")},
+                        request_id=request_id,
+                    )
+                    await _persist_status(session, request_id, "cancelled")
+                return web.json_response({
+                    "transaction_id":      transaction_id,
+                    "request_id":          request_id,
+                    "offerings":           [],
+                    "recommended_item_id": None,
+                    "scoring":             {"recommended_item_id": None, "criteria": [], "ranking": []},
+                    "reasoning_steps":     [],
+                    "messages":            ["No offerings returned from the supplier network"],
+                    "status":              "live",
+                })
 
             # ── Persist discovery, then advance status to 'scoring' BEFORE
             # the external score call ────────────────────────────────────────
@@ -1302,7 +1338,15 @@ async def compare(request: web.Request) -> web.Response:
                     },
                     request_id=request_id,
                 )
-                await _persist_status(session, request_id, "negotiating")
+                # Persist the supplier-declared category of the chosen offering
+                # (Beckn catalog) onto the request, alongside the status bump.
+                recommended_category = (
+                    (selected or {}).get("category")
+                    or (offerings[0].get("category") if offerings else None)
+                )
+                await _persist_status(
+                    session, request_id, "negotiating", category=recommended_category
+                )
 
             _session_put(transaction_id, {
                 "transaction_id":  transaction_id,
@@ -1310,6 +1354,7 @@ async def compare(request: web.Request) -> web.Response:
                 "selected":        selected,
                 "intent":          body,
                 "request_id":      request_id,
+                "requester_id":    requester_id,
                 "beckn_intent_id": beckn_intent_id,
                 "query_id":        query_id,
                 "offering_ids_map": offering_ids_map,
@@ -1340,8 +1385,12 @@ async def compare(request: web.Request) -> web.Response:
                     await _persist_status(cleanup_session, request_id, "cancelled")
             except Exception:
                 pass
-        logger.warning("compare live path failed (%s) — returning mock", exc)
-        return _mock_compare_response()
+        logger.error("compare live path failed (%s) — returning error (no mock)", exc)
+        return web.json_response(
+            {"error": "Supplier network unavailable",
+             "detail": "Could not reach the Beckn supplier network. Please try again."},
+            status=502,
+        )
 
 
 def _mock_compare_response() -> web.Response:
@@ -1520,6 +1569,18 @@ async def commit(request: web.Request) -> web.Response:
             chosen_offering_id = state_offering_ids_map.get(chosen_item_id, "")
             chosen_score_id = state_score_ids_map.get(chosen_offering_id, "")
             committed_request_id = state.get("request_id", "")
+            # Absolute delivery ETA = confirm time + the chosen offering's
+            # fulfillment_hours. Persisted so the order page can show a real ETA
+            # later (the live commit response leaves fulfillment_eta None).
+            order_fulfillment_eta: str | None = None
+            chosen_hours = chosen.get("fulfillment_hours")
+            if chosen_hours is not None:
+                try:
+                    order_fulfillment_eta = (
+                        datetime.now(timezone.utc) + timedelta(hours=int(chosen_hours))
+                    ).isoformat()
+                except (TypeError, ValueError):
+                    order_fulfillment_eta = None
             if chosen_score_id:
                 await _persist(session, "/normalize/order", {
                     "score_id":          chosen_score_id,
@@ -1530,6 +1591,8 @@ async def commit(request: web.Request) -> web.Response:
                     "beckn_confirm_ref": order_id,
                     "delivery_terms":    "Standard delivery",
                     "currency":          chosen.get("price_currency", "INR"),
+                    "fulfillment_eta":   order_fulfillment_eta,
+                    "requester_id":      state.get("requester_id"),
                 })
                 await _persist_audit(
                     session, "confirm", f"order_confirmed: {order_id}",
@@ -1866,6 +1929,30 @@ async def analytics(request: web.Request) -> web.Response:
         raise web.HTTPServiceUnavailable(reason="Analytics service unavailable")
 
 
+async def order_detail(request: web.Request) -> web.Response:
+    """GET /order/{request_id} — proxy to data-normalizer's order read endpoint.
+
+    Lets the frontend render an order whose browser session is gone (e.g. opened
+    from the dashboard). Passes through 404 for an unknown request_id.
+    """
+    request_id = request.match_info["request_id"]
+    if not DATA_NORMALIZER_URL:
+        raise web.HTTPServiceUnavailable(reason="Persistence service not configured")
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(
+                f"{DATA_NORMALIZER_URL}/order/{request_id}",
+                timeout=aiohttp.ClientTimeout(total=10),
+            ) as resp:
+                if resp.status == 404:
+                    return web.json_response({"found": False}, status=404)
+                body = await resp.json()
+                return web.json_response(body, status=resp.status)
+    except aiohttp.ClientError as exc:
+        logger.warning("Data-normalizer unreachable for order %s: %s", request_id, exc)
+        raise web.HTTPServiceUnavailable(reason="Persistence service unavailable")
+
+
 async def run(request: web.Request) -> web.Response:
     """POST /run  { "query": "..." } — execute full procurement pipeline."""
     try:
@@ -2033,6 +2120,7 @@ def create_app() -> web.Application:
     app.router.add_post("/commit",                         commit)
     app.router.add_route("PATCH", "/cancel",               cancel)
     app.router.add_get("/status/{txn_id}/{order_id}",      order_status)
+    app.router.add_get("/order/{request_id}",              order_detail)
     return app
 
 
