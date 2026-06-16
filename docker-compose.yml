@@ -9,12 +9,13 @@ services:
       - ./IntentParser:/app/IntentParser    # repo module mounted at runtime
       - ./shared:/app/shared                # shared models
     environment:
+      # Host Ollama (GPU). Reachable now that UFW allows docker bridges → :11434.
       - OLLAMA_URL=http://host.docker.internal:11434/v1
       - COMPLEX_MODEL=qwen3:1.7b
       - SIMPLE_MODEL=qwen3:1.7b
       - PYTHONPATH=/app
     extra_hosts:
-      - "host.docker.internal:host-gateway"   # Linux: resolver Ollama del host
+      - "host.docker.internal:host-gateway"   # Linux: resolve host Ollama
     networks:
       - beckn_network
 
@@ -52,11 +53,12 @@ services:
       - ./CatalogNormalizer:/app/CatalogNormalizer   # repo module mounted at runtime
       - ./shared:/app/shared                          # shared models
     environment:
+      # Host Ollama (GPU). Reachable now that UFW allows docker bridges → :11434.
       - OLLAMA_URL=http://host.docker.internal:11434/v1
       - NORMALIZER_MODEL=qwen3:1.7b
       - PYTHONPATH=/app
     extra_hosts:
-      - "host.docker.internal:host-gateway"   # Linux: resolver Ollama del host
+      - "host.docker.internal:host-gateway"   # Linux: resolve host Ollama
     networks:
       - beckn_network
 
@@ -296,6 +298,117 @@ services:
       start_period: 10s
     networks:
       - beckn_network
+
+  # ── PostgreSQL — durable store for the Negotiation Engine ──────────────────
+  #   Owns the `negotiation` DB: LangGraph AsyncPostgresSaver checkpoints
+  #   (created by the engine at startup) + the negotiation_session/round/
+  #   policy_decision audit tables (seeded from the mounted init scripts).
+  #   NOTE: the procurement-pipeline services (data-normalizer, analytics,
+  #   erp-adapter) point at an EXTERNAL `procurement_agent` DB via
+  #   host.docker.internal:5432 and fall back to mock — they do not use this.
+  postgres:
+    image: postgres:16
+    container_name: postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: negotiation
+    ports:
+      - "55432:5432"
+    volumes:
+      - ./database/sql/20_negotiation_schema.sql:/docker-entrypoint-initdb.d/01_negotiation_schema.sql:ro
+      - ./database/seed_negotiation_demo.sql:/docker-entrypoint-initdb.d/02_seed_negotiation_demo.sql:ro
+    networks:
+      - beckn_network
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres", "-d", "negotiation"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # ── Negotiation Engine (Phase 3 buyer agent) ───────────────────────────────
+  #   LangGraph state machine: deterministic strategy + hard 20% guardrail,
+  #   durable AsyncPostgresSaver checkpointer, Redis Pub/Sub resume broker
+  #   (beckn_on_select_results). Env var names mirror src/config.py aliases.
+  negotiation-engine:
+    build:
+      context: ./services/negotiation_engine
+      dockerfile: Dockerfile
+    container_name: negotiation-engine
+    restart: unless-stopped
+    ports:
+      # Host :8004 is owned by the orchestrator (frontend procurement flow).
+      # The engine is reached INTERNALLY by the demo-gateway via the docker
+      # DNS name `negotiation-engine:8004`, so it needs no privileged host
+      # port — expose 18004 for direct host-side debugging only.
+      - "18004:8004"
+    environment:
+      NEGOTIATION_POSTGRES_DSN: postgresql://postgres:postgres@postgres:5432/negotiation
+      REDIS_URL: redis://redis:6379/0
+      NEGOTIATION_REDIS_ON_SELECT_CHANNEL: beckn_on_select_results
+      NEGOTIATION_API_PORT: "8004"
+      NEGOTIATION_LOG_LEVEL: INFO
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - beckn_network
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8004/readyz"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 25s
+
+  # ── Demo Gateway (hosts the qwen3:8b Supplier Agent) ───────────────────────
+  #   Proxies negotiation kickoff/poll to the engine and drives the LLM
+  #   supplier counter-party (in-process), publishing its replies to Redis to
+  #   resume the parked buyer graph.
+  #
+  #   network_mode: host — REQUIRED on this machine: nftables drops ALL
+  #   docker-bridge → host traffic, so a bridged container cannot reach the
+  #   host Ollama (127.0.0.1:11434). Sharing the host netns lets the gateway
+  #   reach Ollama on localhost directly, with NO firewall/Ollama change and
+  #   WITHOUT putting Ollama in compose. Consequence of host netns: no port
+  #   mapping (binds host :8015 via the command override below), and engine/
+  #   redis are reached via their published host ports, not docker DNS.
+  demo-gateway:
+    build:
+      context: .
+      dockerfile: ./services/frontend_demo_gateway/Dockerfile
+    container_name: demo-gateway
+    restart: unless-stopped
+    network_mode: host
+    command:
+      - uvicorn
+      - services.frontend_demo_gateway.main:app
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8015"
+    environment:
+      NEGOTIATION_ENGINE_URL: http://localhost:18004
+      REDIS_URL: redis://localhost:6379/0
+      REDIS_ON_SELECT_CHANNEL: beckn_on_select_results
+      OLLAMA_BASE_URL: http://localhost:11434/v1
+      OLLAMA_API_KEY: ollama
+      SUPPLIER_MODEL: qwen3:8b
+      SUPPLIER_ACCEPTABLE_DISCOUNT_FLOOR: "0.10"
+      SUPPLIER_MAX_ROUNDS: "3"
+    depends_on:
+      negotiation-engine:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8015/readyz"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 25s
 
 networks:
   beckn_network:
