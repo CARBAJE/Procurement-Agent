@@ -4,6 +4,11 @@
 # the actual installed versions. Pip resolution should be a no-op if
 # the env is healthy.
 
+# Web server (host conda env provided these implicitly; the container needs
+# them explicitly so `uvicorn src.main:app` in the Dockerfile can start).
+fastapi>=0.110
+uvicorn[standard]>=0.27
+
 # Core LangGraph + LangChain stack.
 langgraph>=0.2.0
 langchain-openai>=0.2.0

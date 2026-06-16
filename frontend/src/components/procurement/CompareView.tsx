@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import { ArrowLeft, Send, AlertCircle, Hash, Info, Loader2 } from "lucide-react"
+import { ArrowLeft, Send, AlertCircle, Hash, Info, Loader2, Handshake } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -100,6 +100,29 @@ export default function CompareView({ txnId }: CompareViewProps) {
     } else {
       setDialogOpen(true)
     }
+  }
+
+  // Step into the negotiation flow with the selected supplier's quoted terms.
+  function goNegotiate() {
+    const offer = comparison?.offerings.find((o) => o.item_id === selectedId)
+    if (!offer) return
+    const listPrice = parseFloat(offer.price_value)
+    const hours = offer.fulfillment_hours ?? intent?.delivery_timeline ?? 336
+    const deliveryDate = new Date(Date.now() + hours * 3_600_000)
+      .toISOString()
+      .slice(0, 10)
+    const qty = intent?.quantity ?? offer.available_quantity ?? 1
+    const params = new URLSearchParams({
+      supplier_id: offer.provider_id,
+      item_id: offer.item_id,
+      original_price: String(Number.isFinite(listPrice) ? listPrice : 0),
+      delivery_date: deliveryDate,
+      item: offer.item_name,
+      quantity: String(qty),
+    })
+    router.push(
+      `/request/${encodeURIComponent(txnId)}/negotiate?${params.toString()}`,
+    )
   }
 
   // ── Loading skeleton ──────────────────────────────────────────────────────
@@ -213,6 +236,14 @@ export default function CompareView({ txnId }: CompareViewProps) {
               Non-recommended choice — you will be asked to confirm
             </span>
           )}
+          <Button
+            variant="outline"
+            disabled={!selectedId || submitting}
+            onClick={goNegotiate}
+          >
+            <Handshake className="mr-2 h-4 w-4" aria-hidden="true" />
+            Negotiate Terms
+          </Button>
           <Button
             disabled={!selectedId || submitting}
             onClick={onProceed}

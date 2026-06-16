@@ -123,47 +123,97 @@ export interface DemoScoreResponse {
   pipeline: string
 }
 
-export interface DemoNegotiateOffer {
-  provider_id: string
-  item_id: string
-  price: number
-  currency?: string
-  delivery_hours: number
-  quantity: number
-  score?: number
-}
-
+/** Demo kickoff payload — buyer's deal parameters for the negotiation. */
 export interface DemoNegotiateRequest {
-  transaction_id?: string
+  supplier_id?: string
+  supplier_name?: string
+  item: string
+  quantity: number
+  target_price: number
+  list_price?: number
+  delivery_hours?: number
+  /** Buyer's desired delivery date (ISO yyyy-mm-dd). */
+  requested_delivery_date?: string
   category?: string
-  ranked_offers: DemoNegotiateOffer[]
-  policy?: Record<string, unknown>
   max_rounds?: number
-  simulated_outcome?: "accepted" | "counter" | "escalate"
-  callback_delay_s?: number
 }
 
+/** A drafted counter-offer the buyer (LangGraph) parks on. */
+export interface BuyerCounterOffer {
+  target_price: number
+  target_delivery_hours?: number
+  target_quantity?: number
+  discount_pct: number
+  rationale?: string
+}
+
+/** 202 result from kicking off a negotiation against the live engine. */
 export interface DemoNegotiateAccepted {
   thread_id: string
   status: string
   paused_at: string | null
-  interrupt: Record<string, unknown> | null
-  final_outcome: string | null
-  callback_delay_s: number
-  simulated_outcome: string
+  buyer_counter_offer: BuyerCounterOffer | null
+  list_price: number
+  target_price: number
+  requested_delivery_date: string
+  max_rounds: number
 }
 
+/** One full negotiation round — both the buyer's message and the supplier's reply. */
+export interface NegotiationHistoryTurn {
+  round_no: number
+  // Buyer side (full message)
+  buyer_price_offer: number
+  buyer_delivery_offer: string
+  buyer_quantity: number
+  buyer_justification: string
+  // Supplier side (qwen3:8b)
+  supplier_action: "accept" | "counter" | "reject"
+  supplier_price: number | null
+  proposed_delivery_date: string | null
+  supplier_message: string
+  source: "llm" | "fallback"
+  resume_status: "accepted" | "counter"
+}
+
+/** Snapshot merging the buyer graph state + gateway session. */
 export interface DemoNegotiateSnapshot {
   thread_id: string
-  next: string[]
-  final_outcome: string | null
-  awaiting_on_select: boolean | null
-  current_target: Record<string, unknown> | null
-  current_counter_offer: Record<string, unknown> | null
-  last_on_select_payload: Record<string, unknown> | null
   negotiation_round: number
-  audit_event_count: number
-  resumed: boolean
+  rounds_elapsed: number
+  max_rounds: number
+  awaiting_supplier: boolean
+  final_outcome: string | null
+  buyer_counter_offer: BuyerCounterOffer | null
+  list_price: number
+  target_price: number
+  requested_delivery_date: string
+  agreed_delivery_date: string | null
+  item: string
+  history: NegotiationHistoryTurn[]
+}
+
+/** The qwen3:8b supplier's reply to the buyer's current counter-offer. */
+export interface SupplierTurn {
+  action: "accept" | "counter" | "reject"
+  counter_price: number | null
+  proposed_delivery_date: string | null
+  message: string
+  model: string
+  source: "llm" | "fallback"
+}
+
+/** Result of asking the supplier agent to respond this round. */
+export interface SupplierRespondResult {
+  done: boolean
+  round_no?: number
+  buyer_ask?: number
+  supplier?: SupplierTurn
+  agreed_price?: number | null
+  agreed_delivery_date?: string | null
+  resume_status?: "accepted" | "counter"
+  model?: string
+  final_outcome?: string
 }
 
 /** Run the real Phase-2 LTR ranker against a list of candidate suppliers. */
@@ -178,7 +228,7 @@ export async function scoreSuppliers(
   return data
 }
 
-/** Kick off a real LangGraph negotiation session; returns 202 + thread_id. */
+/** Kick off a real LangGraph negotiation against the live engine (202). */
 export async function kickoffNegotiation(
   payload: DemoNegotiateRequest,
 ): Promise<DemoNegotiateAccepted> {
@@ -189,12 +239,22 @@ export async function kickoffNegotiation(
   return data
 }
 
-/** Poll the LangGraph state for a running negotiation. */
+/** Poll the buyer-graph + session state for a running negotiation. */
 export async function pollNegotiation(
   threadId: string,
 ): Promise<DemoNegotiateSnapshot> {
   const { data } = await axios.get<DemoNegotiateSnapshot>(
     `/api/demo/negotiate/${encodeURIComponent(threadId)}`,
+  )
+  return data
+}
+
+/** Ask the qwen3:8b supplier agent to respond to the buyer's current offer. */
+export async function supplierRespond(
+  threadId: string,
+): Promise<SupplierRespondResult> {
+  const { data } = await axios.post<SupplierRespondResult>(
+    `/api/demo/negotiate/${encodeURIComponent(threadId)}/supplier-respond`,
   )
   return data
 }
