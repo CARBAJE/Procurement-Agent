@@ -16,7 +16,7 @@ import type { Offering } from "@/lib/types"
 
 // ── Sort ────────────────────────────────────────────────────────────────────
 
-type SortKey = "provider_name" | "price_value" | "rating" | "available_quantity"
+type SortKey = "provider_name" | "price_value" | "rating" | "available_quantity" | "fulfillment_hours"
 type SortDir = "asc" | "desc"
 
 function compare(a: Offering, b: Offering, key: SortKey, dir: SortDir): number {
@@ -41,6 +41,7 @@ function getSortable(o: Offering, key: SortKey): string | number | null {
     case "price_value":        return parseFloat(o.price_value)
     case "rating":             return o.rating ? parseFloat(o.rating) : null
     case "available_quantity": return o.available_quantity ?? null
+    case "fulfillment_hours":  return o.fulfillment_hours ?? null
   }
 }
 
@@ -48,6 +49,12 @@ function formatStock(q?: number | null): string {
   if (q == null) return "—"
   if (q >= 1000) return `${(q / 1000).toFixed(q % 1000 === 0 ? 0 : 1)}k`
   return q.toString()
+}
+
+function formatDelivery(h?: number | null): string {
+  if (h == null) return "—"
+  if (h < 24) return `${h}h`
+  return `${Math.round(h / 24)}d`
 }
 
 // ── Header cell ─────────────────────────────────────────────────────────────
@@ -159,11 +166,12 @@ export default function ComparisonTable({
         <TableHeader>
           <TableRow>
             <TableHead className="w-[5%]" aria-hidden="true" />
-            <SortableHeader label="Provider" sortKey="provider_name" currentKey={sortKey} currentDir={sortDir} onSort={onSort} className="w-[33%]" />
-            <SortableHeader label="Price"    sortKey="price_value"   currentKey={sortKey} currentDir={sortDir} onSort={onSort} className="w-[15%] text-right" />
-            <SortableHeader label="Rating"   sortKey="rating"        currentKey={sortKey} currentDir={sortDir} onSort={onSort} className="w-[12%]" />
-            <SortableHeader label="Stock"    sortKey="available_quantity" currentKey={sortKey} currentDir={sortDir} onSort={onSort} className="w-[12%]" />
-            <TableHead className="w-[13%]">Specs</TableHead>
+            <SortableHeader label="Provider" sortKey="provider_name" currentKey={sortKey} currentDir={sortDir} onSort={onSort} className="w-[28%]" />
+            <SortableHeader label="Price"    sortKey="price_value"   currentKey={sortKey} currentDir={sortDir} onSort={onSort} className="w-[13%] text-right" />
+            <SortableHeader label="Rating"   sortKey="rating"        currentKey={sortKey} currentDir={sortDir} onSort={onSort} className="w-[11%]" />
+            <SortableHeader label="Stock"    sortKey="available_quantity" currentKey={sortKey} currentDir={sortDir} onSort={onSort} className="w-[10%]" />
+            <SortableHeader label="Delivery" sortKey="fulfillment_hours"  currentKey={sortKey} currentDir={sortDir} onSort={onSort} className="w-[11%]" />
+            <TableHead className="w-[12%]">Specs</TableHead>
             <TableHead className="w-[10%] text-right">Action</TableHead>
           </TableRow>
         </TableHeader>
@@ -230,6 +238,9 @@ export default function ComparisonTable({
                     <span className="text-sm tabular-nums">{formatStock(o.available_quantity)}</span>
                   </TableCell>
                   <TableCell>
+                    <span className="text-sm tabular-nums">{formatDelivery(o.fulfillment_hours)}</span>
+                  </TableCell>
+                  <TableCell>
                     {specs.length > 0 ? (
                       <button
                         type="button"
@@ -258,7 +269,7 @@ export default function ComparisonTable({
                 {specsOpen && specs.length > 0 && (
                   <TableRow key={`${o.item_id}-specs`} className="bg-muted/30 hover:bg-muted/30">
                     <TableCell />
-                    <TableCell colSpan={6} id={`specs-${o.item_id}`}>
+                    <TableCell colSpan={7} id={`specs-${o.item_id}`}>
                       <div className="flex flex-wrap gap-1.5 py-1">
                         {specs.map((s) => (
                           <Badge key={s} variant="outline" className="text-xs font-normal">

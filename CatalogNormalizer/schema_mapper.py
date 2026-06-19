@@ -44,6 +44,18 @@ class SchemaMapper:
                 rating = str(rating_obj.get("ratingValue", "")) or None
             else:
                 rating = str(rating_obj) if rating_obj is not None else None
+            # Split the delivery-lead-time tag out of the spec tags (it is
+            # carried as a tag to survive onix; see sim-bpp _wire_resource).
+            fulfillment_hours: int | None = None
+            spec_tags: list = []
+            for t in resource.get("tags", []):
+                if (t.get("descriptor") or {}).get("name") == "fulfillment_hours":
+                    try:
+                        fulfillment_hours = int(float(t.get("value")))
+                    except (TypeError, ValueError):
+                        pass
+                else:
+                    spec_tags.append(t)
             offerings.append(
                 DiscoverOffering(
                     bpp_id=bpp_id,
@@ -56,7 +68,7 @@ class SchemaMapper:
                     price_currency=price.get("currency", "INR"),
                     rating=rating,
                     available_quantity=_available_count(resource),
-                    specifications=_tags_to_specs(resource.get("tags", [])),
+                    specifications=_tags_to_specs(spec_tags),
                     # Prefer a real network-supplied category (descriptor.code);
                     # fall back to deriving it from the item name, because the
                     # local onix build strips non-core catalog fields in transit.
@@ -64,9 +76,9 @@ class SchemaMapper:
                         resource.get("descriptor", {}).get("code")
                         or _derive_category(resource.get("descriptor", {}).get("name", ""))
                     ),
-                    # fulfillment_hours intentionally left None: a real Beckn
-                    # network does not carry a delivery ETA in the discovery
-                    # catalog — it is resolved at /select or /init (fulfillment).
+                    # Delivery lead time carried as a tag (sim-bpp); enables the
+                    # scoring model to weigh delivery, not just price + rating.
+                    fulfillment_hours=fulfillment_hours,
                 )
             )
         return offerings
