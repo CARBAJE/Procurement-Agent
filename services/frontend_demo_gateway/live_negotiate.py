@@ -387,13 +387,27 @@ async def supplier_respond(thread_id: str, request: Request) -> dict[str, Any]:
     session["rounds_elapsed"] = round_no
     if resume_status == "accepted":
         session["agreed_delivery_date"] = agreed_delivery_date
+
+    # Humanize the buyer's (engine-decided) offer via the LLM — natural wording,
+    # same numbers. Falls back to the deterministic template on any failure.
+    buyer_message = await agent.humanize_buyer_offer(
+        item=session["item"],
+        quantity=session["quantity"],
+        list_price=session["list_price"],
+        target_price=buyer_ask,
+        delivery_date=requested_delivery_date,
+        discount_pct=float(counter.get("discount_pct") or 0.0),
+        round_no=round_no,
+        max_rounds=max_rounds,
+    )
+
     turn = {
         "round_no": round_no,
-        # ── Buyer side (full message, sourced from the engine counter-offer) ──
+        # ── Buyer side (full message; numbers from the engine, wording from LLM) ──
         "buyer_price_offer": buyer_ask,
         "buyer_delivery_offer": requested_delivery_date,
         "buyer_quantity": session["quantity"],
-        "buyer_justification": _buyer_justification(counter, session.get("category", "")),
+        "buyer_justification": buyer_message,
         # ── Supplier side (qwen3:8b) ──
         "supplier_action": supplier.action,
         "supplier_price": agreed_price if supplier.action != "reject" else None,

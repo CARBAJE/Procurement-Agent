@@ -142,6 +142,7 @@ class SupplierAgent:
         base_url: str,
         api_key: str,
         model: str,
+        buyer_model: Optional[str] = None,
         acceptable_discount_floor: float = 0.08,
         temperature: float = 0.4,
         timeout_s: float = 60.0,
@@ -152,6 +153,7 @@ class SupplierAgent:
             base_url=base_url, api_key=api_key, timeout=timeout_s
         )
         self._model = model
+        self._buyer_model = buyer_model or model
         self._floor = acceptable_discount_floor
         self._temperature = temperature
         self._base_url = base_url
@@ -266,6 +268,63 @@ class SupplierAgent:
                 max_rounds=max_rounds,
                 requested_delivery_date=requested_delivery_date,
             )
+
+    async def humanize_buyer_offer(
+        self,
+        *,
+        item: str,
+        quantity: int,
+        list_price: float,
+        target_price: float,
+        delivery_date: Optional[str],
+        discount_pct: float,
+        round_no: int = 1,
+        max_rounds: int = 3,
+    ) -> str:
+        """Phrase the buyer's counter-offer as a natural, human negotiation line.
+
+        The NUMBERS come from the deterministic LangGraph engine (guardrail-
+        capped); this only humanizes the WORDING via the same local model.
+        Falls back to a plain sentence on any error (never throws).
+        """
+        delivery_txt = f", delivered by {delivery_date}" if delivery_date else ""
+        fallback = (
+            f"We'd like to settle at INR {target_price:.2f} per unit for "
+            f"{quantity} units{delivery_txt}."
+        )
+        disc = discount_pct * 100
+        # NOTE: do NOT set max_tokens or use /no_think here — qwen3 is a thinking
+        # model and that combination returns empty content. We let it think and
+        # strip the <think> block (same proven pattern as the supplier path).
+        system = (
+            "You are a corporate procurement buyer negotiating with a supplier. "
+            "Reply with ONE short, natural, professional sentence (first person "
+            "plural, courteous but firm) that makes the counter-offer. No preamble, "
+            "no quotes, no JSON, no bullet points — only the sentence."
+        )
+        user = (
+            f"Item: {item}, {quantity} units.\n"
+            f"Our target price: INR {target_price:.2f} per unit "
+            f"(about {disc:.0f}% below their INR {list_price:.2f} list price).\n"
+            + (f"Requested delivery: {delivery_date}.\n" if delivery_date else "")
+            + f"Round {round_no} of {max_rounds}"
+            + (" — final round, so signal urgency to close." if round_no >= max_rounds else ".")
+        )
+        try:
+            completion = await self._client.chat.completions.create(
+                model=self._buyer_model,
+                temperature=0.6,
+                messages=[
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": user},
+                ],
+            )
+            raw = completion.choices[0].message.content or ""
+            text = _THINK_RE.sub("", raw).strip().strip('"').strip()
+            return text[:600] or fallback
+        except Exception as exc:  # pragma: no cover — model/daemon down
+            logger.warning("humanize_buyer_offer failed (%s) — template fallback", exc)
+            return fallback
 
     # ── helpers ──────────────────────────────────────────────────────────
 

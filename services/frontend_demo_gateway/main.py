@@ -69,6 +69,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         base_url=CONFIG.ollama_base_url,
         api_key=CONFIG.ollama_api_key,
         model=CONFIG.supplier_model,
+        buyer_model=CONFIG.buyer_humanize_model,
         acceptable_discount_floor=CONFIG.supplier_acceptable_discount_floor,
         temperature=CONFIG.supplier_temperature,
         timeout_s=CONFIG.supplier_timeout_s,

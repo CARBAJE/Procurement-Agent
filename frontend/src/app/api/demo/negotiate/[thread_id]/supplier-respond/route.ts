@@ -18,7 +18,7 @@ export async function POST(
     const { data, status } = await axios.post(
       `${gatewayUrl}/api/demo/negotiate/${threadId}/supplier-respond`,
       {},
-      { validateStatus: (s) => s < 500, timeout: 90_000 },
+      { validateStatus: (s) => s < 500, timeout: 150_000 },
     )
     return NextResponse.json(data, { status })
   } catch (err) {

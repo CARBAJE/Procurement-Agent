@@ -38,6 +38,9 @@ class Settings(BaseSettings):
     )
     ollama_api_key: str = Field(default="ollama", alias="OLLAMA_API_KEY")
     supplier_model: str = Field(default="qwen3:8b", alias="SUPPLIER_MODEL")
+    #: Lighter, non-"thinking" model used only to phrase the buyer's offer in
+    #: natural language (keeps per-round latency under the proxy timeout).
+    buyer_humanize_model: str = Field(default="phi3", alias="BUYER_HUMANIZE_MODEL")
 
     #: Below this fractional discount off list price the supplier accepts
     #: outright (its negotiation "reservation point"). Pure-config knob the

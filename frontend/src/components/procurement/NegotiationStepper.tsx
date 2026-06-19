@@ -106,9 +106,14 @@ export function NegotiationStepper({
   const history = snapshot?.history ?? []
   const requestedDelivery =
     snapshot?.requested_delivery_date ?? initialRequestedDeliveryDate ?? null
-  const accepted = status === "done" && snapshot?.final_outcome === "accepted"
+  // The gateway's authoritative "deal closed" signal is agreedPrice (set when
+  // supplier-respond returns done). The engine's final_outcome can lag behind
+  // the async Redis resume, so we don't gate the UI on it.
+  const accepted =
+    status === "done" &&
+    (agreedPrice !== null || snapshot?.final_outcome === "accepted")
   const rejected =
-    status === "done" && snapshot?.final_outcome != null && !accepted
+    status === "done" && !accepted && snapshot?.final_outcome != null
 
   function handleStart() {
     void start({
