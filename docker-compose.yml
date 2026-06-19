@@ -101,13 +101,16 @@ services:
     ports:
       - "8009:8009"
     environment:
-      # PostgreSQL — single source of truth: root .env (see .env.example).
-      # Uses real data when available, mock otherwise.
-      - DB_HOST=${DB_HOST:-host.docker.internal}
-      - DB_PORT=${DB_PORT:-5432}
-      - DB_NAME=${DB_NAME:-procurement_agent}
-      - DB_USER=${DB_USER:-postgres}
-      - DB_PASSWORD=${DB_PASSWORD:-postgres123}
+      # In-network compose postgres holds the seeded procurement_agent DB
+      # (host postgres binds 127.0.0.1 + UFW blocks docker→host:5432).
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=procurement_agent
+      - DB_USER=postgres
+      - DB_PASSWORD=postgres
+    depends_on:
+      postgres:
+        condition: service_healthy
     networks:
       - beckn_network
     # Note: requires an external `procurement-postgres` container attached to
@@ -397,6 +400,8 @@ services:
       OLLAMA_BASE_URL: http://localhost:11434/v1
       OLLAMA_API_KEY: ollama
       SUPPLIER_MODEL: qwen3:8b
+      # Light, non-thinking model just for the buyer's natural-language line.
+      BUYER_HUMANIZE_MODEL: phi3
       SUPPLIER_ACCEPTABLE_DISCOUNT_FLOOR: "0.10"
       SUPPLIER_MAX_ROUNDS: "3"
     depends_on:
@@ -405,7 +410,9 @@ services:
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://localhost:8015/readyz"]
+      # /healthz is liveness-only (does NOT probe Ollama) so the 15s probe
+      # never competes with qwen3 inference on the GPU during a negotiation.
+      test: ["CMD", "curl", "-fsS", "http://localhost:8015/healthz"]
       interval: 15s
       timeout: 5s
       retries: 5
