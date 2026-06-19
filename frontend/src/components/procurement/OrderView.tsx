@@ -10,7 +10,7 @@ import OrderSummaryCard       from "@/components/procurement/OrderSummaryCard"
 import OrderLifecycleTimeline from "@/components/procurement/OrderLifecycleTimeline"
 import ReasoningPanel         from "@/components/procurement/ReasoningPanel"
 import StatusPoller           from "@/components/procurement/StatusPoller"
-import { loadSession, patchSession } from "@/lib/session-store"
+import { loadSession, patchSession, type NegotiatedTerms } from "@/lib/session-store"
 import { getOrderDetail } from "@/lib/api"
 import type {
   BecknIntent, CommitResult, Offering, OrderState, StatusSnapshot,
@@ -24,6 +24,7 @@ interface ResolvedSession {
   commit: CommitResult
   offering: Offering
   intent: BecknIntent
+  negotiated: NegotiatedTerms | null
 }
 
 export default function OrderView({ txnId }: OrderViewProps) {
@@ -46,7 +47,12 @@ export default function OrderView({ txnId }: OrderViewProps) {
         )
         if (offering) {
           if (!cancelled) {
-            setResolved({ commit: session.commit, offering, intent: session.intent })
+            setResolved({
+              commit: session.commit,
+              offering,
+              intent: session.intent,
+              negotiated: session.negotiation ?? null,
+            })
             setState(session.commit.order_state ?? null)
             setHydrated(true)
           }
@@ -75,7 +81,7 @@ export default function OrderView({ txnId }: OrderViewProps) {
             messages:        [],
             status:          o.status,
           }
-          setResolved({ commit, offering: o.offering, intent: d.intent })
+          setResolved({ commit, offering: o.offering, intent: d.intent, negotiated: null })
           setState(o.order_state)
           setHistorical(true)
         }
@@ -157,7 +163,7 @@ export default function OrderView({ txnId }: OrderViewProps) {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-6">
-          <OrderSummaryCard commit={commit} offering={offering} quantity={intent.quantity} />
+          <OrderSummaryCard commit={commit} offering={offering} quantity={intent.quantity} negotiated={resolved.negotiated} />
           {!historical && commit.order_id != null && (
             <StatusPoller
               transactionId={commit.transaction_id}
