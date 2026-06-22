@@ -1,5 +1,5 @@
 ---
-tags: [tests, phase-2, real-time, tracking, websocket, kafka, slack, teams, email, e2e]
+tags: [tests, phase-2, real-time, tracking, websocket, kafka, slack, teams, email, sim-bpp, e2e]
 cssclasses: [procurement-doc, test-doc]
 status: "#processed"
 related: ["[[real_time_tracking]]", "[[phase2_core_intelligence_transaction_flow]]", "[[event_streaming_kafka]]", "[[communication_slack_teams]]", "[[frontend_react_nextjs]]"]
@@ -7,33 +7,48 @@ related: ["[[real_time_tracking]]", "[[phase2_core_intelligence_transaction_flow
 
 # Phase 2 — Real-Time Tracking E2E Test Guide
 
-> [!info] Prerequisites
-> - PostgreSQL local (homebrew) corriendo en `localhost:5432`, esquema aplicado.
+> [!info] Qué cubre este documento
+> Cómo probar end-to-end el componente `real_time_tracking` (Phase 2 milestone)
+> desde el frontend: WebSocket, Kafka, persistencia en `purchase_orders`,
+> notificaciones Slack/Teams/Email y auto-advance del BPP simulado.
+>
+> El criterio de aceptación del milestone es: *Dashboard refleja cualquier cambio
+> de estado en menos de 30 segundos*. En la práctica logramos **<2 s** vía
+> WebSocket cuando Kafka está sano, y un fallback a polling de 30 s si Kafka cae.
+
+> [!success] Prerrequisitos
+> - PostgreSQL local (Homebrew) corriendo en `localhost:5432`, esquema aplicado
+>   (ver `database/README.md` para el setup inicial).
 > - Docker Desktop activo.
-> - `npm` y Node 18+ instalados.
+> - Node 18+ y `npm`.
 > - Ollama corriendo en el host (`localhost:11434`) con `qwen3:1.7b` cargado.
-> - Cuenta Phase Two para el login (las credenciales viven en `frontend/.env.local`).
+> - Cuenta Phase Two configurada en `frontend/.env.local` (`KEYCLOAK_*` vars).
+> - Python 3.12+ con un venv local (`.venv-test/`) para los tests unitarios.
 
 ---
 
 ## 1. Setup inicial — levantar el stack y el frontend
 
-Abre **4 terminales** en paralelo. Esto es lo mínimo para ver el flujo en vivo.
+Abre **4 terminales** en paralelo. Esto es lo mínimo para ver el flujo en vivo;
+las terminales 3 y 4 son observadores, no es necesario teclear nada en ellas
+hasta el paso correspondiente.
 
 ### Terminal 1 — Stack completo
 
 ```bash
 cd /Users/cristianmontiel/Downloads/Infosys/Projects/AgenticAI/Procurement-Agent
 docker compose up -d
-docker compose ps           # Verifica que TODO esté "Up" o "(healthy)"
+docker compose ps           # todo debe estar "Up" o "(healthy)"
 docker compose logs -f orchestrator | grep -E "kafka|ws"
 ```
+
+Esa última línea te queda corriendo: te muestra cuándo el orchestrator levanta el productor Kafka, el consumidor, y cada conexión / broadcast de WebSocket.
 
 ### Terminal 2 — Frontend (Next.js)
 
 ```bash
 cd frontend
-npm install                 # solo la 1a vez, o si faltan deps (recharts, etc.)
+npm install                 # la 1ª vez o si faltan deps (recharts, etc.)
 npm run dev                 # → http://localhost:3000
 ```
 
@@ -51,18 +66,18 @@ FROM purchase_orders
 ORDER BY created_at DESC LIMIT 3 \watch 0.5
 ```
 
-(Si `watch` de macOS no está instalado, `psql`'s `\watch 0.5` re-ejecuta el query cada 500ms sin gastar memoria.)
+> El comando `watch` GNU no viene con macOS. `psql`'s `\watch 0.5` re-ejecuta el query cada 500 ms manteniendo la conexión abierta — más eficiente.
 
-### Terminal 4 — Lista para disparar eventos
+### Terminal 4 — Para disparar eventos manualmente
 
-Déjala vacía por ahora; la usamos para producir eventos manuales en la sección 3.
+Déjala vacía por ahora. La usamos en el Paso 3 (vías A, B) y en pruebas avanzadas.
 
 ---
 
 ## 2. Flujo end-to-end desde el frontend
 
-> [!success] Acceptance criterion (`real_time_tracking.md`)
-> Dashboard refleja el cambio de estado en **<30 segundos** (en práctica <2s con WebSocket).
+> [!success] Criterio de aceptación (`real_time_tracking.md`)
+> Dashboard refleja el cambio de estado en **<30 segundos**. Con WebSocket sano: típicamente **<2 s**.
 
 ### Paso 1 — Crear una orden
 
@@ -71,29 +86,29 @@ Déjala vacía por ahora; la usamos para producir eventos manuales en la secció
 3. En el textarea escribe: `comprar 10 reams de papel A4 para Bangalore`.
 4. Click **Parse** → revisa el intent estructurado → **Confirm**.
 5. En la pantalla de ofertas, escoge una → **Commit**.
-6. Te redirige a `/request/{txn_id}/order` — **anota el `txn_id` de la URL** (necesario en el Paso 3).
+6. Te redirige a `/request/{txn_id}/order`. **Anota el `txn_id` de la URL** y el `order_id` que ves en la respuesta del commit (también lo puedes leer en Terminal 3 — es el `beckn_confirm_ref` de la fila más reciente en `purchase_orders`).
 
 ### Paso 2 — Verificar que el WebSocket conectó
 
-En el dashboard que se acaba de abrir:
+En el dashboard recién cargado:
 
-- El componente **StatusPoller** (encima de la timeline) debe mostrar **"🟢 Live · last update X ago"** con un ícono Wifi verde.
+- El componente **StatusPoller** (encima de la timeline) muestra **"🟢 Live · last update X ago"** con un ícono Wifi verde.
 - Abre **DevTools → Network → WS** del browser. Debe aparecer una conexión a `ws://localhost:8004/ws/status/{tu_txn_id}` con status `101 Switching Protocols`.
 - En Terminal 1 verás:
   ```
   orchestrator-1 | INFO:__main__:[ws] connected txn=<tu_txn> (clients=1)
   ```
 
-**Diagnóstico si NO ves "🟢 Live"** (sino "Polling every 30s"):
+**Si NO ves "🟢 Live" sino "Polling every 30s"**:
 - El fallback de polling está activo → el WebSocket no conectó.
-- Revisa: `docker compose logs orchestrator | grep kafka` debe mostrar "producer connected" y "consumer subscribed".
-- Reinicia con `docker compose restart orchestrator`.
+- `docker compose logs orchestrator | grep kafka` debe mostrar "producer connected" y "consumer subscribed". Si no aparecen, Kafka está caído.
+- `docker compose restart orchestrator` y refresca la página.
 
-### Paso 3 — Disparar un cambio de estado (3 vías)
+### Paso 3 — Disparar un cambio de estado (4 vías)
 
-Reemplaza `TU_TXN_ID` y `TU_ORDER_ID` por los reales de la orden recién creada.
+Reemplaza `TU_TXN_ID` y `TU_ORDER_ID` por los reales de la orden recién creada. Cada vía produce el mismo efecto final: `purchase_orders.status` cambia + dashboard avanza + notificaciones disparan según las reglas.
 
-#### Vía A — Kafka directo
+#### Vía A — Producir directamente a Kafka
 
 ```bash
 docker compose exec kafka /opt/kafka/bin/kafka-console-producer.sh \
@@ -103,7 +118,11 @@ docker compose exec kafka /opt/kafka/bin/kafka-console-producer.sh \
 # Ctrl+D para salir.
 ```
 
+Útil para pruebas controladas donde necesitas un payload exacto.
+
 #### Vía B — Webhook del seller (HMAC-signed)
+
+Simula que un BPP real toca la puerta del orchestrator:
 
 ```bash
 TXN="TU_TXN_ID"
@@ -116,72 +135,76 @@ curl -X POST http://localhost:8004/webhooks/seller/status \
   -d "$BODY"
 ```
 
+Esta vía ejercita la validación HMAC + el camino completo persist → audit → publish.
+
 #### Vía C — Refresh manual / poll Beckn
 
-Click en el botón refresh del `StatusPoller`. Si `sim-bpp` ya cambió el estado, el orchestrator detectará y publicará a Kafka.
+Click en el botón refresh del `StatusPoller`. El orchestrator hace `GET /status/{txn}/{order}` contra `sim-bpp`. **Limitación:** sim-bpp por defecto siempre devuelve `ACTIVE` (estado contractual, no logístico), así que esta vía sola no avanza la timeline más allá de `confirmed`. Para que esta vía sirva, activa la Vía D abajo.
 
-#### Vía D — Auto-advance autónomo del BPP (lo más realista, opt-in)
+#### Vía D — Auto-advance autónomo del BPP (opt-in, lo más realista)
 
-Por default `sim-bpp` NO simula el lifecycle físico — solo responde con `ACTIVE` al `/status`. Para activar un BPP que empuje las transiciones automáticamente como lo haría Amazon Business o Flipkart en producción:
+Por default `sim-bpp` no simula el lifecycle físico. Para activar un BPP que empuje las transiciones autónomamente (como Amazon Business o Flipkart):
 
 ```bash
 SIM_BPP_AUTO_ADVANCE=true SIM_BPP_ADVANCE_INTERVAL_SECS=5 \
   docker compose up -d --force-recreate sim-bpp
-docker compose logs --tail=3 sim-bpp   # confirma que arrancó
+docker compose logs --tail=5 sim-bpp   # confirma que arrancó
 ```
 
-Cuando esté activo, **después de cada `/commit`** sim-bpp lanza un task en background que emite, cada `SIM_BPP_ADVANCE_INTERVAL_SECS` segundos:
+Cuando esté activo, **después de cada `/commit`** sim-bpp lanza un task que emite, cada `SIM_BPP_ADVANCE_INTERVAL_SECS` segundos:
 
 ```
 ACCEPTED → PACKED → SHIPPED → OUT_FOR_DELIVERY → DELIVERED
 ```
 
-Cada transición ejecuta dos cosas en paralelo:
-1. `PATCH http://data-normalizer:8006/normalize/po_status` — actualiza `purchase_orders.status` en PostgreSQL.
-2. `produce` al topic Kafka `po.status.changed` — dispara WebSocket broadcast + Slack/Teams/Email.
+Cada transición hace dos cosas en paralelo:
+1. `PATCH http://data-normalizer:8006/normalize/po_status` — actualiza `purchase_orders.status`.
+2. Produce al topic Kafka `po.status.changed` — dispara WebSocket broadcast + Slack/Teams/Email.
 
-**Comportamiento esperado desde el frontend:** después de hacer `Commit`, la timeline visual avanza sola sin intervención manual. Con interval=5s, el ciclo completo Confirmed → Delivered tarda ~25 segundos.
+**Comportamiento esperado en el frontend:** tras hacer Commit, la timeline avanza sola. Con interval=5 s, el ciclo Confirmed → Delivered tarda ≈25 s. El Paso 8 abajo es el checklist específico para validar esta vía.
 
 > [!warning] Trade-off
-> Auto-advance es ideal para demos, pero quitan el control fino para testear casos específicos (ej. "qué pasa si SHIPPED llega después de DELIVERED"). Apágalo (`SIM_BPP_AUTO_ADVANCE=false`) para usar las vías A/B manuales.
+> Auto-advance es ideal para demos pero te quita control fino para casos específicos (p. ej. "qué pasa si SHIPPED llega después de DELIVERED"). Apágalo (`SIM_BPP_AUTO_ADVANCE=false`) para usar las vías A/B manuales.
 
-**Coexistencia con disparos manuales:** si haces curl `SHIPPED` mientras auto-advance está activo, el orchestrator guarda solo la PRIMERA transición a `shipped` (el guard `if new_state != last_state` previene duplicados). El segundo evento es no-op.
+**Coexistencia con disparos manuales:** si haces curl con `SHIPPED` mientras auto-advance ya pasó a `shipped`, el orchestrator no persiste de nuevo (el guard `if new_state != last_state` previene duplicados). El segundo evento es no-op.
 
-**Cancelación a mitad de flujo:** al hacer `cancel` (vía frontend o el endpoint `/cancel`), sim-bpp también recibe el `cancel` de Beckn y aborta el task del lifecycle para ese order (no seguirá disparando estados después).
+**Cancelación a mitad de flujo:** si llamas a `/cancel` (vía frontend o el endpoint directo), sim-bpp también recibe el `cancel` Beckn y aborta el task del lifecycle. No seguirá disparando estados después.
 
 ### Paso 4 — Verificar la propagación end-to-end
 
-Casi simultáneamente deberías ver:
+Casi simultáneamente al disparo (de cualquiera de las 4 vías) deberías ver:
 
-- **Browser (dashboard):** la timeline avanza al paso "SHIPPED" sin recargar. "last update" se reinicia a "just now".
+- **Browser (dashboard):** la timeline avanza al paso correspondiente sin recargar. "last update" se reinicia a "just now".
 - **Terminal 1 (logs orchestrator):**
   ```
   [kafka] forwarded state=SHIPPED txn=... to 1 ws client(s)
   ```
-- **Terminal 3 (psql watch):** la fila `purchase_orders` correspondiente cambia su `status` a `shipped` y `updated_at` se actualiza.
+- **Terminal 3 (psql `\watch`):** la fila `purchase_orders` correspondiente cambia su `status` y `updated_at` se actualiza al timestamp de ahora.
 
-### Paso 5 — Avanzar a DELIVERED
+### Paso 5 — Avanzar hasta DELIVERED
 
-Repite Paso 3 con `"state":"DELIVERED"` (Vía A) o `"beckn_state":"DELIVERED"` (Vía B).
+Repite Paso 3 con `"state":"DELIVERED"` (Vía A) o `"beckn_state":"DELIVERED"` (Vía B). Con auto-advance (Vía D) ya llega solo después de unos segundos.
 
-Verás:
-- Timeline pinta "DELIVERED".
+Cuando llega a DELIVERED:
+- Timeline pinta el último paso.
 - StatusPoller cambia a **"Tracking stopped — order delivered"** (estado terminal).
-- El WebSocket se cierra automáticamente (`[ws] disconnected` en logs).
+- El WebSocket se cierra solo (`[ws] disconnected` en logs).
 
-### Paso 6 — Probar las 3 fuentes convergentes
+### Paso 6 — Probar las 4 fuentes convergentes
 
-Repite el Paso 3 con cada vía A, B y C en sesiones distintas. **Las 3 producen el mismo update visual en el dashboard** — eso demuestra la convergencia de los 3 streams hacia el canal Kafka `po.status.changed`.
+Crea órdenes distintas y dispara cada vía (A, B, C, D) en sesiones separadas. **Las 4 producen el mismo update visual en el dashboard** — eso demuestra la convergencia de los 4 streams hacia el canal Kafka `po.status.changed`. Es la propiedad arquitectónica clave del componente: cualquier productor nuevo (un ERP externo, un sistema de tracking de paquetería, etc.) se integra publicando al mismo topic sin tocar nada del frontend ni del consumer.
 
 ### Paso 7 — Probar el fallback (resiliencia)
+
+Verifica que el sistema sobrevive a una caída de Kafka:
 
 ```bash
 docker compose stop kafka
 ```
 
 Refresca el dashboard:
-- El StatusPoller cambia a **"Polling every 30s"** (modo fallback).
-- El sistema sigue funcionando, solo que con latencia de polling.
+- StatusPoller cambia a **"Polling every 30s"** (modo fallback HTTP).
+- El sistema sigue funcionando, solo con latencia de polling.
 
 ```bash
 docker compose start kafka
@@ -190,6 +213,68 @@ docker compose start kafka
 Refresca de nuevo:
 - Vuelve a **"🟢 Live"**.
 - El WebSocket se reconecta automáticamente.
+
+### Paso 8 — Validar específicamente auto-advance (Vía D)
+
+Si activaste auto-advance en el Paso 3 Vía D, este checklist confirma que **TODA** la cadena funciona end-to-end:
+
+1. **Confirma el arranque con el flag activo:**
+   ```bash
+   SIM_BPP_AUTO_ADVANCE=true SIM_BPP_ADVANCE_INTERVAL_SECS=5 \
+     docker compose up -d --force-recreate sim-bpp
+   docker compose logs --tail=10 sim-bpp
+   ```
+   Debes ver `sim-bpp starting on :3002`. (El flag se confirma indirectamente cuando aparezca un log "auto-advance: started" después del primer `/commit`.)
+
+2. **Crea una orden completa** desde el frontend (Login → Parse → Confirm → Commit). Anota `order_id`.
+
+3. **En Terminal 3 (psql watch)** observa cómo `purchase_orders.status` cambia solo:
+   | Aproximadamente | Status esperado | Beckn state interno |
+   |---|---|---|
+   | `/commit` retorna | `pending` | (sin lifecycle aún) |
+   | T+5 s | `confirmed` | ACCEPTED |
+   | T+10 s | `confirmed` | PACKED |
+   | T+15 s | `shipped` | SHIPPED |
+   | T+20 s | `shipped` | OUT_FOR_DELIVERY |
+   | T+25 s | `delivered` | DELIVERED — terminal |
+
+4. **En Terminal 1 / logs sim-bpp**, durante esos ~25 s verás:
+   ```
+   sim-bpp | auto-advance: started order=<ORDER> txn=<TXN> interval=5s
+   sim-bpp | kafka published state=ACCEPTED order=<ORDER>
+   sim-bpp | auto-advance: order=<ORDER> → ACCEPTED (confirmed)
+   sim-bpp | kafka published state=PACKED order=<ORDER>
+   sim-bpp | auto-advance: order=<ORDER> → PACKED (confirmed)
+   …
+   sim-bpp | auto-advance: order=<ORDER> → DELIVERED (delivered)
+   ```
+
+5. **En los logs del orchestrator** las 5 reenvíos a WebSocket:
+   ```
+   orchestrator-1 | [kafka] forwarded state=ACCEPTED txn=... to 1 ws client(s)
+   orchestrator-1 | [kafka] forwarded state=PACKED txn=... to 1 ws client(s)
+   …
+   ```
+
+6. **En el browser**, la timeline avanza paso a paso sin que toques nada y termina en "Tracking stopped — order delivered".
+
+7. **Probar cancelación mid-flow:**
+   - Crea una nueva orden y, dentro de los primeros ~10 s post-Commit, llama al endpoint `/cancel`:
+     ```bash
+     curl -X PATCH http://localhost:8004/cancel \
+       -H "Content-Type: application/json" \
+       -d "{\"request_id\":\"<REQUEST_ID>\"}"
+     ```
+   - En los logs de sim-bpp verás `auto-advance: cancelled order=<ORDER>`.
+   - El status final en `purchase_orders` no avanza más allá del estado donde estaba al momento del cancel (el orchestrator marca `cancelled` por su lado en `procurement_requests`).
+
+> [!check] Checklist resumido del Paso 8
+> - [ ] sim-bpp arrancó con `SIM_BPP_AUTO_ADVANCE=true`
+> - [ ] 5 estados visibles en la columna `purchase_orders.status` durante ~25 s
+> - [ ] 5 líneas "auto-advance: order=… → STATE" en logs de sim-bpp
+> - [ ] 5 líneas "[kafka] forwarded state=…" en logs del orchestrator
+> - [ ] Timeline en el browser llega a DELIVERED sin intervención manual
+> - [ ] /cancel mid-flow aborta correctamente (log "cancelled" + lifecycle se detiene)
 
 ---
 
@@ -240,44 +325,44 @@ docker compose logs --tail=3 notification-dispatcher
 #### Test E2E
 
 1. Abre `http://localhost:3000`, crea una orden, llega a `/request/{txn}/order`.
-2. Dispara `SHIPPED` (Vía A o B del Paso 3 anterior).
-3. **Mira tu canal de Slack** — te llega un mensaje:
+2. Dispara `SHIPPED` (Vía A o B del Paso 3, o espera al auto-advance de Vía D).
+3. **Mira tu canal de Slack** — te llega un mensaje con formato Block Kit:
    > :truck: **Order status update — SHIPPED**
-   > Order: `ord-1` · Transaction: `<txn_id>` · Source: `manual` · Observed at: 2026-…
+   > Order: `<order_id>` · Transaction: `<txn_id>` · Source: `manual` · Observed at: 2026-…
 
-Si no llega: `docker compose logs notification-dispatcher | grep slack`.
+Diagnóstico si no llega: `docker compose logs notification-dispatcher | grep slack`.
 
-### Canal 2 — Microsoft Teams (≈15-20 min, más enredado)
+### Canal 2 — Microsoft Teams (≈15-20 min)
 
-Microsoft está deprecando los "Office 365 connectors". El camino actual es **Power Automate Workflow**.
+Microsoft está deprecando los "Office 365 connectors" tradicionales. El camino actual recomendado es **Power Automate Workflow**.
 
 #### Setup en Teams
 
-1. Abre Microsoft Teams → ve al canal donde quieres recibir.
+1. Abre Microsoft Teams → ve al canal donde quieres recibir notificaciones.
 2. Menú "**…**" del canal → **Workflows**.
 3. Plantilla: **"Post to a channel when a webhook request is received"**.
 4. Sigue el wizard. Te quedará un URL tipo `https://prod-XX.westus.logic.azure.com:443/workflows/...`.
 5. Copia el URL.
 
 > [!warning] Compatibilidad de Adaptive Cards
-> El payload que envía `teams_channel.py` es un Adaptive Card. Si tu Workflow no lo procesa correctamente, simplifica el payload en `services/notification-dispatcher/src/teams_channel.py` a `{"text": "Order status update..."}`.
+> El payload que envía `teams_channel.py` es un Adaptive Card v1.4. Si tu Workflow no lo procesa correctamente, edita `services/notification-dispatcher/src/teams_channel.py` y simplifica el payload a `{"text": "Order status update..."}`.
 
 #### Configurar
 
 ```bash
 export TEAMS_WEBHOOK_URL="https://prod-XX.westus.logic.azure.com:443/workflows/..."
 docker compose up -d --force-recreate notification-dispatcher
-# Si ya tenías SLACK_WEBHOOK_URL, ambos canales activos:
+# Con Slack ya configurado, ambos canales activos:
 # "Channels enabled: ['slack', 'teams']"
 ```
 
 #### Test
 
-Misma vía que Slack. Dispara `SHIPPED` y observa el canal de Teams.
+Misma vía que Slack. Dispara `SHIPPED` (manual o esperando auto-advance) y observa el canal de Teams.
 
 ### Canal 3 — Email (≈15 min con Mailtrap)
 
-**Mailtrap** es un SMTP de testing — captura emails en un inbox virtual, no manda al mundo real. Ideal para dev.
+**Mailtrap** es un servicio SMTP de testing — captura emails en un inbox virtual, **no manda al mundo real**. Ideal para dev.
 
 #### Setup en Mailtrap
 
@@ -306,7 +391,7 @@ JOIN users u                 ON u.user_id = pr.requester_id
 ORDER BY po.created_at DESC LIMIT 5;"
 ```
 
-Si está vacío: aún no has completado una orden con `/commit`. Si la columna `email` está vacía en `users`, ponle un valor:
+Si está vacío: aún no has completado una orden con `/commit`. Si la columna `email` aparece NULL/vacía, ponle un valor de prueba:
 
 ```bash
 psql -h localhost -U cristianmontiel -d procurement_agent -c \
@@ -322,13 +407,13 @@ export SMTP_USER="<username de mailtrap>"
 export SMTP_PASSWORD="<password de mailtrap>"
 export SMTP_FROM="noreply@procurement-agent.local"
 docker compose up -d --force-recreate notification-dispatcher
-# "Channels enabled: ['email']" (o ['slack', 'teams', 'email'] si tienes todo)
+# Confirma: "Channels enabled: ['email']" (o ['slack', 'teams', 'email'] si tienes todo)
 ```
 
 #### Test E2E
 
 1. En el frontend, crea una orden y completa `/commit` (esto llena la cadena de FKs).
-2. Dispara `DELIVERED` (no SHIPPED — email solo se manda en CONFIRMED/DELIVERED):
+2. Dispara `DELIVERED` (no SHIPPED — email solo se manda en CONFIRMED y DELIVERED):
    ```bash
    TXN="..."; ORDER="..."
    BODY="{\"transaction_id\":\"$TXN\",\"order_id\":\"$ORDER\",\"beckn_state\":\"DELIVERED\"}"
@@ -336,39 +421,37 @@ docker compose up -d --force-recreate notification-dispatcher
    curl -X POST http://localhost:8004/webhooks/seller/status \
      -H "Content-Type: application/json" -H "X-Signature: $SIG" -d "$BODY"
    ```
-3. Abre tu inbox de Mailtrap → debe aparecer el email HTML con subject `Order DELIVERED — ord-X`.
+3. Abre tu inbox de Mailtrap → debe aparecer el email HTML con subject `Order DELIVERED — <order_id>`.
 
 #### Diagnóstico
 
 ```bash
 docker compose logs notification-dispatcher | grep -E "email|recipient"
 # "[email] sent to=..."           → OK
-# "[email] no recipient found..."  → la cadena de FKs falló (revisa la query del JOIN)
+# "[email] no recipient found..."  → la cadena de FKs falló (verifica con el JOIN)
 ```
 
 ### Probar las 3 notificaciones en una sola corrida
 
-Setea las 3 envs (Slack + Teams + Mailtrap) y luego:
+Setea las 3 envs (Slack + Teams + Mailtrap), levanta sim-bpp con auto-advance, y crea una orden. En ~25 s verás:
 
-1. Crear orden → `/request/{txn}/order`.
-2. Disparar `CONFIRMED`: llegan **Slack + Teams + Email**.
-3. Disparar `SHIPPED`: llegan **Slack + Teams**.
-4. Disparar `DELIVERED`: llegan **Slack + Teams + Email** (timeline marca terminal).
+1. `CONFIRMED` (estado inicial al confirmar): llegan **Slack + Teams + Email**.
+2. `SHIPPED` (auto-advance lo dispara): llegan **Slack + Teams**.
+3. `DELIVERED` (auto-advance al final): llegan **Slack + Teams + Email** (timeline marca terminal).
 
 ### Atajo sin configurar nada externo: webhook.site
 
-Para verificar que el dispatcher emite POSTs sin configurar Slack/Teams/Mailtrap:
+Para verificar que el dispatcher emite POSTs sin crear cuentas Slack/Teams/Mailtrap:
 
 ```bash
-# 1. Abre https://webhook.site → te da un URL único.
+# Abre https://webhook.site → te da un URL único por pestaña.
 export SLACK_WEBHOOK_URL="https://webhook.site/tu-id-único"
-export TEAMS_WEBHOOK_URL="https://webhook.site/otro-id-único"  # otra pestaña
+export TEAMS_WEBHOOK_URL="https://webhook.site/otro-id-único"
 docker compose up -d --force-recreate notification-dispatcher
-# Dispara estados desde el frontend → ves los POST en webhook.site en vivo.
+# Dispara estados desde el frontend → ves los POSTs en webhook.site en vivo.
 ```
 
 ---
-
 ## 4. Comandos rápidos de referencia
 
 ### Iniciar todo desde cero
@@ -378,7 +461,14 @@ docker compose up -d --build
 cd frontend && npm run dev
 ```
 
-### Reiniciar solo el dispatcher (sin tocar lo demás)
+### Iniciar con auto-advance activo (modo demo)
+
+```bash
+SIM_BPP_AUTO_ADVANCE=true SIM_BPP_ADVANCE_INTERVAL_SECS=5 \
+  docker compose up -d --force-recreate sim-bpp
+```
+
+### Reiniciar solo el dispatcher
 
 ```bash
 docker compose up -d --force-recreate notification-dispatcher
@@ -388,10 +478,10 @@ docker compose logs -f notification-dispatcher
 ### Watch en vivo del DB
 
 ```bash
-# psql interactivo
 psql -h localhost -U cristianmontiel -d procurement_agent
 # Dentro:
-SELECT * FROM purchase_orders ORDER BY created_at DESC LIMIT 3 \watch 0.5
+SELECT po_id, beckn_confirm_ref, status, created_at FROM purchase_orders
+ORDER BY created_at DESC LIMIT 3 \watch 0.5
 ```
 
 ### Producir un evento desde Kafka
@@ -410,29 +500,10 @@ curl -X POST http://localhost:8004/webhooks/seller/status \
   -H "Content-Type: application/json" -H "X-Signature: $SIG" -d "$BODY"
 ```
 
-### Correr los tests unitarios
+### Cancelar una orden a mitad de flujo
 
 ```bash
-.venv-test/bin/python -m pytest \
-  services/orchestrator/tests/test_realtime_tracking.py \
-  services/notification-dispatcher/tests/ -v
+curl -X PATCH http://localhost:8004/cancel \
+  -H "Content-Type: application/json" \
+  -d '{"request_id":"<REQUEST_ID>"}'
 ```
-
----
-
-## 5. Troubleshooting
-
-| Síntoma | Causa probable | Fix |
-|---|---|---|
-| StatusPoller dice "Polling every 30s" | WebSocket no conectó | `docker compose restart orchestrator` |
-| `purchase_orders` no se llena después de `/commit` | Sesión perdida tras restart del orchestrator | Hacer `/compare` + `/commit` sin restart en medio |
-| `PATCH /normalize/po_status` devuelve 405 | Bug viejo (método incorrecto) | Verificar que `_persist` se llame con `method="PATCH"` |
-| `[email] no recipient found` | Cadena FK rota o `users.email` vacío | `UPDATE users SET email = '...' WHERE email IS NULL` |
-| `Module not found: recharts` en `npm run dev` | `node_modules` desactualizado | `cd frontend && npm install` |
-| Notificaciones no llegan | Webhook URL mal o channel deshabilitado | `docker compose logs notification-dispatcher \| grep Channels` |
-| Auto-advance no dispara después de `/commit` | El flag está en `false` (default) | `SIM_BPP_AUTO_ADVANCE=true docker compose up -d --force-recreate sim-bpp` |
-| Auto-advance avanza demasiado rápido para demos | Interval por defecto es 5s | Subir a 10-15s: `SIM_BPP_ADVANCE_INTERVAL_SECS=10` |
-
----
-
-*Cubre el Phase 2 milestone: real_time_tracking | Cris. Validation contra `sim-bpp` (= Beckn sandbox local) cumple el criterio "Both `/status` polling and webhook push paths validated".*
