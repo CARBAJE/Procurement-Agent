@@ -48,6 +48,16 @@
               "icon": "lucide-file",
               "title": "phase2_real_time_tracking"
             }
+          },
+          {
+            "id": "77c29c4e467c62d5",
+            "type": "leaf",
+            "state": {
+              "type": "empty",
+              "state": {},
+              "icon": "lucide-file",
+              "title": "Nueva pestaña"
+            }
           }
         ],
         "currentTab": 2
@@ -214,8 +224,8 @@
   },
   "active": "31c8fabbf0fb18c4",
   "lastOpenFiles": [
-    "milestones/phase2_core_intelligence_transaction_flow.md",
     "tests/phase2/phase2_real_time_tracking.md",
+    "milestones/phase2_core_intelligence_transaction_flow.md",
     "milestones/phase3_advanced_intelligence_enterprise_features.md",
     "user_stories/story3_emergency_procurement.md",
     "tests/phase1/phase1_bap_monolith.md",

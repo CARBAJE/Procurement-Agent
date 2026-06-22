@@ -118,6 +118,10 @@ export default function StatusPoller({
     ws.onopen = () => {
       if (cancelled) return
       setMode("ws")
+      // Clear any stale error from a prior connection attempt (e.g. React's
+      // Strict Mode double-mount in dev, transient network blips during a
+      // reconnect). If we're connected now, by definition there's no error.
+      setError("")
       stopPolling()
     }
 
@@ -136,6 +140,8 @@ export default function StatusPoller({
         }
         setLastUpdateAt(new Date())
         setCurrentState(snap.state)
+        // Receiving a message is proof the WS is healthy; clear any stale error.
+        setError("")
         onUpdateRef.current(snap)
       } catch (err) {
         // eslint-disable-next-line no-console
@@ -144,6 +150,12 @@ export default function StatusPoller({
     }
 
     ws.onerror = () => {
+      // Ignore errors on a socket the cleanup has already cancelled — these
+      // come from React's Strict Mode double-mount in dev (mount A is closed
+      // while mount B is the live one). Without this guard the dead socket's
+      // onerror would set a stale "Live connection lost" message on top of a
+      // perfectly healthy mount B.
+      if (cancelled) return
       // eslint-disable-next-line no-console
       console.warn("[StatusPoller] WS error — falling back to polling")
       setError("Live connection lost — polling instead")
@@ -218,7 +230,7 @@ export default function StatusPoller({
               <>Connecting…</>
             )}
           </p>
-          {error && (
+          {error && mode !== "ws" && (
             <p className="text-xs text-destructive flex items-center gap-1 mt-0.5">
               <AlertCircle className="h-3 w-3" />
               {error}
