@@ -2,6 +2,7 @@ services:
 
   # ── Lambda 1: Intention Parser ─────────────────────────────────────────────
   intention-parser:
+    restart: unless-stopped
     build: ./services/intention-parser
     ports:
       - "8001:8001"
@@ -22,6 +23,7 @@ services:
 
   # ── Lambda 2: Beckn BAP Client ─────────────────────────────────────────────
   beckn-bap-client:
+    restart: unless-stopped
     build:
       context: .                                     # repo root — Dockerfile COPYs shared/
       dockerfile: ./services/beckn-bap-client/Dockerfile
@@ -45,6 +47,7 @@ services:
 
   # ── Lambda 4: Catalog Normalizer ───────────────────────────────────────────
   catalog-normalizer:
+    restart: unless-stopped
     build:
       context: .
       dockerfile: ./services/catalog-normalizer/Dockerfile
@@ -65,6 +68,7 @@ services:
 
   # ── Lambda 3: Comparative & Scoring ────────────────────────────────────────
   comparative-scoring:
+    restart: unless-stopped
     build: ./services/comparative-scoring
     ports:
       - "8003:8003"
@@ -75,6 +79,7 @@ services:
 
   # ── Lambda 5: Data Normalizer — persistence bridge ─────────────────────────
   data-normalizer:
+    restart: unless-stopped
     build:
       context: .
       dockerfile: ./services/data-normalizer/Dockerfile
@@ -97,6 +102,7 @@ services:
   # ── Lambda 6: Analytics ────────────────────────────────────────────────────
   # Port 8009 (was 8006 — moved to coexist with data-normalizer on 8006).
   analytics:
+    restart: unless-stopped
     build: ./services/analytics
     ports:
       - "8009:8009"
@@ -119,6 +125,7 @@ services:
 
   # ── Orchestrator: Step Functions local simulator ───────────────────────────
   orchestrator:
+    restart: unless-stopped
     build: ./services/orchestrator
     ports:
       - "8000:8004"   # matches frontend .env.local BAP_URL/INTENT_PARSER_URL defaults
@@ -158,6 +165,7 @@ services:
 
   # ── ERP Adapter (vendor-neutral SAP/Oracle integration) ────────────────────
   erp-adapter:
+    restart: unless-stopped
     build:
       context: .
       dockerfile: ./services/erp-adapter/Dockerfile
@@ -200,6 +208,7 @@ services:
 
   # ── ERP Mock (emulates SAP OData v4 + Oracle ERP Cloud REST) ───────────────
   erp-mock:
+    restart: unless-stopped
     build:
       context: .
       dockerfile: ./services/erp-mock/Dockerfile
@@ -216,6 +225,7 @@ services:
 
   # ── Redis — shared cache for ONIX adapters ─────────────────────────────────
   redis:
+    restart: unless-stopped
     image: redis:alpine
     container_name: redis
     ports:
@@ -280,6 +290,7 @@ services:
   #   Emits on_{action} callbacks to onix-bpp:8082/bpp/caller/on_{action}.
   #   Edit catalog.json (bind-mounted) to change the catalog without a rebuild.
   sim-bpp:
+    restart: unless-stopped
     container_name: sim-bpp
     build:
       context: .
