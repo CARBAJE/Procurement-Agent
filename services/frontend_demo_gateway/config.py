@@ -29,18 +29,18 @@ class Settings(BaseSettings):
         case_sensitive=False,
     )
 
-    # ── Ollama / Supplier Agent ──────────────────────────────────────────
-    # NOTE: the gateway runs as a HOST uvicorn process, so ``localhost`` here
-    # reaches the host Ollama daemon directly (the in-network ollama container
-    # is only needed by dockerised services). qwen3:8b is the supplier brain.
+    # ── LLM endpoint (Claude Code OpenAI proxy) ──────────────────────────
+    # MIGRATED off Ollama: the gateway runs host-networked, so localhost:8012
+    # reaches the Claude proxy directly. The agents now think via Claude Code.
+    # (The data pipelines — intent-parser, catalog-normalizer — stay on Ollama.)
     ollama_base_url: str = Field(
-        default="http://localhost:11434/v1", alias="OLLAMA_BASE_URL"
+        default="http://localhost:8012/v1", alias="OLLAMA_BASE_URL"
     )
-    ollama_api_key: str = Field(default="ollama", alias="OLLAMA_API_KEY")
-    supplier_model: str = Field(default="qwen3:8b", alias="SUPPLIER_MODEL")
-    #: Lighter, non-"thinking" model used only to phrase the buyer's offer in
-    #: natural language (keeps per-round latency under the proxy timeout).
-    buyer_humanize_model: str = Field(default="phi3", alias="BUYER_HUMANIZE_MODEL")
+    ollama_api_key: str = Field(default="your-local-proxy-key", alias="OLLAMA_API_KEY")
+    supplier_model: str = Field(default="claude-3-5-sonnet", alias="SUPPLIER_MODEL")
+    #: Lighter/faster model just to phrase the buyer's offer (proxy maps
+    #: gpt-4o-mini -> haiku), keeping per-round latency under the proxy timeout.
+    buyer_humanize_model: str = Field(default="gpt-4o-mini", alias="BUYER_HUMANIZE_MODEL")
 
     #: Below this fractional discount off list price the supplier accepts
     #: outright (its negotiation "reservation point"). Pure-config knob the

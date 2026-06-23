@@ -71,6 +71,7 @@ def _get_llm() -> Any | None:
         _LLM_INSTANCE = ChatOpenAI(
             model=CONFIG.openai_model,
             api_key=CONFIG.openai_api_key,
+            base_url=CONFIG.openai_base_url,  # local Claude Code proxy
             timeout=CONFIG.openai_timeout_s,
             max_tokens=CONFIG.advisory_max_tokens,
         )

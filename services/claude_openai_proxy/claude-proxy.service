@@ -1,0 +1,34 @@
+# systemd --user unit for the Claude Code OpenAI proxy.
+#
+# Why a systemd service (not a docker-compose service): the proxy must run the
+# host-installed *native* `claude` binary (an ELF built for this host's glibc)
+# using the host's file-based credentials (~/.claude/.credentials.json).
+# Containerizing it would risk glibc incompatibility and would write root-owned
+# files into ~/.claude. A user service runs it natively, managed + auto-restarting.
+#
+# Install:
+#   mkdir -p ~/.config/systemd/user
+#   cp services/claude_openai_proxy/claude-proxy.service ~/.config/systemd/user/
+#   systemctl --user daemon-reload
+#   systemctl --user enable --now claude-proxy
+#   # survive logout/reboot (one-time, needs sudo):
+#   sudo loginctl enable-linger "$USER"
+#
+# Logs:  journalctl --user -u claude-proxy -f
+
+[Unit]
+Description=Claude Code OpenAI Proxy (OpenAI-compatible /v1 on :8012)
+After=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/carbaje/Documents/Work/INFOSYS/ProcurementAgentBecknProtocol
+Environment=CLAUDE_PROXY_KEY=your-local-proxy-key
+Environment=CLAUDE_PROXY_HOST=127.0.0.1
+Environment=CLAUDE_PROXY_PORT=8012
+ExecStart=/home/carbaje/anaconda3/envs/infosys_project/bin/python -m uvicorn services.claude_openai_proxy.main:app --host 127.0.0.1 --port 8012
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=default.target

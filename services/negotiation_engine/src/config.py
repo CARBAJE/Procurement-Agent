@@ -51,7 +51,15 @@ class NegotiationConfig(BaseSettings):
 
     # ── OpenAI / LLM (advisory node) ────────────────────────────────────
     openai_api_key: str | None = Field(default=None, alias="OPENAI_API_KEY")
-    openai_model: str = Field(default="gpt-4o", alias="NEGOTIATION_OPENAI_MODEL")
+    # Advisory/ambiguous LLM node routes through the local Claude Code proxy.
+    # NOTE: this engine is a BRIDGED container, so it reaches the host proxy via
+    # host.docker.internal:8012 — which requires a UFW allow rule for
+    # docker→host:8012 (analogous to the :11434 rule). `localhost` would point
+    # at the container itself. Left None-able so unset key => placeholder path.
+    openai_base_url: str | None = Field(
+        default="http://host.docker.internal:8012/v1", alias="NEGOTIATION_OPENAI_BASE_URL"
+    )
+    openai_model: str = Field(default="claude-3-5-sonnet", alias="NEGOTIATION_OPENAI_MODEL")
     openai_timeout_s: float = Field(default=30.0, alias="NEGOTIATION_OPENAI_TIMEOUT_S")
     advisory_max_tokens: int = Field(
         default=512, alias="NEGOTIATION_ADVISORY_MAX_TOKENS"
