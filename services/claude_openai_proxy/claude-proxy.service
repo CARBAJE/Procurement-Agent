@@ -23,10 +23,14 @@ After=network-online.target
 [Service]
 Type=simple
 WorkingDirectory=/home/carbaje/Documents/Work/INFOSYS/ProcurementAgentBecknProtocol
+# Binds 0.0.0.0 so the BRIDGED negotiation-engine container can reach it via
+# host.docker.internal:8012. This is NOT "open": the host UFW allows :8012 only
+# from loopback + the docker subnet (172.16.0.0/12), and every /v1 call still
+# requires the Bearer key. Host-net clients (demo-gateway) use localhost:8012.
 Environment=CLAUDE_PROXY_KEY=your-local-proxy-key
-Environment=CLAUDE_PROXY_HOST=127.0.0.1
+Environment=CLAUDE_PROXY_HOST=0.0.0.0
 Environment=CLAUDE_PROXY_PORT=8012
-ExecStart=/home/carbaje/anaconda3/envs/infosys_project/bin/python -m uvicorn services.claude_openai_proxy.main:app --host 127.0.0.1 --port 8012
+ExecStart=/home/carbaje/anaconda3/envs/infosys_project/bin/python -m uvicorn services.claude_openai_proxy.main:app --host 0.0.0.0 --port 8012
 Restart=always
 RestartSec=3
 
