@@ -421,3 +421,143 @@ async def fetch_analytics(pool: Any, period: str) -> dict:
         "period":                 period,
         "data_source":            "live",
     }
+
+
+async def fetch_business_impact(pool: Any, period: str) -> dict:
+    """Compute business impact metrics from real order data.
+
+    Returns actuals that the frontend uses to override the hardcoded
+    placeholders in the Business Impact section.
+    """
+    period_days = {"30d": 30, "90d": 90, "180d": 180}[period]
+
+    async with pool.acquire() as conn:
+        savings_row = await conn.fetchrow(
+            """
+            SELECT
+                COALESCE(SUM((nego.initial_price - nego.final_price) * po.quantity),
+                         0)::float AS monthly_savings
+            FROM purchase_orders      po
+            JOIN approval_decisions   ad   ON po.approval_id    = ad.approval_id
+            JOIN negotiation_outcomes nego ON ad.negotiation_id = nego.negotiation_id
+            WHERE po.created_at >= date_trunc('month', NOW())
+              AND po.status != 'cancelled'
+            """,
+        )
+
+        count_row = await conn.fetchrow(
+            """
+            SELECT COUNT(*)::int AS requests_this_month
+            FROM procurement_requests
+            WHERE status = 'confirmed'
+              AND date_trunc('month', created_at) = date_trunc('month', NOW())
+            """,
+        )
+
+        cycle_row = await conn.fetchrow(
+            """
+            SELECT COALESCE(
+                AVG(EXTRACT(EPOCH FROM (updated_at - created_at)) / 3600), 0
+            )::float AS avg_hours
+            FROM procurement_requests
+            WHERE status     = 'confirmed'
+              AND created_at >= NOW() - ($1 * INTERVAL '1 day')
+            """,
+            period_days,
+        )
+
+    return {
+        "monthly_savings":       round(float(savings_row["monthly_savings"]), 2),
+        "requests_this_month":   int(count_row["requests_this_month"]),
+        "avg_cycle_time_hours":  round(float(cycle_row["avg_hours"]), 1),
+        "data_source":           "live",
+    }
+
+
+async def fetch_benchmark(pool: Any, period: str) -> dict:
+    """CPO benchmarking: average contracted price vs best available market price per category.
+
+    contracted_price  — average agreed_price across POs in the period.
+    best_market_price — cheapest seller_offering price seen in the same period
+                        (includes all evaluated suppliers, not just the one chosen).
+    annual_savings    — (contracted - market) * total_qty * annualisation factor.
+    """
+    period_days = {"30d": 30, "90d": 90, "180d": 180}[period]
+
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            """
+            WITH contracted AS (
+                SELECT
+                    pr.category,
+                    AVG(po.agreed_price)::float   AS contracted_price,
+                    SUM(po.quantity)::float        AS total_qty
+                FROM purchase_orders      po
+                JOIN approval_decisions   ad   ON po.approval_id     = ad.approval_id
+                JOIN negotiation_outcomes nego ON ad.negotiation_id  = nego.negotiation_id
+                JOIN scored_offers        sc   ON nego.score_id      = sc.score_id
+                JOIN seller_offerings     soff ON sc.offering_id     = soff.offering_id
+                JOIN discovery_queries    dq   ON soff.query_id      = dq.query_id
+                JOIN beckn_intents        bi   ON dq.beckn_intent_id = bi.beckn_intent_id
+                JOIN parsed_intents       pi   ON bi.intent_id       = pi.intent_id
+                JOIN procurement_requests pr   ON pi.request_id      = pr.request_id
+                WHERE po.created_at  >= NOW() - ($1 * INTERVAL '1 day')
+                  AND po.status      != 'cancelled'
+                  AND pr.category    IS NOT NULL
+                GROUP BY pr.category
+            ),
+            market AS (
+                SELECT DISTINCT ON (pr.category)
+                    pr.category,
+                    soff.price::float AS best_market_price,
+                    b.name            AS top_alternative
+                FROM seller_offerings     soff
+                JOIN bpp               b    ON soff.bpp_id          = b.bpp_id
+                JOIN discovery_queries    dq   ON soff.query_id      = dq.query_id
+                JOIN beckn_intents        bi   ON dq.beckn_intent_id = bi.beckn_intent_id
+                JOIN parsed_intents       pi   ON bi.intent_id       = pi.intent_id
+                JOIN procurement_requests pr   ON pi.request_id      = pr.request_id
+                WHERE soff.received_at >= NOW() - ($1 * INTERVAL '1 day')
+                  AND pr.category       IS NOT NULL
+                ORDER BY pr.category, soff.price ASC
+            )
+            SELECT
+                c.category,
+                ROUND(c.contracted_price::numeric, 2)::float                                   AS contracted_price,
+                ROUND(m.best_market_price::numeric, 2)::float                                  AS best_market_price,
+                ROUND(
+                    ((c.contracted_price - m.best_market_price)
+                     / NULLIF(c.contracted_price, 0) * 100)::numeric, 1
+                )::float                                                                        AS gap_percent,
+                ROUND(
+                    ((c.contracted_price - m.best_market_price)
+                     * c.total_qty * (365.0 / $1))::numeric, 0
+                )::float                                                                        AS annual_savings,
+                m.top_alternative
+            FROM contracted c
+            JOIN market     m ON c.category = m.category
+            WHERE c.contracted_price > m.best_market_price
+            ORDER BY annual_savings DESC
+            LIMIT 10
+            """,
+            period_days,
+        )
+
+    categories = [
+        {
+            "category":          r["category"],
+            "current_contract":  float(r["contracted_price"]),
+            "best_market_price": float(r["best_market_price"]),
+            "gap_percent":       float(r["gap_percent"]),
+            "annual_savings":    float(r["annual_savings"]),
+            "top_alternative":   r["top_alternative"] or "Unknown",
+        }
+        for r in rows
+    ]
+
+    return {
+        "projected_annual_savings": round(sum(c["annual_savings"] for c in categories), 0),
+        "categories":               categories,
+        "period":                   period,
+        "data_source":              "live",
+    }

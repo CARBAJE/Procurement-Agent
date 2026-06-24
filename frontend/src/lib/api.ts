@@ -51,8 +51,22 @@ export async function fetchAnalytics(period: AnalyticsPeriod = "90d"): Promise<A
 
 // ── /analytics/benchmark — CPO benchmarking report ──────────────────────────
 
-export async function fetchBenchmark(): Promise<BenchmarkReport> {
-  const { data } = await axios.get<BenchmarkReport>("/api/analytics/benchmark")
+export async function fetchBenchmark(period: AnalyticsPeriod = "90d"): Promise<BenchmarkReport> {
+  const { data } = await axios.get<BenchmarkReport>(`/api/analytics/benchmark?period=${period}`)
+  return data
+}
+
+// ── /analytics/business-impact — live actuals for Business Impact cards ─────
+
+export interface BusinessImpactLive {
+  monthly_savings: number
+  requests_this_month: number
+  avg_cycle_time_hours: number
+  data_source: "live"
+}
+
+export async function fetchBusinessImpact(period: AnalyticsPeriod = "90d"): Promise<BusinessImpactLive> {
+  const { data } = await axios.get<BusinessImpactLive>(`/api/analytics/business-impact?period=${period}`)
   return data
 }
 

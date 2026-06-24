@@ -41,7 +41,7 @@ import DrillDownModal, {
   type DrillDownColumn,
   type DrillDownRow,
 } from "@/components/analytics/DrillDownModal"
-import { fetchAnalytics, fetchBenchmark } from "@/lib/api"
+import { fetchAnalytics, fetchBenchmark, fetchBusinessImpact } from "@/lib/api"
 import type { AnalyticsData, AnalyticsPeriod, BenchmarkReport, BusinessImpact } from "@/lib/types"
 
 // Recharts uses browser APIs — disable SSR for all chart components.
@@ -239,10 +239,12 @@ export default function DashboardPage() {
   const [drillStack, setDrillStack] = useState<DrillDownLevel[]>([])
   const [benchmark, setBenchmark]         = useState<BenchmarkReport | null>(null)
   const [benchmarkLoading, setBenchmarkLoading] = useState(false)
+  const [benchmarkError, setBenchmarkError] = useState<string | null>(null)
+  const [teamSizeFte, setTeamSizeFte] = useState(5)
   const [businessImpact, setBusinessImpact] = useState<BusinessImpact>({
-    platform_licensing: { baseline_monthly: 50_000, actual_monthly: 32_000 },
-    team_productivity:  { requests_per_fte_before: 12, requests_per_fte_after: 38 },
-    audit_prep_hours:   { before: 40, after: 6 },
+    platform_licensing: { baseline_monthly: 50_000, actual_monthly: 50_000 },
+    team_productivity:  { requests_per_fte_before: 12, requests_per_fte_after: 12 },
+    audit_prep_hours:   { before: 40, after: 40 },
   })
 
   useEffect(() => {
@@ -258,6 +260,39 @@ export default function DashboardPage() {
       .catch(() => { setAnalytics(null); setFetchError(true) })
       .finally(() => setLoading(false))
   }, [period, status])
+
+  // Populate Business Impact "after" values from real DB data when available.
+  // Baselines stay user-configurable; only the "actual" side is overwritten.
+  useEffect(() => {
+    if (status !== "authenticated") return
+    fetchBusinessImpact(period)
+      .then((live) => {
+        setBusinessImpact((prev) => ({
+          platform_licensing: {
+            ...prev.platform_licensing,
+            actual_monthly: Math.max(
+              0,
+              prev.platform_licensing.baseline_monthly - live.monthly_savings,
+            ),
+          },
+          team_productivity: {
+            ...prev.team_productivity,
+            requests_per_fte_after: Math.max(
+              prev.team_productivity.requests_per_fte_before + 1,
+              Math.round(live.requests_this_month / teamSizeFte),
+            ),
+          },
+          audit_prep_hours: {
+            ...prev.audit_prep_hours,
+            after: Math.max(
+              1,
+              Math.round(prev.audit_prep_hours.before * (live.avg_cycle_time_hours / 72.0)),
+            ),
+          },
+        }))
+      })
+      .catch(() => { /* keep defaults on unavailable analytics */ })
+  }, [period, status, teamSizeFte])
 
   if (status === "loading" || (status === "authenticated" && loading)) {
     return <DashboardSkeleton />
@@ -615,6 +650,16 @@ export default function DashboardPage() {
                       }))}
                     />
                   </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="baseline-fte">Procurement team size (FTEs)</Label>
+                    <Input
+                      id="baseline-fte"
+                      type="number"
+                      min={1}
+                      value={teamSizeFte}
+                      onChange={(e) => setTeamSizeFte(Math.max(1, Number(e.target.value)))}
+                    />
+                  </div>
                 </div>
               </DialogContent>
             </Dialog>
@@ -706,8 +751,10 @@ export default function DashboardPage() {
                 <Button
                   onClick={() => {
                     setBenchmarkLoading(true)
-                    fetchBenchmark()
+                    setBenchmarkError(null)
+                    fetchBenchmark(period)
                       .then(setBenchmark)
+                      .catch(() => setBenchmarkError("Analytics service unavailable. Rebuild the analytics container and retry."))
                       .finally(() => setBenchmarkLoading(false))
                   }}
                   disabled={benchmarkLoading}
@@ -722,12 +769,26 @@ export default function DashboardPage() {
             </div>
           </CardHeader>
           <CardContent>
-            {!benchmark ? (
-              <div className="flex flex-col items-center justify-center py-10 text-center gap-3">
+            {benchmarkError ? (
+              <div className="flex flex-col items-center justify-center py-10 text-center gap-3" role="alert">
+                <AlertCircle className="h-8 w-8 text-destructive opacity-60" aria-hidden="true" />
+                <p className="text-sm text-destructive max-w-xs">{benchmarkError}</p>
+                <Button variant="outline" size="sm" onClick={() => setBenchmarkError(null)}>Dismiss</Button>
+              </div>
+            ) : !benchmark ? (
+              <div className="flex flex-col items-center justify-center py-10 text-center gap-3" role="status">
                 <BarChart2 className="h-10 w-10 opacity-20" aria-hidden="true" />
                 <p className="text-sm text-muted-foreground max-w-xs">
                   Run an analysis to compare your current contracts against the best available market prices and identify potential savings.
                 </p>
+              </div>
+            ) : benchmark.categories.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-10 text-center gap-3" role="status">
+                <BarChart2 className="h-10 w-10 opacity-20" aria-hidden="true" />
+                <p className="text-sm text-muted-foreground max-w-xs">
+                  No procurement data available yet. Complete some orders to see benchmarking results.
+                </p>
+                <Button variant="ghost" size="sm" onClick={() => setBenchmark(null)}>Reset</Button>
               </div>
             ) : (
               <div className="space-y-4">

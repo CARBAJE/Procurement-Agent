@@ -107,21 +107,16 @@ services:
     ports:
       - "8009:8009"
     environment:
-      # In-network compose postgres holds the seeded procurement_agent DB
-      # (host postgres binds 127.0.0.1 + UFW blocks docker→host:5432).
-      - DB_HOST=postgres
+      - DB_HOST=procurement-postgres
       - DB_PORT=5432
       - DB_NAME=procurement_agent
       - DB_USER=postgres
-      - DB_PASSWORD=postgres
+      - DB_PASSWORD=postgres123
     depends_on:
       postgres:
         condition: service_healthy
     networks:
       - beckn_network
-    # Note: requires an external `procurement-postgres` container attached to
-    # the `beckn_network` (managed outside this compose file). Falls back to
-    # mock data automatically when DB is unreachable.
 
   # ── Orchestrator: Step Functions local simulator ───────────────────────────
   orchestrator:

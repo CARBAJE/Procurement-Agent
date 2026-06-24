@@ -89,14 +89,64 @@ async def analytics(request: web.Request) -> web.Response:
         )
 
 
+async def business_impact(request: web.Request) -> web.Response:
+    period = request.query.get("period", "90d")
+    if period not in VALID_PERIODS:
+        period = "90d"
+
+    pool = request.app.get("db_pool")
+    if pool is None:
+        return web.json_response(
+            {"error": "database_unavailable"},
+            status=503,
+        )
+
+    try:
+        from queries import fetch_business_impact
+        data = await fetch_business_impact(pool, period)
+        return web.json_response(data)
+    except Exception as exc:
+        logger.error("business_impact query failed (%s)", exc)
+        return web.json_response(
+            {"error": "database_query_failed", "detail": str(exc)},
+            status=503,
+        )
+
+
+async def benchmark(request: web.Request) -> web.Response:
+    period = request.query.get("period", "90d")
+    if period not in VALID_PERIODS:
+        period = "90d"
+
+    pool = request.app.get("db_pool")
+    if pool is None:
+        return web.json_response(
+            {"error": "database_unavailable"},
+            status=503,
+        )
+
+    try:
+        from queries import fetch_benchmark
+        data = await fetch_benchmark(pool, period)
+        return web.json_response(data)
+    except Exception as exc:
+        logger.error("benchmark query failed (%s)", exc)
+        return web.json_response(
+            {"error": "database_query_failed", "detail": str(exc)},
+            status=503,
+        )
+
+
 # ── App factory ───────────────────────────────────────────────────────────────
 
 def create_app() -> web.Application:
     app = web.Application()
     app.on_startup.append(_on_startup)
     app.on_cleanup.append(_on_cleanup)
-    app.router.add_get("/health",    health)
-    app.router.add_get("/analytics", analytics)
+    app.router.add_get("/health",          health)
+    app.router.add_get("/analytics",       analytics)
+    app.router.add_get("/business-impact", business_impact)
+    app.router.add_get("/benchmark",       benchmark)
     return app
 
 
