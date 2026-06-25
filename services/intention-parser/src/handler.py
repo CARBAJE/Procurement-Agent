@@ -51,7 +51,7 @@ async def parse(request: web.Request) -> web.Response:
             "intent":       intent_type,
             "confidence":   result.confidence,
             "beckn_intent": beckn_dict,
-            "routed_to":    result.routed_to or "qwen3:1.7b",
+            "routed_to":    result.routed_to,
         })
     except Exception as exc:
         logger.error("Intent parsing failed: %s", exc)
