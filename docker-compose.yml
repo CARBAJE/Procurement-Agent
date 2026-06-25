@@ -320,7 +320,7 @@ services:
   #   erp-adapter) point at an EXTERNAL `procurement_agent` DB via
   #   host.docker.internal:5432 and fall back to mock — they do not use this.
   postgres:
-    image: postgres:16
+    image: pgvector/pgvector:pg16
     container_name: postgres
     restart: unless-stopped
     environment:
@@ -330,6 +330,7 @@ services:
     ports:
       - "55432:5432"
     volumes:
+      - postgres_data:/var/lib/postgresql/data
       - ./database/sql/20_negotiation_schema.sql:/docker-entrypoint-initdb.d/01_negotiation_schema.sql:ro
       - ./database/seed_negotiation_demo.sql:/docker-entrypoint-initdb.d/02_seed_negotiation_demo.sql:ro
     networks:
@@ -442,3 +443,6 @@ networks:
   beckn_network:
     name: beckn_network
     driver: bridge
+
+volumes:
+  postgres_data:
