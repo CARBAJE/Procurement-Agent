@@ -4,6 +4,7 @@ from __future__ import annotations
 import logging
 import os
 import uuid as _uuid
+from datetime import datetime
 
 from ..db import get_pool
 
@@ -25,6 +26,7 @@ async def create_order(
     currency: str = "INR",
     unit: str = "units",
     requester_id: str | None = None,
+    fulfillment_eta: str | None = None,
 ) -> str:
     """Create negotiation_outcome + approval_decision + purchase_order in one tx.
 
@@ -36,6 +38,17 @@ async def create_order(
     """
     pool = await get_pool()
     rid = _uuid.UUID(requester_id) if requester_id else _uuid.UUID(SYSTEM_USER_ID)
+
+    # asyncpg binds timestamptz params as datetime objects, not ISO strings.
+    eta_dt = None
+    if fulfillment_eta:
+        try:
+            eta_dt = datetime.fromisoformat(fulfillment_eta)
+        except (TypeError, ValueError):
+            logger.warning(
+                "[order_repo] unparseable fulfillment_eta %r — storing NULL",
+                fulfillment_eta,
+            )
 
     async with pool.acquire() as conn:
         async with conn.transaction():
@@ -76,9 +89,9 @@ async def create_order(
                 INSERT INTO purchase_orders (
                     approval_id, bpp_id, item_id, quantity, unit,
                     agreed_price, currency, delivery_terms,
-                    beckn_confirm_ref, status
+                    beckn_confirm_ref, status, fulfillment_eta
                 )
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'pending')
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'pending', $10)
                 RETURNING po_id
                 """,
                 approval_id,
@@ -90,6 +103,7 @@ async def create_order(
                 currency,
                 delivery_terms,
                 beckn_confirm_ref,
+                eta_dt,
             )
             return str(po["po_id"])
 

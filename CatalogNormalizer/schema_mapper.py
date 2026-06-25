@@ -44,6 +44,18 @@ class SchemaMapper:
                 rating = str(rating_obj.get("ratingValue", "")) or None
             else:
                 rating = str(rating_obj) if rating_obj is not None else None
+            # Split the delivery-lead-time tag out of the spec tags (it is
+            # carried as a tag to survive onix; see sim-bpp _wire_resource).
+            fulfillment_hours: int | None = None
+            spec_tags: list = []
+            for t in resource.get("tags", []):
+                if (t.get("descriptor") or {}).get("name") == "fulfillment_hours":
+                    try:
+                        fulfillment_hours = int(float(t.get("value")))
+                    except (TypeError, ValueError):
+                        pass
+                else:
+                    spec_tags.append(t)
             offerings.append(
                 DiscoverOffering(
                     bpp_id=bpp_id,
@@ -56,10 +68,17 @@ class SchemaMapper:
                     price_currency=price.get("currency", "INR"),
                     rating=rating,
                     available_quantity=_available_count(resource),
-                    specifications=_tags_to_specs(resource.get("tags", [])),
-                    # fulfillment_hours intentionally left None: a real Beckn
-                    # network does not carry a delivery ETA in the discovery
-                    # catalog — it is resolved at /select or /init (fulfillment).
+                    specifications=_tags_to_specs(spec_tags),
+                    # Prefer a real network-supplied category (descriptor.code);
+                    # fall back to deriving it from the item name, because the
+                    # local onix build strips non-core catalog fields in transit.
+                    category=(
+                        resource.get("descriptor", {}).get("code")
+                        or _derive_category(resource.get("descriptor", {}).get("name", ""))
+                    ),
+                    # Delivery lead time carried as a tag (sim-bpp); enables the
+                    # scoring model to weigh delivery, not just price + rating.
+                    fulfillment_hours=fulfillment_hours,
                 )
             )
         return offerings
@@ -195,6 +214,29 @@ def _tags_to_specs(tags: list) -> list[str]:
         elif name:
             specs.append(str(name))
     return specs
+
+
+_CATEGORY_RULES: list[tuple[tuple[str, ...], str]] = [
+    (("cat6", "ethernet", "switch", "router", "network", "lan", "wifi"), "Networking"),
+    (("laptop", "desktop", "monitor", "printer", "multifunction", "scanner",
+      "computer", "server"), "IT Equipment"),
+    (("keyboard", "mouse", "webcam", "dock", "hdmi", "usb-c", "headset",
+      "adapter", "cable"), "IT Peripherals"),
+    (("chair", "desk", "cabinet", "table", "drawer", "furniture"), "Furniture"),
+    (("paper", "pen", "marker", "sticky", "notebook", "stapler", "toner",
+      "cartridge", "ink", "stationery"), "Office Supplies"),
+]
+
+
+def _derive_category(item_name: str) -> str | None:
+    """Best-effort category from the item name. Used only as a fallback when the
+    catalog (network) does not carry an explicit category — keyword rules are
+    ordered most-specific first. Returns None when nothing matches."""
+    n = (item_name or "").lower()
+    for keywords, category in _CATEGORY_RULES:
+        if any(k in n for k in keywords):
+            return category
+    return None
 
 
 def _iso_duration_to_hours(s: str) -> int:

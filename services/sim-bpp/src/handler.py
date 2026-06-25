@@ -120,10 +120,19 @@ def load_catalog() -> list[dict]:
 _TOKEN_RE = re.compile(r"[a-z0-9]+")
 
 
+def _singular(w: str) -> str:
+    """Light singularization so 'laptops'→'laptop', 'sheets'→'sheet'. Keeps
+    short tokens (a4) and double-s words (glass) intact."""
+    if len(w) > 3 and w.endswith("s") and not w.endswith("ss"):
+        return w[:-1]
+    return w
+
+
 def _tokenize(text: str) -> set[str]:
-    """Lowercase word/number tokens. Token-based (not substring) matching avoids
+    """Lowercase word/number tokens, lightly singularized so plural queries
+    match singular catalog keywords. Token-based (not substring) matching avoids
     false positives like the query token "white" matching "whiteboard"."""
-    return set(_TOKEN_RE.findall(text.lower()))
+    return {_singular(t) for t in _TOKEN_RE.findall(text.lower())}
 
 
 def _item_tokens(item: dict) -> set[str]:
@@ -143,9 +152,15 @@ def _wire_resource(item: dict, provider: dict) -> dict:
     provider + rating — that is what the BAP catalog-normalizer reads from the
     BECKN_V2_FLAT_RESOURCES shape (resource.provider / resource.rating).
     """
+    # Supplier-declared category rides on descriptor.code — a standard Beckn v2
+    # Descriptor field that onix preserves (unlike a custom resource field or a
+    # 'category' tag, both of which onix strips during schema validation).
+    descriptor = dict(item.get("descriptor", {}))
+    if item.get("category"):
+        descriptor["code"] = item["category"]
     res: dict = {
         "id": item["id"],
-        "descriptor": item.get("descriptor", {}),
+        "descriptor": descriptor,
         "provider": {"id": provider["id"], "descriptor": provider.get("descriptor", {})},
         "price": item.get("price", {}),
     }
@@ -157,12 +172,21 @@ def _wire_resource(item: dict, provider: dict) -> dict:
     # Stock → Beckn v2 quantity.available.count
     if item.get("stock") is not None:
         res["quantity"] = {"available": {"count": item["stock"]}}
-    # Specs → Beckn v2 tags[] (each spec becomes a tag value)
+    # Specs → Beckn v2 tags[] (each spec becomes a tag value). Category travels
+    # as a tag too: onix strips non-schema resource fields, but tags pass
+    # through — and a real Beckn catalog carries the category on the item.
     specs = item.get("specs") or []
-    if specs:
-        res["tags"] = [{"descriptor": {"name": "specification"}, "value": s} for s in specs]
-    # NOTE: no fulfillment/ETA here on purpose — a real Beckn network resolves
-    # delivery ETA at /select or /init, not in the discovery catalog.
+    tags = [{"descriptor": {"name": "specification"}, "value": s} for s in specs]
+    # Delivery lead time travels as a tag (onix strips non-schema resource
+    # fields, but tags pass through). The catalog-normalizer reads it back into
+    # DiscoverOffering.fulfillment_hours so the scoring model can weigh delivery.
+    if item.get("fulfillment_hours") is not None:
+        tags.append({
+            "descriptor": {"name": "fulfillment_hours"},
+            "value": str(item["fulfillment_hours"]),
+        })
+    if tags:
+        res["tags"] = tags
     return res
 
 
@@ -188,12 +212,15 @@ def build_on_discover(ctx: dict, msg: dict) -> dict:
     # — precise relevance instead of any-token noise.
     query_tokens = _tokenize(text) & vocab
 
+    # No recognized query tokens (e.g. an unknown brand like "Dell" with no
+    # catalog match) → return NOTHING, not the whole catalog. An empty set is a
+    # subset of every item, which would otherwise match all 31 offerings.
     catalogs: list[dict] = []
-    for prov in catalog:
+    for prov in (catalog if query_tokens else []):
         resources = [
             _wire_resource(it, prov)
             for it in prov.get("items", [])
-            if query_tokens <= _item_tokens(it)  # empty query → subset of everything → all
+            if query_tokens <= _item_tokens(it)
         ]
         if resources:
             prov_descriptor = prov.get("descriptor", {})

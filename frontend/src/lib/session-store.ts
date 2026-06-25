@@ -15,11 +15,20 @@ import type {
 
 const KEY_PREFIX = "procurement:session:"
 
+/** Terms settled by the negotiation step (compare → negotiate → order). */
+export interface NegotiatedTerms {
+  settled_price: number | null
+  agreed_delivery_date: string | null
+  supplier_id?: string | null
+}
+
 export interface WizardSession {
   intent: BecknIntent
   comparison: ComparisonResult
   chosenItemId: string | null
   commit: CommitResult | null
+  /** Present once the user has run the negotiation step. */
+  negotiation?: NegotiatedTerms | null
 }
 
 export function loadSession(txnId: string): WizardSession | null {

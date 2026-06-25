@@ -1,7 +1,8 @@
 """Analytics microservice — GET /analytics
 
 Owns the database connection and all reporting queries.
-Falls back to deterministic mock data when the DB is unavailable or empty.
+Falls back to deterministic mock data only when the DB is UNAVAILABLE (pool is
+None or a query raises). A reachable-but-empty DB returns real zeros (live).
 
 Environment variables:
   DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD
@@ -65,17 +66,75 @@ async def analytics(request: web.Request) -> web.Response:
         period = "90d"
 
     pool = request.app.get("db_pool")
-    if pool is not None:
-        try:
-            from queries import fetch_analytics
-            data = await fetch_analytics(pool, period)
-            if data is not None:
-                return web.json_response(data)
-        except Exception as exc:
-            logger.warning("DB query failed (%s) — serving mock data", exc)
 
-    from mock import generate_mock_analytics
-    return web.json_response(generate_mock_analytics(period))
+    # DB unreachable → honest error, never fabricated data. A reachable-but-empty
+    # DB is NOT an error: fetch_analytics returns real zeros (data_source: live).
+    if pool is None:
+        logger.warning("DB pool unavailable — returning 503 (no mock data)")
+        return web.json_response(
+            {"error": "database_unavailable",
+             "detail": "The analytics database is not reachable."},
+            status=503,
+        )
+
+    try:
+        from queries import fetch_analytics
+        data = await fetch_analytics(pool, period)
+        return web.json_response(data)
+    except Exception as exc:
+        logger.error("DB query failed (%s) — returning 503 (no mock data)", exc)
+        return web.json_response(
+            {"error": "database_query_failed", "detail": str(exc)},
+            status=503,
+        )
+
+
+async def business_impact(request: web.Request) -> web.Response:
+    period = request.query.get("period", "90d")
+    if period not in VALID_PERIODS:
+        period = "90d"
+
+    pool = request.app.get("db_pool")
+    if pool is None:
+        return web.json_response(
+            {"error": "database_unavailable"},
+            status=503,
+        )
+
+    try:
+        from queries import fetch_business_impact
+        data = await fetch_business_impact(pool, period)
+        return web.json_response(data)
+    except Exception as exc:
+        logger.error("business_impact query failed (%s)", exc)
+        return web.json_response(
+            {"error": "database_query_failed", "detail": str(exc)},
+            status=503,
+        )
+
+
+async def benchmark(request: web.Request) -> web.Response:
+    period = request.query.get("period", "90d")
+    if period not in VALID_PERIODS:
+        period = "90d"
+
+    pool = request.app.get("db_pool")
+    if pool is None:
+        return web.json_response(
+            {"error": "database_unavailable"},
+            status=503,
+        )
+
+    try:
+        from queries import fetch_benchmark
+        data = await fetch_benchmark(pool, period)
+        return web.json_response(data)
+    except Exception as exc:
+        logger.error("benchmark query failed (%s)", exc)
+        return web.json_response(
+            {"error": "database_query_failed", "detail": str(exc)},
+            status=503,
+        )
 
 
 # ── App factory ───────────────────────────────────────────────────────────────
@@ -84,8 +143,10 @@ def create_app() -> web.Application:
     app = web.Application()
     app.on_startup.append(_on_startup)
     app.on_cleanup.append(_on_cleanup)
-    app.router.add_get("/health",    health)
-    app.router.add_get("/analytics", analytics)
+    app.router.add_get("/health",          health)
+    app.router.add_get("/analytics",       analytics)
+    app.router.add_get("/business-impact", business_impact)
+    app.router.add_get("/benchmark",       benchmark)
     return app
 
 

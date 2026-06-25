@@ -33,15 +33,16 @@ from fastapi.middleware.cors import CORSMiddleware
 # before any of our local modules that import from ``core.*`` or ``src.*``.
 from . import _paths  # noqa: F401
 
-from .mock_negotiate import router as negotiate_router  # noqa: E402
-from .mock_score import _build_model, router as score_router  # noqa: E402
+import httpx  # noqa: E402
+import redis.asyncio as aioredis  # noqa: E402
 
-# Import once for the LangGraph builder.
-from langgraph.checkpoint.memory import MemorySaver  # noqa: E402
-from src.graph import build_graph  # noqa: E402  (negotiation_engine)
+from .config import CONFIG  # noqa: E402
+from .live_negotiate import router as negotiate_router  # noqa: E402
+from .mock_score import _build_model, router as score_router  # noqa: E402
+from .supplier_agent import SupplierAgent  # noqa: E402
 
 logging.basicConfig(
-    level=os.getenv("FRONTEND_DEMO_GATEWAY_LOG_LEVEL", "INFO"),
+    level=CONFIG.log_level,
     format="%(asctime)s %(name)s %(levelname)s %(message)s",
 )
 logger = logging.getLogger(__name__)
@@ -54,27 +55,60 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    """Boot the model + graph singletons. Tear them down on shutdown."""
+    """Boot the singletons (score model, supplier agent, redis, engine client)."""
     logger.info("Frontend Demo Gateway starting")
 
     # Phase-2 LTR model (real PyTorch nn.Linear, fallback weights).
     app.state.score_model = _build_model()
     app.state.score_model_version = "phase2-fallback-static-weights"
 
-    # Real LangGraph state machine with MemorySaver — only the
-    # checkpointer is mocked; nodes, guardrails, and Pydantic models
-    # are all production.
-    app.state.negotiation_graph = build_graph(checkpointer=MemorySaver())
-    app.state.negotiation_resumed = {}  # thread_id → bool
+    # ── Supplier Agent — real qwen3:8b via local Ollama (OpenAI SDK). ──
+    # Constructed ONCE here; owns an AsyncOpenAI connection pool. Never
+    # re-instantiated per request.
+    app.state.supplier_agent = SupplierAgent(
+        base_url=CONFIG.ollama_base_url,
+        api_key=CONFIG.ollama_api_key,
+        model=CONFIG.supplier_model,
+        buyer_model=CONFIG.buyer_humanize_model,
+        acceptable_discount_floor=CONFIG.supplier_acceptable_discount_floor,
+        temperature=CONFIG.supplier_temperature,
+        timeout_s=CONFIG.supplier_timeout_s,
+    )
+    ollama_ok = await app.state.supplier_agent.health()
+    logger.info(
+        "Supplier Agent ready: model=%s ollama=%s reachable=%s",
+        CONFIG.supplier_model,
+        CONFIG.ollama_base_url,
+        ollama_ok,
+    )
+
+    # ── Redis client (publishes supplier responses → engine resume). ──
+    app.state.redis = aioredis.from_url(CONFIG.redis_url, decode_responses=True)
+
+    # ── Shared httpx client proxying to the live Negotiation Engine. ──
+    app.state.engine_client = httpx.AsyncClient(
+        base_url=CONFIG.negotiation_engine_url,
+        timeout=CONFIG.engine_timeout_s,
+    )
+
+    # In-memory session store: thread_id → deal context + round history.
+    app.state.negotiation_sessions = {}
 
     logger.info(
-        "Gateway ready: Phase2Scorer loaded, LangGraph compiled, "
-        "endpoints mounted under /api/demo/*"
+        "Gateway ready: Phase2Scorer loaded, Supplier=%s, proxying buyer to %s, "
+        "endpoints under /api/demo/*",
+        CONFIG.supplier_model,
+        CONFIG.negotiation_engine_url,
     )
 
     try:
         yield
     finally:
+        await app.state.engine_client.aclose()
+        try:
+            await app.state.redis.aclose()
+        except Exception:  # pragma: no cover
+            pass
         logger.info("Frontend Demo Gateway shutdown complete")
 
 
@@ -137,16 +171,18 @@ async def healthz() -> dict[str, str]:
 
 @app.get("/readyz", tags=["ops"])
 async def readyz(request: Request) -> dict:
-    """Readiness probe — confirms both singletons are loaded."""
+    """Readiness probe — confirms the singletons are loaded + Ollama reachable."""
     model = getattr(request.app.state, "score_model", None)
-    graph = getattr(request.app.state, "negotiation_graph", None)
-    if model is None or graph is None:
+    agent = getattr(request.app.state, "supplier_agent", None)
+    if model is None or agent is None:
         return {"status": "starting"}, status.HTTP_503_SERVICE_UNAVAILABLE  # type: ignore[return-value]
     return {
         "status": "ready",
         "score_model_version": request.app.state.score_model_version,
         "score_model_weights": model.get_weights(),
-        "active_threads": len(request.app.state.negotiation_resumed),
+        "supplier_model": agent.model,
+        "ollama_reachable": await agent.health(),
+        "active_sessions": len(request.app.state.negotiation_sessions),
     }
 
 

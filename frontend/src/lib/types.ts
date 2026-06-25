@@ -136,6 +136,30 @@ export interface StatusSnapshot {
   status: "live" | "mock"
 }
 
+// ── /order/{request_id} — DB-backed order detail (no session needed) ─────────
+
+export interface OrderDetailOrder {
+  order_id: string
+  order_state: OrderState
+  fulfillment_eta: string | null
+  bpp_id: string
+  bpp_uri: string
+  status: "live" | "mock"
+  quantity: number
+  offering: Offering
+}
+
+export interface OrderDetail {
+  found: boolean
+  request_id: string
+  raw_input_text: string
+  request_status: string
+  category: string | null
+  created_at: string | null
+  intent: BecknIntent | null
+  order: OrderDetailOrder | null
+}
+
 // ── Analytics Dashboard ──────────────────────────────────────────────────────
 
 export interface KpiMetrics {

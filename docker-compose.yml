@@ -2,6 +2,7 @@ services:
 
   # ── Lambda 1: Intention Parser ─────────────────────────────────────────────
   intention-parser:
+    restart: unless-stopped
     build: ./services/intention-parser
     ports:
       - "8001:8001"
@@ -9,17 +10,20 @@ services:
       - ./IntentParser:/app/IntentParser    # repo module mounted at runtime
       - ./shared:/app/shared                # shared models
     environment:
+      # Host Ollama (GPU). Reachable now that UFW allows docker bridges → :11434.
       - OLLAMA_URL=http://host.docker.internal:11434/v1
-      - COMPLEX_MODEL=qwen3:1.7b
-      - SIMPLE_MODEL=qwen3:1.7b
+      # Use qwen3:8b (present on the host daemon; qwen3:1.7b is not loaded there).
+      - COMPLEX_MODEL=qwen3:8b
+      - SIMPLE_MODEL=qwen3:8b
       - PYTHONPATH=/app
     extra_hosts:
-      - "host.docker.internal:host-gateway"   # Linux: resolver Ollama del host
+      - "host.docker.internal:host-gateway"   # Linux: resolve host Ollama
     networks:
       - beckn_network
 
   # ── Lambda 2: Beckn BAP Client ─────────────────────────────────────────────
   beckn-bap-client:
+    restart: unless-stopped
     build:
       context: .                                     # repo root — Dockerfile COPYs shared/
       dockerfile: ./services/beckn-bap-client/Dockerfile
@@ -43,6 +47,7 @@ services:
 
   # ── Lambda 4: Catalog Normalizer ───────────────────────────────────────────
   catalog-normalizer:
+    restart: unless-stopped
     build:
       context: .
       dockerfile: ./services/catalog-normalizer/Dockerfile
@@ -52,16 +57,18 @@ services:
       - ./CatalogNormalizer:/app/CatalogNormalizer   # repo module mounted at runtime
       - ./shared:/app/shared                          # shared models
     environment:
+      # Host Ollama (GPU). Reachable now that UFW allows docker bridges → :11434.
       - OLLAMA_URL=http://host.docker.internal:11434/v1
       - NORMALIZER_MODEL=qwen3:1.7b
       - PYTHONPATH=/app
     extra_hosts:
-      - "host.docker.internal:host-gateway"   # Linux: resolver Ollama del host
+      - "host.docker.internal:host-gateway"   # Linux: resolve host Ollama
     networks:
       - beckn_network
 
   # ── Lambda 3: Comparative & Scoring ────────────────────────────────────────
   comparative-scoring:
+    restart: unless-stopped
     build: ./services/comparative-scoring
     ports:
       - "8003:8003"
@@ -72,6 +79,7 @@ services:
 
   # ── Lambda 5: Data Normalizer — persistence bridge ─────────────────────────
   data-normalizer:
+    restart: unless-stopped
     build:
       context: .
       dockerfile: ./services/data-normalizer/Dockerfile
@@ -81,11 +89,12 @@ services:
       - ./DataNormalizer:/app/DataNormalizer   # repo module mounted at runtime
       - ./shared:/app/shared                   # shared models
     environment:
-      - DB_HOST=host.docker.internal
-      - DB_PORT=5432
-      - DB_NAME=procurement_agent
-      - DB_USER=cristianmontiel
-      - DB_PASSWORD=
+      # PostgreSQL — single source of truth: root .env (see .env.example)
+      - DB_HOST=${DB_HOST:-host.docker.internal}
+      - DB_PORT=${DB_PORT:-5432}
+      - DB_NAME=${DB_NAME:-procurement_agent}
+      - DB_USER=${DB_USER:-postgres}
+      - DB_PASSWORD=${DB_PASSWORD:-postgres123}
       - PYTHONPATH=/app
     networks:
       - beckn_network
@@ -93,24 +102,25 @@ services:
   # ── Lambda 6: Analytics ────────────────────────────────────────────────────
   # Port 8009 (was 8006 — moved to coexist with data-normalizer on 8006).
   analytics:
+    restart: unless-stopped
     build: ./services/analytics
     ports:
       - "8009:8009"
     environment:
-      # PostgreSQL — uses real data when available, mock otherwise
       - DB_HOST=procurement-postgres
       - DB_PORT=5432
       - DB_NAME=procurement_agent
       - DB_USER=postgres
       - DB_PASSWORD=postgres123
+    depends_on:
+      postgres:
+        condition: service_healthy
     networks:
       - beckn_network
-    # Note: requires an external `procurement-postgres` container attached to
-    # the `beckn_network` (managed outside this compose file). Falls back to
-    # mock data automatically when DB is unreachable.
 
   # ── Orchestrator: Step Functions local simulator ───────────────────────────
   orchestrator:
+    restart: unless-stopped
     build: ./services/orchestrator
     ports:
       - "8000:8004"   # matches frontend .env.local BAP_URL/INTENT_PARSER_URL defaults
@@ -164,17 +174,20 @@ services:
 
   # ── ERP Adapter (vendor-neutral SAP/Oracle integration) ────────────────────
   erp-adapter:
+    restart: unless-stopped
     build:
       context: .
       dockerfile: ./services/erp-adapter/Dockerfile
     ports:
       - "8007:8007"
     environment:
-      - DB_HOST=procurement-postgres
-      - DB_PORT=5432
-      - DB_NAME=procurement_agent
-      - DB_USER=postgres
-      - DB_PASSWORD=postgres123
+      # PostgreSQL — single source of truth: root .env (see .env.example).
+      # Falls back to InMemoryOutboxRepo silently if the DB is unreachable.
+      - DB_HOST=${DB_HOST:-host.docker.internal}
+      - DB_PORT=${DB_PORT:-5432}
+      - DB_NAME=${DB_NAME:-procurement_agent}
+      - DB_USER=${DB_USER:-postgres}
+      - DB_PASSWORD=${DB_PASSWORD:-postgres123}
       - REDIS_URL=redis://redis:6379
       - ERP_VENDORS=mock                       # override to sap | oracle | sap,oracle
       - ERP_INTERNAL_TOKEN=dev-internal-token-CHANGE_ME
@@ -209,6 +222,7 @@ services:
 
   # ── ERP Mock (emulates SAP OData v4 + Oracle ERP Cloud REST) ───────────────
   erp-mock:
+    restart: unless-stopped
     build:
       context: .
       dockerfile: ./services/erp-mock/Dockerfile
@@ -225,6 +239,7 @@ services:
 
   # ── Redis — shared cache for ONIX adapters ─────────────────────────────────
   redis:
+    restart: unless-stopped
     image: redis:alpine
     container_name: redis
     ports:
@@ -354,6 +369,7 @@ services:
   #   Emits on_{action} callbacks to onix-bpp:8082/bpp/caller/on_{action}.
   #   Edit catalog.json (bind-mounted) to change the catalog without a rebuild.
   sim-bpp:
+    restart: unless-stopped
     container_name: sim-bpp
     build:
       context: .
@@ -389,6 +405,130 @@ services:
     depends_on:
       kafka:
         condition: service_healthy
+
+  # ── PostgreSQL — durable store for the Negotiation Engine ──────────────────
+  #   Owns the `negotiation` DB: LangGraph AsyncPostgresSaver checkpoints
+  #   (created by the engine at startup) + the negotiation_session/round/
+  #   policy_decision audit tables (seeded from the mounted init scripts).
+  #   NOTE: the procurement-pipeline services (data-normalizer, analytics,
+  #   erp-adapter) point at an EXTERNAL `procurement_agent` DB via
+  #   host.docker.internal:5432 and fall back to mock — they do not use this.
+  postgres:
+    image: postgres:16
+    container_name: postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: negotiation
+    ports:
+      - "55432:5432"
+    volumes:
+      - ./database/sql/20_negotiation_schema.sql:/docker-entrypoint-initdb.d/01_negotiation_schema.sql:ro
+      - ./database/seed_negotiation_demo.sql:/docker-entrypoint-initdb.d/02_seed_negotiation_demo.sql:ro
+    networks:
+      - beckn_network
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres", "-d", "negotiation"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # ── Negotiation Engine (Phase 3 buyer agent) ───────────────────────────────
+  #   LangGraph state machine: deterministic strategy + hard 20% guardrail,
+  #   durable AsyncPostgresSaver checkpointer, Redis Pub/Sub resume broker
+  #   (beckn_on_select_results). Env var names mirror src/config.py aliases.
+  negotiation-engine:
+    build:
+      context: ./services/negotiation_engine
+      dockerfile: Dockerfile
+    container_name: negotiation-engine
+    restart: unless-stopped
+    ports:
+      # Host :8004 is owned by the orchestrator (frontend procurement flow).
+      # The engine is reached INTERNALLY by the demo-gateway via the docker
+      # DNS name `negotiation-engine:8004`, so it needs no privileged host
+      # port — expose 18004 for direct host-side debugging only.
+      - "18004:8004"
+    environment:
+      NEGOTIATION_POSTGRES_DSN: postgresql://postgres:postgres@postgres:5432/negotiation
+      REDIS_URL: redis://redis:6379/0
+      NEGOTIATION_REDIS_ON_SELECT_CHANNEL: beckn_on_select_results
+      NEGOTIATION_API_PORT: "8004"
+      NEGOTIATION_LOG_LEVEL: INFO
+      # Advisory LLM node → Claude Code proxy. Bridged container reaches the
+      # host proxy via host.docker.internal:8012 (needs a UFW allow for
+      # docker→host:8012; advisory branch falls back to a placeholder if it
+      # can't connect, so the standard counter-offer flow is unaffected).
+      OPENAI_API_KEY: your-local-proxy-key
+      NEGOTIATION_OPENAI_BASE_URL: http://host.docker.internal:8012/v1
+      NEGOTIATION_OPENAI_MODEL: claude-3-5-sonnet
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - beckn_network
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8004/readyz"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 25s
+
+  # ── Demo Gateway (hosts the qwen3:8b Supplier Agent) ───────────────────────
+  #   Proxies negotiation kickoff/poll to the engine and drives the LLM
+  #   supplier counter-party (in-process), publishing its replies to Redis to
+  #   resume the parked buyer graph.
+  #
+  #   network_mode: host — REQUIRED on this machine: nftables drops ALL
+  #   docker-bridge → host traffic, so a bridged container cannot reach the
+  #   host Ollama (127.0.0.1:11434). Sharing the host netns lets the gateway
+  #   reach Ollama on localhost directly, with NO firewall/Ollama change and
+  #   WITHOUT putting Ollama in compose. Consequence of host netns: no port
+  #   mapping (binds host :8015 via the command override below), and engine/
+  #   redis are reached via their published host ports, not docker DNS.
+  demo-gateway:
+    build:
+      context: .
+      dockerfile: ./services/frontend_demo_gateway/Dockerfile
+    container_name: demo-gateway
+    restart: unless-stopped
+    network_mode: host
+    command:
+      - uvicorn
+      - services.frontend_demo_gateway.main:app
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8015"
+    environment:
+      NEGOTIATION_ENGINE_URL: http://localhost:18004
+      REDIS_URL: redis://localhost:6379/0
+      REDIS_ON_SELECT_CHANNEL: beckn_on_select_results
+      # MIGRATED to the Claude Code OpenAI proxy (host-networked → localhost:8012).
+      OLLAMA_BASE_URL: http://localhost:8012/v1
+      OLLAMA_API_KEY: your-local-proxy-key
+      SUPPLIER_MODEL: claude-3-5-sonnet
+      BUYER_HUMANIZE_MODEL: gpt-4o-mini
+      SUPPLIER_ACCEPTABLE_DISCOUNT_FLOOR: "0.10"
+      SUPPLIER_MAX_ROUNDS: "3"
+    depends_on:
+      negotiation-engine:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      # /healthz is liveness-only (does NOT probe Ollama) so the 15s probe
+      # never competes with qwen3 inference on the GPU during a negotiation.
+      test: ["CMD", "curl", "-fsS", "http://localhost:8015/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 25s
 
 networks:
   beckn_network:

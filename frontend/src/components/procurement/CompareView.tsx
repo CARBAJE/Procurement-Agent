@@ -2,15 +2,15 @@
 
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import { ArrowLeft, Send, AlertCircle, Hash, Info } from "lucide-react"
+import { ArrowLeft, Send, AlertCircle, Hash, Info, Loader2, Handshake } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 import ComparisonTable      from "@/components/procurement/ComparisonTable"
 import ScoringPanel         from "@/components/procurement/ScoringPanel"
 import ReasoningPanel       from "@/components/procurement/ReasoningPanel"
 import ConfirmCommitDialog  from "@/components/procurement/ConfirmCommitDialog"
+import ConfirmCancelDialog  from "@/components/procurement/ConfirmCancelDialog"
 import { commitOrder, cancelRequest } from "@/lib/api"
 import { clearSession, loadSession, patchSession } from "@/lib/session-store"
 import type { ComparisonResult, BecknIntent } from "@/lib/types"
@@ -26,6 +26,7 @@ export default function CompareView({ txnId }: CompareViewProps) {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [hydrated,   setHydrated]   = useState(false)
   const [dialogOpen, setDialogOpen] = useState(false)
+  const [cancelDialogOpen, setCancelDialogOpen] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error,      setError]      = useState("")
 
@@ -49,6 +50,7 @@ export default function CompareView({ txnId }: CompareViewProps) {
   async function cancel() {
     const requestId = comparison?.request_id
     if (!requestId) {
+      setCancelDialogOpen(false)
       setError(
         "No request_id available for this comparison — the DB row was never created. " +
         "Check that the data-normalizer container is running.",
@@ -61,6 +63,7 @@ export default function CompareView({ txnId }: CompareViewProps) {
       await cancelRequest(requestId)
     } catch (err) {
       console.error("[cancel] failed for requestId:", requestId, err)
+      setCancelDialogOpen(false)
       setError(
         "Could not mark the request as cancelled in the database. " +
         "The data-normalizer may be offline — check the logs.",
@@ -99,6 +102,29 @@ export default function CompareView({ txnId }: CompareViewProps) {
     }
   }
 
+  // Step into the negotiation flow with the selected supplier's quoted terms.
+  function goNegotiate() {
+    const offer = comparison?.offerings.find((o) => o.item_id === selectedId)
+    if (!offer) return
+    const listPrice = parseFloat(offer.price_value)
+    const hours = offer.fulfillment_hours ?? intent?.delivery_timeline ?? 336
+    const deliveryDate = new Date(Date.now() + hours * 3_600_000)
+      .toISOString()
+      .slice(0, 10)
+    const qty = intent?.quantity ?? offer.available_quantity ?? 1
+    const params = new URLSearchParams({
+      supplier_id: offer.provider_id,
+      item_id: offer.item_id,
+      original_price: String(Number.isFinite(listPrice) ? listPrice : 0),
+      delivery_date: deliveryDate,
+      item: offer.item_name,
+      quantity: String(qty),
+    })
+    router.push(
+      `/request/${encodeURIComponent(txnId)}/negotiate?${params.toString()}`,
+    )
+  }
+
   // ── Loading skeleton ──────────────────────────────────────────────────────
   if (!hydrated) {
     return (
@@ -135,7 +161,7 @@ export default function CompareView({ txnId }: CompareViewProps) {
     )
   }
 
-  const { offerings, scoring, reasoning_steps, messages, status, recommended_item_id } = comparison
+  const { offerings, scoring, reasoning_steps, messages, recommended_item_id } = comparison
   const recommended = offerings.find((o) => o.item_id === recommended_item_id)
   const selected    = offerings.find((o) => o.item_id === selectedId)
 
@@ -159,9 +185,6 @@ export default function CompareView({ txnId }: CompareViewProps) {
             </span>
           </div>
         </div>
-        <Badge variant={status === "live" ? "default" : "secondary"} className="text-sm px-3 py-1">
-          {status === "live" ? "Live Beckn Network" : "Local Catalog"}
-        </Badge>
       </div>
 
       {/* ── Table + scoring panel ──────────────────────────────────────────── */}
@@ -199,8 +222,12 @@ export default function CompareView({ txnId }: CompareViewProps) {
 
       {/* ── Action bar ────────────────────────────────────────────────────── */}
       <div className="flex items-center justify-between pt-2 border-t flex-wrap gap-3">
-        <Button variant="outline" onClick={cancel} disabled={submitting}>
-          <ArrowLeft className="mr-2 h-4 w-4" />
+        <Button
+          variant="outline"
+          onClick={() => setCancelDialogOpen(true)}
+          disabled={submitting}
+        >
+          <ArrowLeft className="mr-2 h-4 w-4" aria-hidden="true" />
           Cancel and start over
         </Button>
         <div className="flex items-center gap-3 flex-wrap">
@@ -210,15 +237,38 @@ export default function CompareView({ txnId }: CompareViewProps) {
             </span>
           )}
           <Button
+            variant="outline"
+            disabled={!selectedId || submitting}
+            onClick={goNegotiate}
+          >
+            <Handshake className="mr-2 h-4 w-4" aria-hidden="true" />
+            Negotiate Terms
+          </Button>
+          <Button
             disabled={!selectedId || submitting}
             onClick={onProceed}
-            aria-label="Proceed with selection"
+            aria-busy={submitting}
           >
-            <Send className="mr-2 h-4 w-4" />
-            Proceed with selection
+            {submitting ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
+                Placing order…
+              </>
+            ) : (
+              <>
+                <Send className="mr-2 h-4 w-4" aria-hidden="true" />
+                Proceed with selection
+              </>
+            )}
           </Button>
         </div>
       </div>
+
+      {submitting && !error && (
+        <p role="status" className="text-xs text-muted-foreground text-right">
+          Placing your order through the Beckn network — this can take a few seconds.
+        </p>
+      )}
 
       {error && (
         <p role="alert" className="text-sm text-destructive text-right">{error}</p>
@@ -239,6 +289,14 @@ export default function CompareView({ txnId }: CompareViewProps) {
           onConfirm={doCommit}
         />
       )}
+
+      {/* ── Cancel confirmation dialog ───────────────────────────────────── */}
+      <ConfirmCancelDialog
+        open={cancelDialogOpen}
+        onOpenChange={(o) => { if (!submitting) setCancelDialogOpen(o) }}
+        submitting={submitting}
+        onConfirm={cancel}
+      />
     </div>
   )
 }

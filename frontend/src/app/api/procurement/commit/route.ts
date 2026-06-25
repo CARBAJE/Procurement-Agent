@@ -8,9 +8,17 @@ export async function POST(req: NextRequest) {
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
   const body = await req.json()
+  // Carry the authenticated identity (the requester is resolved from the
+  // session at /compare; included here for symmetry / future approver use).
+  const actor = {
+    keycloak_id: session.user.id,
+    email:       session.user.email,
+    name:        session.user.name,
+    role:        session.user.role,
+  }
   const bapUrl = process.env.BAP_URL ?? "http://localhost:8000"
   try {
-    const { data } = await axios.post(`${bapUrl}/commit`, body)
+    const { data } = await axios.post(`${bapUrl}/commit`, { ...body, actor })
     return NextResponse.json(data)
   } catch (err) {
     // axios wraps non-2xx responses; surface the original status + detail.

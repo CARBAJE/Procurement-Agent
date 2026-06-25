@@ -6,12 +6,12 @@ import { ArrowLeft, Hash, AlertCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
-import { Badge } from "@/components/ui/badge"
 import OrderSummaryCard       from "@/components/procurement/OrderSummaryCard"
 import OrderLifecycleTimeline from "@/components/procurement/OrderLifecycleTimeline"
 import ReasoningPanel         from "@/components/procurement/ReasoningPanel"
 import StatusPoller           from "@/components/procurement/StatusPoller"
-import { loadSession, patchSession } from "@/lib/session-store"
+import { loadSession, patchSession, type NegotiatedTerms } from "@/lib/session-store"
+import { getOrderDetail } from "@/lib/api"
 import type {
   BecknIntent, CommitResult, Offering, OrderState, StatusSnapshot,
 } from "@/lib/types"
@@ -24,30 +24,76 @@ interface ResolvedSession {
   commit: CommitResult
   offering: Offering
   intent: BecknIntent
+  negotiated: NegotiatedTerms | null
 }
 
 export default function OrderView({ txnId }: OrderViewProps) {
   const router = useRouter()
-  const [resolved, setResolved] = useState<ResolvedSession | null>(null)
-  const [state,    setState]    = useState<OrderState | null>(null)
-  const [hydrated, setHydrated] = useState(false)
+  const [resolved,   setResolved]   = useState<ResolvedSession | null>(null)
+  const [state,      setState]      = useState<OrderState | null>(null)
+  const [hydrated,   setHydrated]   = useState(false)
+  // Historical = reconstructed from the DB (no live session) → no live polling.
+  const [historical, setHistorical] = useState(false)
 
   useEffect(() => {
-    const session = loadSession(txnId)
-    if (session?.commit && session.chosenItemId) {
-      const offering = session.comparison.offerings.find(
-        (o) => o.item_id === session.chosenItemId,
-      )
-      if (offering) {
-        setResolved({
-          commit: session.commit,
-          offering,
-          intent: session.intent,
-        })
-        setState(session.commit.order_state ?? null)
+    let cancelled = false
+
+    async function load() {
+      // 1. Live session (the tab that created the order) — full fidelity.
+      const session = loadSession(txnId)
+      if (session?.commit && session.chosenItemId) {
+        const offering = session.comparison.offerings.find(
+          (o) => o.item_id === session.chosenItemId,
+        )
+        if (offering) {
+          if (!cancelled) {
+            setResolved({
+              commit: session.commit,
+              offering,
+              intent: session.intent,
+              negotiated: session.negotiation ?? null,
+            })
+            setState(session.commit.order_state ?? null)
+            setHydrated(true)
+          }
+          return
+        }
+      }
+
+      // 2. No session (e.g. opened from the dashboard) — fetch from the DB by
+      //    request_id (the URL param in the dashboard flow).
+      try {
+        const d = await getOrderDetail(txnId)
+        if (cancelled) return
+        if (d.order && d.intent) {
+          const o = d.order
+          const commit: CommitResult = {
+            transaction_id:  d.request_id,
+            request_id:      d.request_id,
+            order_id:        o.order_id,
+            order_state:     o.order_state,
+            payment_terms:   null,
+            fulfillment_eta: o.fulfillment_eta,
+            bpp_id:          o.bpp_id,
+            bpp_uri:         o.bpp_uri,
+            contract_id:     null,
+            reasoning_steps: [],
+            messages:        [],
+            status:          o.status,
+          }
+          setResolved({ commit, offering: o.offering, intent: d.intent, negotiated: null })
+          setState(o.order_state)
+          setHistorical(true)
+        }
+      } catch {
+        // Unknown request_id / backend down → fall through to "unavailable".
+      } finally {
+        if (!cancelled) setHydrated(true)
       }
     }
-    setHydrated(true)
+
+    load()
+    return () => { cancelled = true }
   }, [txnId])
 
   const onUpdate = useCallback((snap: StatusSnapshot) => {
@@ -84,7 +130,8 @@ export default function OrderView({ txnId }: OrderViewProps) {
         </CardHeader>
         <CardContent className="space-y-4">
           <p className="text-sm text-muted-foreground">
-            We could not find a stored order for this request in the current session.
+            We could not find a confirmed order for this request. It may still be
+            in progress, may have been cancelled, or the request id is unknown.
           </p>
           <Button onClick={() => router.push("/request/new")}>Start a new request</Button>
         </CardContent>
@@ -112,15 +159,12 @@ export default function OrderView({ txnId }: OrderViewProps) {
             <span className="text-xs text-muted-foreground font-mono">{commit.transaction_id}</span>
           </div>
         </div>
-        <Badge variant={commit.status === "live" ? "default" : "secondary"} className="text-sm px-3 py-1">
-          {commit.status === "live" ? "Live Beckn Network" : "Local Catalog"}
-        </Badge>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-6">
-          <OrderSummaryCard commit={commit} offering={offering} quantity={intent.quantity} />
-          {commit.order_id != null && (
+          <OrderSummaryCard commit={commit} offering={offering} quantity={intent.quantity} negotiated={resolved.negotiated} />
+          {!historical && commit.order_id != null && (
             <StatusPoller
               transactionId={commit.transaction_id}
               orderId={commit.order_id}

@@ -115,16 +115,17 @@ async def create_discovery(
                 o_row = await conn.fetchrow(
                     """
                     INSERT INTO seller_offerings (
-                        query_id, bpp_id, item_id, price, currency,
+                        query_id, bpp_id, item_id, item_name, price, currency,
                         delivery_eta_hours, quality_rating, certifications,
                         inventory_count, is_normalized
                     )
-                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, TRUE)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10, TRUE)
                     RETURNING offering_id
                     """,
                     query_id,
                     bpp_uuid,
                     off.get("item_id") or "",
+                    off.get("item_name") or off.get("item_id") or "",
                     price,
                     off.get("price_currency") or "INR",
                     delivery_hours,

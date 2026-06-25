@@ -11,9 +11,11 @@ from .repositories import (
     audit_repo,
     discovery_repo,
     intent_repo,
+    order_read_repo,
     order_repo,
     request_repo,
     scoring_repo,
+    user_repo,
 )
 
 logger = logging.getLogger(__name__)
@@ -29,14 +31,38 @@ class DataNormalizer:
         raw_input_text: str,
         channel: str = "web",
         requester_id: str | None = None,
+        actor: dict | None = None,
     ) -> dict:
         """Create root procurement_requests row.
 
-        Returns: {"request_id": str}
+        When `actor` carries a Keycloak identity (keycloak_id) and no explicit
+        requester_id is given, just-in-time provision the user and attribute the
+        request to them. Any resolution failure falls back to the system user
+        (requester_id stays None → request_repo uses SYSTEM_USER_ID).
+
+        Returns: {"request_id": str, "requester_id": str | None}
         """
+        if actor and actor.get("keycloak_id") and not requester_id:
+            try:
+                pool = await get_pool()
+                async with pool.acquire() as conn:
+                    requester_id = await user_repo.resolve_user(
+                        conn,
+                        keycloak_id=actor["keycloak_id"],
+                        email=actor.get("email"),
+                        name=actor.get("name"),
+                        role=actor.get("role"),
+                    )
+            except Exception as exc:  # noqa: BLE001 — never fail the write path on identity
+                logger.warning(
+                    "[normalizer] user resolve failed (%s) — attributing to system user",
+                    exc,
+                )
+                requester_id = None
+
         request_id = await request_repo.create_request(raw_input_text, channel, requester_id)
-        logger.info("[normalizer] created request %s", request_id)
-        return {"request_id": request_id}
+        logger.info("[normalizer] created request %s (requester=%s)", request_id, requester_id or "system")
+        return {"request_id": request_id, "requester_id": requester_id}
 
     # ── /normalize/intent ─────────────────────────────────────────────────────
 
@@ -112,6 +138,7 @@ class DataNormalizer:
         unit: str = "units",
         network_id: str = "beckn-default",
         requester_id: str | None = None,
+        fulfillment_eta: str | None = None,
     ) -> dict:
         """Create negotiation_outcome + approval_decision + purchase_order.
 
@@ -133,6 +160,7 @@ class DataNormalizer:
             currency=currency,
             unit=unit,
             requester_id=requester_id,
+            fulfillment_eta=fulfillment_eta,
         )
         logger.info("[normalizer] created purchase_order %s", po_id)
         return {"po_id": po_id}
@@ -177,15 +205,30 @@ class DataNormalizer:
         po_id = await order_repo.update_po_status(beckn_confirm_ref, state)
         return {"po_id": po_id, "status": state}
 
+    # ── GET /order/{request_id} ───────────────────────────────────────────────
+
+    async def get_order_detail(self, request_id: str) -> dict | None:
+        """Reconstruct a full order detail from the DB by request_id.
+
+        Returns the {request, intent, order} DTO, or None when request_id is
+        unknown. `order` is None when the request exists but no purchase_order
+        was persisted. Read-only — never writes.
+        """
+        return await order_read_repo.get_order_detail(request_id)
+
     # ── PATCH /normalize/status ───────────────────────────────────────────────
 
-    async def update_status(self, request_id: str, status: str) -> dict:
+    async def update_status(
+        self, request_id: str, status: str, category: str | None = None
+    ) -> dict:
         """Update procurement_requests.status lifecycle column.
 
         Valid statuses: draft, parsing, discovering, scoring,
                         negotiating, pending_approval, confirmed, cancelled
 
+        Optional `category` sets the supplier-declared category (from discovery).
+
         Returns: {"request_id": str, "status": str}
         """
-        await request_repo.update_status(request_id, status)
+        await request_repo.update_status(request_id, status, category)
         return {"request_id": request_id, "status": status}

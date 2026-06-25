@@ -142,10 +142,16 @@ async def resume_graph(
         )
         return None
 
+    # Use the ASYNC state API: AsyncPostgresSaver raises InvalidStateError on
+    # a synchronous ``get_state`` from the main thread, which would crash this
+    # listener task and silently stop resuming any further parked threads.
+    try:
+        snapshot = await graph.aget_state(config)
+        next_nodes = getattr(snapshot, "next", None)
+    except Exception:  # pragma: no cover — best-effort logging only
+        next_nodes = None
     logger.info(
-        "Graph resumed thread_id=%s next=%s",
-        transaction_id,
-        getattr(graph.get_state(config), "next", None),
+        "Graph resumed thread_id=%s next=%s", transaction_id, next_nodes
     )
     return result
 

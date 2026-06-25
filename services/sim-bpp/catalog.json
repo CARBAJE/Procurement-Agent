@@ -1,312 +1,928 @@
 [
   {
     "id": "PROV-OFFICEWORLD-01",
-    "descriptor": { "name": "OfficeWorld Supplies" },
+    "descriptor": {
+      "name": "OfficeWorld Supplies"
+    },
     "rating": "4.8",
     "items": [
       {
         "id": "item-a4-80gsm",
-        "descriptor": { "name": "A4 Paper 80gsm (500 sheets)" },
-        "price": { "currency": "INR", "value": "195.00" },
+        "descriptor": {
+          "name": "A4 Paper 80gsm (500 sheets)"
+        },
+        "category": "Office Supplies",
+        "price": {
+          "currency": "INR",
+          "value": "195.00"
+        },
         "stock": 1200,
-        "specs": ["80 GSM", "500 sheets/ream", "Brightness 102", "Size A4 210x297mm"],
-        "keywords": ["a4", "paper", "80gsm", "ream", "sheets", "stationery"]
+        "specs": [
+          "80 GSM",
+          "500 sheets/ream",
+          "Brightness 102",
+          "Size A4 210x297mm"
+        ],
+        "keywords": [
+          "a4",
+          "paper",
+          "80gsm",
+          "ream",
+          "sheets",
+          "stationery"
+        ],
+        "fulfillment_hours": 24
       },
       {
         "id": "item-a3-80gsm",
-        "descriptor": { "name": "A3 Paper 80gsm (500 sheets)" },
-        "price": { "currency": "INR", "value": "365.00" },
+        "descriptor": {
+          "name": "A3 Paper 80gsm (500 sheets)"
+        },
+        "category": "Office Supplies",
+        "price": {
+          "currency": "INR",
+          "value": "365.00"
+        },
         "stock": 430,
-        "specs": ["80 GSM", "500 sheets/ream", "Size A3 297x420mm"],
-        "keywords": ["a3", "paper", "80gsm", "ream", "sheets", "stationery"]
+        "specs": [
+          "80 GSM",
+          "500 sheets/ream",
+          "Size A3 297x420mm"
+        ],
+        "keywords": [
+          "a3",
+          "paper",
+          "80gsm",
+          "ream",
+          "sheets",
+          "stationery"
+        ],
+        "fulfillment_hours": 36
       },
       {
         "id": "item-toner-tn2420",
-        "descriptor": { "name": "Brother TN-2420 Toner Cartridge" },
-        "price": { "currency": "INR", "value": "3200.00" },
+        "descriptor": {
+          "name": "Brother TN-2420 Toner Cartridge"
+        },
+        "category": "Office Supplies",
+        "price": {
+          "currency": "INR",
+          "value": "3200.00"
+        },
         "stock": 85,
-        "specs": ["Yield 3000 pages", "Black", "Genuine Brother"],
-        "keywords": ["toner", "cartridge", "brother", "printer", "tn2420", "ink"]
+        "specs": [
+          "Yield 3000 pages",
+          "Black",
+          "Genuine Brother"
+        ],
+        "keywords": [
+          "toner",
+          "cartridge",
+          "brother",
+          "printer",
+          "tn2420",
+          "ink"
+        ],
+        "fulfillment_hours": 24
       },
       {
         "id": "item-stapler-heavy",
-        "descriptor": { "name": "Heavy Duty Stapler (100 sheets)" },
-        "price": { "currency": "INR", "value": "780.00" },
+        "descriptor": {
+          "name": "Heavy Duty Stapler (100 sheets)"
+        },
+        "category": "Office Supplies",
+        "price": {
+          "currency": "INR",
+          "value": "780.00"
+        },
         "stock": 60,
-        "specs": ["Capacity 100 sheets", "Uses 23/13 staples", "Metal body"],
-        "keywords": ["stapler", "staple", "office", "stationery"]
+        "specs": [
+          "Capacity 100 sheets",
+          "Uses 23/13 staples",
+          "Metal body"
+        ],
+        "keywords": [
+          "stapler",
+          "staple",
+          "office",
+          "stationery"
+        ],
+        "fulfillment_hours": 36
       }
     ]
   },
   {
     "id": "PROV-PAPERDIRECT-01",
-    "descriptor": { "name": "PaperDirect India" },
-    "rating": "4.5",
+    "descriptor": {
+      "name": "PaperDirect India"
+    },
+    "rating": "4.2",
     "items": [
       {
         "id": "item-a4-ream",
-        "descriptor": { "name": "A4 Paper 80gsm Ream" },
-        "price": { "currency": "INR", "value": "189.00" },
+        "descriptor": {
+          "name": "A4 Paper 80gsm Ream"
+        },
+        "category": "Office Supplies",
+        "price": {
+          "currency": "INR",
+          "value": "189.00"
+        },
         "stock": 3400,
-        "specs": ["80 GSM", "500 sheets/ream", "Size A4 210x297mm"],
-        "keywords": ["a4", "paper", "80gsm", "ream", "sheets", "stationery"]
+        "specs": [
+          "80 GSM",
+          "500 sheets/ream",
+          "Size A4 210x297mm"
+        ],
+        "keywords": [
+          "a4",
+          "paper",
+          "80gsm",
+          "ream",
+          "sheets",
+          "stationery"
+        ],
+        "fulfillment_hours": 120
       },
       {
         "id": "item-a4-recycled",
-        "descriptor": { "name": "A4 Recycled Paper 70gsm (500 sheets)" },
-        "price": { "currency": "INR", "value": "172.00" },
+        "descriptor": {
+          "name": "A4 Recycled Paper 70gsm (500 sheets)"
+        },
+        "category": "Office Supplies",
+        "price": {
+          "currency": "INR",
+          "value": "172.00"
+        },
         "stock": 900,
-        "specs": ["70 GSM", "100% Recycled", "500 sheets/ream", "Size A4"],
-        "keywords": ["a4", "paper", "recycled", "70gsm", "eco", "ream", "sheets"]
+        "specs": [
+          "70 GSM",
+          "100% Recycled",
+          "500 sheets/ream",
+          "Size A4"
+        ],
+        "keywords": [
+          "a4",
+          "paper",
+          "recycled",
+          "70gsm",
+          "eco",
+          "ream",
+          "sheets"
+        ],
+        "fulfillment_hours": 132
       },
       {
         "id": "item-notebook-a5",
-        "descriptor": { "name": "A5 Spiral Notebook (200 pages)" },
-        "price": { "currency": "INR", "value": "95.00" },
+        "descriptor": {
+          "name": "A5 Spiral Notebook (200 pages)"
+        },
+        "category": "Office Supplies",
+        "price": {
+          "currency": "INR",
+          "value": "95.00"
+        },
         "stock": 540,
-        "specs": ["200 pages", "Ruled", "Spiral bound", "Size A5"],
-        "keywords": ["notebook", "a5", "spiral", "diary", "stationery"]
+        "specs": [
+          "200 pages",
+          "Ruled",
+          "Spiral bound",
+          "Size A5"
+        ],
+        "keywords": [
+          "notebook",
+          "a5",
+          "spiral",
+          "diary",
+          "stationery"
+        ],
+        "fulfillment_hours": 120
       }
     ]
   },
   {
     "id": "PROV-STATHUB-01",
-    "descriptor": { "name": "Stationery Hub" },
+    "descriptor": {
+      "name": "Stationery Hub"
+    },
     "rating": "4.9",
     "items": [
       {
         "id": "item-a4-premium",
-        "descriptor": { "name": "A4 Paper Premium 80gsm" },
-        "price": { "currency": "INR", "value": "201.00" },
+        "descriptor": {
+          "name": "A4 Paper Premium 80gsm"
+        },
+        "category": "Office Supplies",
+        "price": {
+          "currency": "INR",
+          "value": "201.00"
+        },
         "stock": 760,
-        "specs": ["80 GSM", "High brightness 110", "500 sheets/ream", "Size A4"],
-        "keywords": ["a4", "paper", "80gsm", "premium", "ream", "sheets", "stationery"]
+        "specs": [
+          "80 GSM",
+          "High brightness 110",
+          "500 sheets/ream",
+          "Size A4"
+        ],
+        "keywords": [
+          "a4",
+          "paper",
+          "80gsm",
+          "premium",
+          "ream",
+          "sheets",
+          "stationery"
+        ],
+        "fulfillment_hours": 24
       },
       {
         "id": "item-gel-pens-12",
-        "descriptor": { "name": "Gel Pens Pack of 12 (Blue)" },
-        "price": { "currency": "INR", "value": "120.00" },
+        "descriptor": {
+          "name": "Gel Pens Pack of 12 (Blue)"
+        },
+        "category": "Office Supplies",
+        "price": {
+          "currency": "INR",
+          "value": "120.00"
+        },
         "stock": 320,
-        "specs": ["12 pens/pack", "0.7mm tip", "Blue ink"],
-        "keywords": ["pen", "pens", "gel", "blue", "stationery", "writing"]
+        "specs": [
+          "12 pens/pack",
+          "0.7mm tip",
+          "Blue ink"
+        ],
+        "keywords": [
+          "pen",
+          "pens",
+          "gel",
+          "blue",
+          "stationery",
+          "writing"
+        ],
+        "fulfillment_hours": 36
       },
       {
         "id": "item-whiteboard-marker",
-        "descriptor": { "name": "Whiteboard Markers Pack of 10" },
-        "price": { "currency": "INR", "value": "240.00" },
+        "descriptor": {
+          "name": "Whiteboard Markers Pack of 10"
+        },
+        "category": "Office Supplies",
+        "price": {
+          "currency": "INR",
+          "value": "240.00"
+        },
         "stock": 150,
-        "specs": ["10 markers/pack", "Assorted colors", "Low odor", "Refillable"],
-        "keywords": ["marker", "markers", "whiteboard", "pen", "stationery"]
+        "specs": [
+          "10 markers/pack",
+          "Assorted colors",
+          "Low odor",
+          "Refillable"
+        ],
+        "keywords": [
+          "marker",
+          "markers",
+          "whiteboard",
+          "pen",
+          "stationery"
+        ],
+        "fulfillment_hours": 24
       },
       {
         "id": "item-sticky-notes",
-        "descriptor": { "name": "Sticky Notes 76x76mm (12 pads)" },
-        "price": { "currency": "INR", "value": "210.00" },
+        "descriptor": {
+          "name": "Sticky Notes 76x76mm (12 pads)"
+        },
+        "category": "Office Supplies",
+        "price": {
+          "currency": "INR",
+          "value": "210.00"
+        },
         "stock": 280,
-        "specs": ["12 pads", "100 sheets/pad", "76x76mm", "Assorted colors"],
-        "keywords": ["sticky", "notes", "post-it", "memo", "stationery"]
+        "specs": [
+          "12 pads",
+          "100 sheets/pad",
+          "76x76mm",
+          "Assorted colors"
+        ],
+        "keywords": [
+          "sticky",
+          "notes",
+          "post-it",
+          "memo",
+          "stationery"
+        ],
+        "fulfillment_hours": 36
       }
     ]
   },
   {
     "id": "PROV-TECHMART-01",
-    "descriptor": { "name": "TechMart Distributors" },
+    "descriptor": {
+      "name": "TechMart Distributors"
+    },
     "rating": "4.6",
     "items": [
       {
         "id": "item-laptop-i5",
-        "descriptor": { "name": "Business Laptop 14\" Core i5 16GB 512GB SSD" },
-        "price": { "currency": "INR", "value": "62000.00" },
+        "descriptor": {
+          "name": "Business Laptop 14\" Core i5 16GB 512GB SSD"
+        },
+        "category": "IT Equipment",
+        "price": {
+          "currency": "INR",
+          "value": "62000.00"
+        },
         "stock": 35,
-        "specs": ["Intel Core i5-1335U", "16GB DDR5 RAM", "512GB NVMe SSD", "14-inch FHD", "Windows 11 Pro", "3yr warranty"],
-        "keywords": ["laptop", "notebook", "computer", "i5", "16gb", "ssd", "it", "hardware"]
+        "specs": [
+          "Intel Core i5-1335U",
+          "16GB DDR5 RAM",
+          "512GB NVMe SSD",
+          "14-inch FHD",
+          "Windows 11 Pro",
+          "3yr warranty"
+        ],
+        "keywords": [
+          "laptop",
+          "notebook",
+          "computer",
+          "i5",
+          "16gb",
+          "ssd",
+          "it",
+          "hardware"
+        ],
+        "fulfillment_hours": 72
       },
       {
         "id": "item-monitor-24",
-        "descriptor": { "name": "24\" Full HD IPS Monitor" },
-        "price": { "currency": "INR", "value": "9800.00" },
+        "descriptor": {
+          "name": "24\" Full HD IPS Monitor"
+        },
+        "category": "IT Equipment",
+        "price": {
+          "currency": "INR",
+          "value": "9800.00"
+        },
         "stock": 120,
-        "specs": ["24-inch", "1920x1080 FHD", "IPS panel", "75Hz", "HDMI + VGA"],
-        "keywords": ["monitor", "display", "screen", "24", "ips", "it", "hardware"]
+        "specs": [
+          "24-inch",
+          "1920x1080 FHD",
+          "IPS panel",
+          "75Hz",
+          "HDMI + VGA"
+        ],
+        "keywords": [
+          "monitor",
+          "display",
+          "screen",
+          "24",
+          "ips",
+          "it",
+          "hardware"
+        ],
+        "fulfillment_hours": 84
       },
       {
         "id": "item-keyboard-mech",
-        "descriptor": { "name": "Mechanical Keyboard (Wired)" },
-        "price": { "currency": "INR", "value": "2900.00" },
+        "descriptor": {
+          "name": "Mechanical Keyboard (Wired)"
+        },
+        "category": "IT Peripherals",
+        "price": {
+          "currency": "INR",
+          "value": "2900.00"
+        },
         "stock": 95,
-        "specs": ["Blue switches", "Wired USB", "Full size", "Anti-ghosting"],
-        "keywords": ["keyboard", "mechanical", "wired", "peripheral", "it", "hardware"]
+        "specs": [
+          "Blue switches",
+          "Wired USB",
+          "Full size",
+          "Anti-ghosting"
+        ],
+        "keywords": [
+          "keyboard",
+          "mechanical",
+          "wired",
+          "peripheral",
+          "it",
+          "hardware"
+        ],
+        "fulfillment_hours": 48
       },
       {
         "id": "item-mouse-wireless",
-        "descriptor": { "name": "Wireless Optical Mouse" },
-        "price": { "currency": "INR", "value": "650.00" },
+        "descriptor": {
+          "name": "Wireless Optical Mouse"
+        },
+        "category": "IT Peripherals",
+        "price": {
+          "currency": "INR",
+          "value": "650.00"
+        },
         "stock": 240,
-        "specs": ["2.4GHz wireless", "1600 DPI", "Ambidextrous", "USB receiver"],
-        "keywords": ["mouse", "wireless", "optical", "peripheral", "it", "hardware"]
+        "specs": [
+          "2.4GHz wireless",
+          "1600 DPI",
+          "Ambidextrous",
+          "USB receiver"
+        ],
+        "keywords": [
+          "mouse",
+          "wireless",
+          "optical",
+          "peripheral",
+          "it",
+          "hardware"
+        ],
+        "fulfillment_hours": 60
       }
     ]
   },
   {
     "id": "PROV-COMPUWORLD-01",
-    "descriptor": { "name": "CompuWorld Enterprise" },
+    "descriptor": {
+      "name": "CompuWorld Enterprise"
+    },
     "rating": "4.3",
     "items": [
       {
         "id": "item-laptop-i7",
-        "descriptor": { "name": "Business Laptop 15\" Core i7 16GB 1TB SSD" },
-        "price": { "currency": "INR", "value": "84500.00" },
+        "descriptor": {
+          "name": "Business Laptop 15\" Core i7 16GB 1TB SSD"
+        },
+        "category": "IT Equipment",
+        "price": {
+          "currency": "INR",
+          "value": "84500.00"
+        },
         "stock": 18,
-        "specs": ["Intel Core i7-1355U", "16GB DDR5 RAM", "1TB NVMe SSD", "15.6-inch FHD", "Windows 11 Pro", "3yr warranty"],
-        "keywords": ["laptop", "notebook", "computer", "i7", "16gb", "ssd", "it", "hardware"]
+        "specs": [
+          "Intel Core i7-1355U",
+          "16GB DDR5 RAM",
+          "1TB NVMe SSD",
+          "15.6-inch FHD",
+          "Windows 11 Pro",
+          "3yr warranty"
+        ],
+        "keywords": [
+          "laptop",
+          "notebook",
+          "computer",
+          "i7",
+          "16gb",
+          "ssd",
+          "it",
+          "hardware"
+        ],
+        "fulfillment_hours": 144
       },
       {
         "id": "item-monitor-27",
-        "descriptor": { "name": "27\" QHD IPS Monitor" },
-        "price": { "currency": "INR", "value": "16500.00" },
+        "descriptor": {
+          "name": "27\" QHD IPS Monitor"
+        },
+        "category": "IT Equipment",
+        "price": {
+          "currency": "INR",
+          "value": "16500.00"
+        },
         "stock": 64,
-        "specs": ["27-inch", "2560x1440 QHD", "IPS panel", "100Hz", "USB-C + HDMI + DP"],
-        "keywords": ["monitor", "display", "screen", "27", "qhd", "ips", "it", "hardware"]
+        "specs": [
+          "27-inch",
+          "2560x1440 QHD",
+          "IPS panel",
+          "100Hz",
+          "USB-C + HDMI + DP"
+        ],
+        "keywords": [
+          "monitor",
+          "display",
+          "screen",
+          "27",
+          "qhd",
+          "ips",
+          "it",
+          "hardware"
+        ],
+        "fulfillment_hours": 156
       },
       {
         "id": "item-docking-station",
-        "descriptor": { "name": "USB-C Docking Station (Dual 4K)" },
-        "price": { "currency": "INR", "value": "7200.00" },
+        "descriptor": {
+          "name": "USB-C Docking Station (Dual 4K)"
+        },
+        "category": "IT Peripherals",
+        "price": {
+          "currency": "INR",
+          "value": "7200.00"
+        },
         "stock": 40,
-        "specs": ["USB-C", "Dual 4K output", "100W power delivery", "6x USB + Ethernet"],
-        "keywords": ["docking", "dock", "usb-c", "station", "peripheral", "it", "hardware"]
+        "specs": [
+          "USB-C",
+          "Dual 4K output",
+          "100W power delivery",
+          "6x USB + Ethernet"
+        ],
+        "keywords": [
+          "docking",
+          "dock",
+          "usb-c",
+          "station",
+          "peripheral",
+          "it",
+          "hardware"
+        ],
+        "fulfillment_hours": 120
       },
       {
         "id": "item-webcam-1080",
-        "descriptor": { "name": "1080p HD Webcam" },
-        "price": { "currency": "INR", "value": "2100.00" },
+        "descriptor": {
+          "name": "1080p HD Webcam"
+        },
+        "category": "IT Peripherals",
+        "price": {
+          "currency": "INR",
+          "value": "2100.00"
+        },
         "stock": 110,
-        "specs": ["1080p @30fps", "Auto-focus", "Dual mic", "USB plug-and-play"],
-        "keywords": ["webcam", "camera", "1080p", "video", "peripheral", "it", "hardware"]
+        "specs": [
+          "1080p @30fps",
+          "Auto-focus",
+          "Dual mic",
+          "USB plug-and-play"
+        ],
+        "keywords": [
+          "webcam",
+          "camera",
+          "1080p",
+          "video",
+          "peripheral",
+          "it",
+          "hardware"
+        ],
+        "fulfillment_hours": 132
       }
     ]
   },
   {
     "id": "PROV-NETGEAR-IN-01",
-    "descriptor": { "name": "NetGear Networking India" },
+    "descriptor": {
+      "name": "NetGear Networking India"
+    },
     "rating": "4.7",
     "items": [
       {
         "id": "item-cat6-305m",
-        "descriptor": { "name": "Cat6 UTP Cable Box 305m" },
-        "price": { "currency": "INR", "value": "5400.00" },
+        "descriptor": {
+          "name": "Cat6 UTP Cable Box 305m"
+        },
+        "category": "Networking",
+        "price": {
+          "currency": "INR",
+          "value": "5400.00"
+        },
         "stock": 75,
-        "specs": ["Cat6 UTP", "305m box", "23 AWG", "550MHz", "CCA conductor"],
-        "keywords": ["cat6", "cable", "utp", "ethernet", "network", "networking", "lan"]
+        "specs": [
+          "Cat6 UTP",
+          "305m box",
+          "23 AWG",
+          "550MHz",
+          "CCA conductor"
+        ],
+        "keywords": [
+          "cat6",
+          "cable",
+          "utp",
+          "ethernet",
+          "network",
+          "networking",
+          "lan"
+        ],
+        "fulfillment_hours": 72
       },
       {
         "id": "item-switch-24p",
-        "descriptor": { "name": "24-Port Gigabit Network Switch" },
-        "price": { "currency": "INR", "value": "11200.00" },
+        "descriptor": {
+          "name": "24-Port Gigabit Network Switch"
+        },
+        "category": "Networking",
+        "price": {
+          "currency": "INR",
+          "value": "11200.00"
+        },
         "stock": 30,
-        "specs": ["24 ports", "Gigabit", "Unmanaged", "Rack mountable"],
-        "keywords": ["switch", "gigabit", "network", "networking", "24-port", "lan"]
+        "specs": [
+          "24 ports",
+          "Gigabit",
+          "Unmanaged",
+          "Rack mountable"
+        ],
+        "keywords": [
+          "switch",
+          "gigabit",
+          "network",
+          "networking",
+          "24-port",
+          "lan"
+        ],
+        "fulfillment_hours": 84
       },
       {
         "id": "item-router-wifi6",
-        "descriptor": { "name": "WiFi 6 Dual-Band Router" },
-        "price": { "currency": "INR", "value": "6800.00" },
+        "descriptor": {
+          "name": "WiFi 6 Dual-Band Router"
+        },
+        "category": "Networking",
+        "price": {
+          "currency": "INR",
+          "value": "6800.00"
+        },
         "stock": 52,
-        "specs": ["WiFi 6 (802.11ax)", "Dual-band AX3000", "4x Gigabit LAN", "MU-MIMO"],
-        "keywords": ["router", "wifi", "wifi6", "wireless", "network", "networking"]
+        "specs": [
+          "WiFi 6 (802.11ax)",
+          "Dual-band AX3000",
+          "4x Gigabit LAN",
+          "MU-MIMO"
+        ],
+        "keywords": [
+          "router",
+          "wifi",
+          "wifi6",
+          "wireless",
+          "network",
+          "networking"
+        ],
+        "fulfillment_hours": 72
       }
     ]
   },
   {
     "id": "PROV-CABLELINK-01",
-    "descriptor": { "name": "CableLink Supplies" },
+    "descriptor": {
+      "name": "CableLink Supplies"
+    },
     "rating": "4.2",
     "items": [
       {
         "id": "item-cat6-100m",
-        "descriptor": { "name": "Cat6 UTP Cable Roll 100m" },
-        "price": { "currency": "INR", "value": "1950.00" },
+        "descriptor": {
+          "name": "Cat6 UTP Cable Roll 100m"
+        },
+        "category": "Networking",
+        "price": {
+          "currency": "INR",
+          "value": "1950.00"
+        },
         "stock": 200,
-        "specs": ["Cat6 UTP", "100m roll", "24 AWG", "550MHz"],
-        "keywords": ["cat6", "cable", "utp", "ethernet", "network", "networking", "lan"]
+        "specs": [
+          "Cat6 UTP",
+          "100m roll",
+          "24 AWG",
+          "550MHz"
+        ],
+        "keywords": [
+          "cat6",
+          "cable",
+          "utp",
+          "ethernet",
+          "network",
+          "networking",
+          "lan"
+        ],
+        "fulfillment_hours": 144
       },
       {
         "id": "item-hdmi-2m",
-        "descriptor": { "name": "HDMI 2.0 Cable 2m" },
-        "price": { "currency": "INR", "value": "320.00" },
+        "descriptor": {
+          "name": "HDMI 2.0 Cable 2m"
+        },
+        "category": "IT Peripherals",
+        "price": {
+          "currency": "INR",
+          "value": "320.00"
+        },
         "stock": 480,
-        "specs": ["HDMI 2.0", "2 meters", "4K@60Hz", "Gold plated"],
-        "keywords": ["hdmi", "cable", "video", "display", "peripheral"]
+        "specs": [
+          "HDMI 2.0",
+          "2 meters",
+          "4K@60Hz",
+          "Gold plated"
+        ],
+        "keywords": [
+          "hdmi",
+          "cable",
+          "video",
+          "display",
+          "peripheral"
+        ],
+        "fulfillment_hours": 132
       },
       {
         "id": "item-usb-c-cable",
-        "descriptor": { "name": "USB-C to USB-C Cable 1m (100W)" },
-        "price": { "currency": "INR", "value": "450.00" },
+        "descriptor": {
+          "name": "USB-C to USB-C Cable 1m (100W)"
+        },
+        "category": "IT Peripherals",
+        "price": {
+          "currency": "INR",
+          "value": "450.00"
+        },
         "stock": 360,
-        "specs": ["USB-C to USB-C", "1 meter", "100W PD", "USB 3.1 Gen2 10Gbps"],
-        "keywords": ["usb-c", "cable", "charging", "peripheral"]
+        "specs": [
+          "USB-C to USB-C",
+          "1 meter",
+          "100W PD",
+          "USB 3.1 Gen2 10Gbps"
+        ],
+        "keywords": [
+          "usb-c",
+          "cable",
+          "charging",
+          "peripheral"
+        ],
+        "fulfillment_hours": 120
       }
     ]
   },
   {
     "id": "PROV-FURNIPRO-01",
-    "descriptor": { "name": "FurniPro Office Furniture" },
+    "descriptor": {
+      "name": "FurniPro Office Furniture"
+    },
     "rating": "4.4",
     "items": [
       {
         "id": "item-chair-ergo",
-        "descriptor": { "name": "Ergonomic Office Chair (Mesh Back)" },
-        "price": { "currency": "INR", "value": "8900.00" },
+        "descriptor": {
+          "name": "Ergonomic Office Chair (Mesh Back)"
+        },
+        "category": "Furniture",
+        "price": {
+          "currency": "INR",
+          "value": "8900.00"
+        },
         "stock": 45,
-        "specs": ["Mesh back", "Adjustable lumbar", "Height adjustable", "Tilt lock", "5yr warranty"],
-        "keywords": ["chair", "ergonomic", "office", "furniture", "seating"]
+        "specs": [
+          "Mesh back",
+          "Adjustable lumbar",
+          "Height adjustable",
+          "Tilt lock",
+          "5yr warranty"
+        ],
+        "keywords": [
+          "chair",
+          "ergonomic",
+          "office",
+          "furniture",
+          "seating"
+        ],
+        "fulfillment_hours": 96
       },
       {
         "id": "item-desk-150",
-        "descriptor": { "name": "Office Desk 150cm (Oak Finish)" },
-        "price": { "currency": "INR", "value": "12400.00" },
+        "descriptor": {
+          "name": "Office Desk 150cm (Oak Finish)"
+        },
+        "category": "Furniture",
+        "price": {
+          "currency": "INR",
+          "value": "12400.00"
+        },
         "stock": 22,
-        "specs": ["150x75cm", "Oak laminate", "Cable management", "Steel frame"],
-        "keywords": ["desk", "table", "office", "furniture", "workstation"]
+        "specs": [
+          "150x75cm",
+          "Oak laminate",
+          "Cable management",
+          "Steel frame"
+        ],
+        "keywords": [
+          "desk",
+          "table",
+          "office",
+          "furniture",
+          "workstation"
+        ],
+        "fulfillment_hours": 108
       },
       {
         "id": "item-cabinet-3drawer",
-        "descriptor": { "name": "3-Drawer Mobile Filing Cabinet" },
-        "price": { "currency": "INR", "value": "6300.00" },
+        "descriptor": {
+          "name": "3-Drawer Mobile Filing Cabinet"
+        },
+        "category": "Furniture",
+        "price": {
+          "currency": "INR",
+          "value": "6300.00"
+        },
         "stock": 38,
-        "specs": ["3 drawers", "Lockable", "Mobile castors", "A4/Foolscap"],
-        "keywords": ["cabinet", "drawer", "filing", "storage", "office", "furniture"]
+        "specs": [
+          "3 drawers",
+          "Lockable",
+          "Mobile castors",
+          "A4/Foolscap"
+        ],
+        "keywords": [
+          "cabinet",
+          "drawer",
+          "filing",
+          "storage",
+          "office",
+          "furniture"
+        ],
+        "fulfillment_hours": 96
       }
     ]
   },
   {
     "id": "PROV-PRINTPLUS-01",
-    "descriptor": { "name": "PrintPlus Solutions" },
+    "descriptor": {
+      "name": "PrintPlus Solutions"
+    },
     "rating": "4.1",
     "items": [
       {
         "id": "item-printer-laser",
-        "descriptor": { "name": "Monochrome Laser Printer (Duplex, WiFi)" },
-        "price": { "currency": "INR", "value": "14900.00" },
+        "descriptor": {
+          "name": "Monochrome Laser Printer (Duplex, WiFi)"
+        },
+        "category": "IT Equipment",
+        "price": {
+          "currency": "INR",
+          "value": "14900.00"
+        },
         "stock": 28,
-        "specs": ["Monochrome laser", "34 ppm", "Auto duplex", "WiFi + Ethernet", "250-sheet tray"],
-        "keywords": ["printer", "laser", "monochrome", "duplex", "wifi", "it", "hardware"]
+        "specs": [
+          "Monochrome laser",
+          "34 ppm",
+          "Auto duplex",
+          "WiFi + Ethernet",
+          "250-sheet tray"
+        ],
+        "keywords": [
+          "printer",
+          "laser",
+          "monochrome",
+          "duplex",
+          "wifi",
+          "it",
+          "hardware"
+        ],
+        "fulfillment_hours": 192
       },
       {
         "id": "item-toner-tn2420-compat",
-        "descriptor": { "name": "Compatible TN-2420 Toner Cartridge" },
-        "price": { "currency": "INR", "value": "1850.00" },
+        "descriptor": {
+          "name": "Compatible TN-2420 Toner Cartridge"
+        },
+        "category": "Office Supplies",
+        "price": {
+          "currency": "INR",
+          "value": "1850.00"
+        },
         "stock": 140,
-        "specs": ["Yield 3000 pages", "Black", "Compatible (non-OEM)"],
-        "keywords": ["toner", "cartridge", "compatible", "tn2420", "printer", "ink"]
+        "specs": [
+          "Yield 3000 pages",
+          "Black",
+          "Compatible (non-OEM)"
+        ],
+        "keywords": [
+          "toner",
+          "cartridge",
+          "compatible",
+          "tn2420",
+          "printer",
+          "ink"
+        ],
+        "fulfillment_hours": 180
       },
       {
         "id": "item-multifunction",
-        "descriptor": { "name": "Color Multifunction Printer (Print/Scan/Copy)" },
-        "price": { "currency": "INR", "value": "23500.00" },
+        "descriptor": {
+          "name": "Color Multifunction Printer (Print/Scan/Copy)"
+        },
+        "category": "IT Equipment",
+        "price": {
+          "currency": "INR",
+          "value": "23500.00"
+        },
         "stock": 15,
-        "specs": ["Color laser", "Print/Scan/Copy", "ADF", "WiFi", "Auto duplex"],
-        "keywords": ["printer", "multifunction", "scanner", "copier", "color", "it", "hardware"]
+        "specs": [
+          "Color laser",
+          "Print/Scan/Copy",
+          "ADF",
+          "WiFi",
+          "Auto duplex"
+        ],
+        "keywords": [
+          "printer",
+          "multifunction",
+          "scanner",
+          "copier",
+          "color",
+          "it",
+          "hardware"
+        ],
+        "fulfillment_hours": 192
       }
     ]
   }
