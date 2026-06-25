@@ -46,6 +46,17 @@ from src.beckn.models import BecknIntent, DiscoverOffering
 from src.beckn.providers import build_providers
 from src.config import BecknConfig
 
+# DataNormalizer is importable because sys.path.insert above added the project root.
+try:
+    from DataNormalizer.db import get_pool as _db_get_pool, close_pool as _db_close_pool
+    from DataNormalizer.repositories import user_repo as _user_repo
+    from DataNormalizer.repositories import approval_repo as _approval_repo
+    _DB_AVAILABLE = True
+except ImportError:
+    _DB_AVAILABLE = False
+    logger_import = logging.getLogger(__name__)
+    logger_import.warning("DataNormalizer not importable — approval/admin DB features disabled")
+
 logger = logging.getLogger(__name__)
 
 config = BecknConfig()
@@ -54,6 +65,11 @@ collector = CallbackCollector(default_timeout=config.callback_timeout)
 # TODO(persistence): swap InMemoryBackend for PostgresBackend here.
 # See: Bap-1/docs/ARCHITECTURE.md §7.2 #6.
 session_store = TransactionSessionStore()
+
+# In-memory store for pending approvals (role-based threshold check).
+# Keyed by a synthetic request_id (uuid).  Entries survive until decided or
+# the process restarts.  A future iteration can persist these in PostgreSQL.
+_pending_approvals: dict[str, dict] = {}
 
 SUPPORTED_CALLBACKS = {"on_discover", "on_select", "on_init", "on_confirm", "on_status"}
 
@@ -535,9 +551,69 @@ async def commit(request: web.Request) -> web.Response:
             reason=f"chosen_item_id {chosen_item_id!r} is not in the compared offerings"
         )
 
-    # TODO(approval-workflow): if ApprovalProvider.required(state) is True,
-    # return 202 Accepted with {approval_pending: true} instead of committing.
-    # See: Bap-1/docs/ARCHITECTURE.md §7.3 #10.
+    # ── RBAC + approval-workflow (resolves TODO(approval-workflow)) ──────────────
+    actor = body.get("actor") or {}
+    actor_role      = actor.get("role", "requester")
+    actor_kc_id     = actor.get("keycloak_id", "")
+    actor_email     = actor.get("email", "")
+    actor_name      = actor.get("name", "")
+
+    if actor_role == "admin":
+        return web.json_response(
+            {"error": "Admin role cannot place orders — advisory mode only."},
+            status=403,
+        )
+
+    intent = state.get("intent")
+    order_total = float(chosen.price_value) * (intent.quantity if intent else 1)
+    threshold = 0.0  # default: require approval for any amount if DB unavailable
+
+    if _DB_AVAILABLE:
+        try:
+            pool = await _db_get_pool()
+            async with pool.acquire() as conn:
+                user_id = await _user_repo.resolve_user(
+                    conn, actor_kc_id, actor_email, actor_name, actor_role,
+                )
+                row = await conn.fetchrow(
+                    "SELECT approval_threshold FROM users WHERE user_id = $1",
+                    uuid.UUID(user_id),
+                )
+                threshold = float(row["approval_threshold"]) if row else 999_999_999.0
+        except Exception as exc:
+            logger.warning("threshold lookup failed (%s) — using high threshold", exc)
+            threshold = 999_999_999.0
+
+    if order_total > threshold:
+        pending_id = str(uuid.uuid4())
+        _pending_approvals[pending_id] = {
+            "request_id":    pending_id,
+            "transaction_id": txn_id,
+            "chosen_item_id": chosen_item_id,
+            "actor":         actor,
+            "amount_total":  order_total,
+            "item_description": chosen.item_name,
+            "provider_name":  chosen.provider_name,
+            "created_at":    _now_iso(),
+        }
+        logger.info(
+            "[commit] order_total=%.2f > threshold=%.2f → pending_approval (id=%s)",
+            order_total, threshold, pending_id,
+        )
+        return web.json_response(
+            {
+                "status":       "pending_approval",
+                "request_id":   pending_id,
+                "amount_total": order_total,
+                "transaction_id": txn_id,
+                "messages":     [
+                    f"Order total ₹{order_total:,.2f} exceeds your auto-approval threshold "
+                    f"(₹{threshold:,.2f}). Submitted for approver review."
+                ],
+            },
+            status=202,
+        )
+    # ── End RBAC / approval-workflow ──────────────────────────────────────────
 
     # Override the recommendation with the user's pick.
     state["selected"] = chosen
@@ -688,15 +764,218 @@ async def status(request: web.Request) -> web.Response:
         })
 
 
+# ── Approvals API ────────────────────────────────────────────────────────────
+
+
+async def list_approvals(request: web.Request) -> web.Response:
+    """GET /approvals — return all pending approval items.
+
+    In production this would be filtered by the authenticated approver's
+    identity; for now it returns the full in-memory list so the approver
+    dashboard can display all pending orders.
+    """
+    return web.json_response(list(_pending_approvals.values()))
+
+
+async def decide_approval(request: web.Request) -> web.Response:
+    """POST /approvals/{request_id}/decide
+
+    Body: { decision: "approved" | "rejected" }
+
+    - rejected  → remove from pending list.
+    - approved  → attempt to resume the BAP commit flow; fall back to mock if
+                  the session has expired.
+    """
+    pending_id = request.match_info["request_id"]
+    item = _pending_approvals.get(pending_id)
+    if not item:
+        raise web.HTTPNotFound(reason=f"No pending approval with id={pending_id!r}")
+
+    try:
+        body = await request.json()
+    except json.JSONDecodeError:
+        raise web.HTTPBadRequest(reason="Invalid JSON")
+
+    decision = body.get("decision", "").lower()
+    if decision not in ("approved", "rejected"):
+        raise web.HTTPBadRequest(reason="decision must be 'approved' or 'rejected'")
+
+    if decision == "rejected":
+        _pending_approvals.pop(pending_id, None)
+        return web.json_response({"status": "cancelled", "request_id": pending_id})
+
+    # Approved: try to resume the original commit from the live session.
+    txn_id       = item["transaction_id"]
+    chosen_item_id = item["chosen_item_id"]
+    state = session_store.get(txn_id)
+
+    if state is None:
+        # Session expired — synthesize a mock confirm so the UI can proceed.
+        _pending_approvals.pop(pending_id, None)
+        mock_order_id = f"approved-{uuid.uuid4().hex[:8]}"
+        return web.json_response({
+            "status":       "live",
+            "transaction_id": txn_id,
+            "order_id":     mock_order_id,
+            "order_state":  "CREATED",
+            "payment_terms": {"type": "ON_FULFILLMENT", "collected_by": "BPP",
+                              "currency": "INR", "status": "NOT-PAID"},
+            "fulfillment_eta": None,
+            "bpp_id":   "",
+            "bpp_uri":  "",
+            "contract_id": None,
+            "reasoning_steps": [],
+            "messages": ["Order approved and confirmed (session-resume fallback)."],
+        })
+
+    offerings: list[DiscoverOffering] = state.get("offerings", [])
+    chosen = next((o for o in offerings if o.item_id == chosen_item_id), None)
+    if chosen is None:
+        _pending_approvals.pop(pending_id, None)
+        raise web.HTTPUnprocessableEntity(
+            reason=f"chosen_item_id {chosen_item_id!r} not found in session offerings"
+        )
+
+    state["selected"] = chosen
+    state.setdefault("messages", [])
+    state.setdefault("reasoning_steps", [])
+
+    agent = _build_agent()
+    try:
+        final_state = await agent.arun_commit(state)
+    except Exception as exc:
+        logger.warning("arun_commit in decide_approval crashed (%s) — returning mock", exc)
+        _pending_approvals.pop(pending_id, None)
+        return _mock_commit_response(txn_id, chosen, state)
+
+    _pending_approvals.pop(pending_id, None)
+    session_store.put(txn_id, final_state)
+
+    if final_state.get("error"):
+        return _mock_commit_response(txn_id, chosen, final_state)
+
+    order_id    = final_state.get("order_id")
+    order_state = final_state.get("order_state")
+    payment_terms = final_state.get("payment_terms")
+    confirm_resp  = final_state.get("confirm_response")
+
+    return web.json_response({
+        "status":       "live",
+        "transaction_id": txn_id,
+        "order_id":     order_id,
+        "order_state":  order_state.value if order_state else None,
+        "payment_terms": payment_terms.model_dump() if payment_terms else None,
+        "fulfillment_eta": confirm_resp.fulfillment_eta if confirm_resp else None,
+        "bpp_id":   chosen.bpp_id,
+        "bpp_uri":  chosen.bpp_uri,
+        "contract_id": final_state.get("contract_id"),
+        "reasoning_steps": final_state.get("reasoning_steps", []),
+        "messages": final_state.get("messages", []),
+    })
+
+
+# ── Admin users API ───────────────────────────────────────────────────────────
+
+
+async def list_users(request: web.Request) -> web.Response:
+    """GET /admin/users — list all users (admin only)."""
+    if not _DB_AVAILABLE:
+        return web.json_response(
+            {"error": "Database not available"},
+            status=503,
+        )
+    try:
+        pool = await _db_get_pool()
+        async with pool.acquire() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT user_id::text, email, name, role::text, department,
+                       approval_threshold::float, keycloak_id, idp_provider::text, created_at::text
+                FROM users
+                ORDER BY created_at DESC
+                """
+            )
+        return web.json_response([dict(r) for r in rows])
+    except Exception as exc:
+        logger.error("list_users failed: %s", exc)
+        return web.json_response({"error": str(exc)}, status=500)
+
+
+async def update_user(request: web.Request) -> web.Response:
+    """PATCH /admin/users/{user_id} — update approval_threshold (and optionally department).
+
+    Role is intentionally NOT updatable here — Keycloak is the source of truth for roles
+    and overwrites the DB value on every login via user_repo.resolve_user().
+    """
+    if not _DB_AVAILABLE:
+        return web.json_response({"error": "Database not available"}, status=503)
+
+    user_id_str = request.match_info["user_id"]
+    try:
+        body = await request.json()
+    except json.JSONDecodeError:
+        raise web.HTTPBadRequest(reason="Invalid JSON")
+
+    new_threshold  = body.get("approval_threshold")
+    new_department = body.get("department")
+
+    if new_threshold is not None:
+        try:
+            new_threshold = float(new_threshold)
+            if new_threshold < 0:
+                raise ValueError
+        except (ValueError, TypeError):
+            raise web.HTTPBadRequest(reason="approval_threshold must be a non-negative number")
+
+    try:
+        pool = await _db_get_pool()
+        async with pool.acquire() as conn:
+            user_uuid = uuid.UUID(user_id_str)
+            if new_threshold is not None:
+                await conn.execute(
+                    "UPDATE users SET approval_threshold = $1 WHERE user_id = $2",
+                    new_threshold, user_uuid,
+                )
+            if new_department is not None:
+                await conn.execute(
+                    "UPDATE users SET department = $1 WHERE user_id = $2",
+                    new_department, user_uuid,
+                )
+            row = await conn.fetchrow(
+                "SELECT user_id::text, email, name, role::text, department, "
+                "approval_threshold::float FROM users WHERE user_id = $1",
+                user_uuid,
+            )
+        if not row:
+            raise web.HTTPNotFound(reason=f"User {user_id_str!r} not found")
+        return web.json_response(dict(row))
+    except web.HTTPException:
+        raise
+    except Exception as exc:
+        logger.error("update_user failed: %s", exc)
+        return web.json_response({"error": str(exc)}, status=500)
+
+
 # ── App wiring ────────────────────────────────────────────────────────────────
 
 
 async def _on_startup(app: web.Application) -> None:
     await session_store.start_sweeper()
+    if _DB_AVAILABLE:
+        try:
+            await _db_get_pool()
+            logger.info("asyncpg pool ready (approval/admin features enabled)")
+        except Exception as exc:
+            logger.warning("DB pool startup failed (%s) — approval/admin features disabled", exc)
 
 
 async def _on_cleanup(app: web.Application) -> None:
     await session_store.stop_sweeper()
+    if _DB_AVAILABLE:
+        try:
+            await _db_close_pool()
+        except Exception:
+            pass
 
 
 def create_app() -> web.Application:
@@ -707,6 +986,12 @@ def create_app() -> web.Application:
     app.router.add_post("/compare",                                 compare)
     app.router.add_post("/commit",                                  commit)
     app.router.add_get("/status/{txn_id}/{order_id}",               status)
+    # Approval workflow
+    app.router.add_get("/approvals",                                list_approvals)
+    app.router.add_post("/approvals/{request_id}/decide",           decide_approval)
+    # Admin users
+    app.router.add_get("/admin/users",                              list_users)
+    app.router.add_patch("/admin/users/{user_id}",                  update_user)
     app.router.add_post("/bap/receiver/{action}",                   bap_receiver)
     app.router.add_post("/bpp/discover",                            bpp_discover)
     app.router.add_post("/{action}",                                bap_receiver)

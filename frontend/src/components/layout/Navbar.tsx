@@ -24,6 +24,7 @@ const ROLE_COLORS: Record<string, "default" | "secondary" | "outline"> = {
 export default function Navbar() {
   const { data: session } = useSession()
   const pathname = usePathname()
+  const role = session?.user.role
 
   return (
     <header className="sticky top-0 z-50 w-full bg-white/80 backdrop-blur-xl border-b border-border/50">
@@ -58,6 +59,36 @@ export default function Navbar() {
               </Link>
             )
           })}
+
+          {(role === "approver" || role === "admin") && (
+            <Link
+              href="/approvals"
+              aria-current={pathname.startsWith("/approvals") ? "page" : undefined}
+              className={cn(
+                "px-3 py-1.5 text-sm rounded-md transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                pathname.startsWith("/approvals")
+                  ? "text-primary font-semibold bg-primary/10"
+                  : "text-muted-foreground hover:text-foreground hover:bg-secondary",
+              )}
+            >
+              Approvals
+            </Link>
+          )}
+
+          {role === "admin" && (
+            <Link
+              href="/admin"
+              aria-current={pathname.startsWith("/admin") ? "page" : undefined}
+              className={cn(
+                "px-3 py-1.5 text-sm rounded-md transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                pathname.startsWith("/admin")
+                  ? "text-primary font-semibold bg-primary/10"
+                  : "text-muted-foreground hover:text-foreground hover:bg-secondary",
+              )}
+            >
+              Admin
+            </Link>
+          )}
         </nav>
 
         {session?.user && (

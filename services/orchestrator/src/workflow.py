@@ -82,6 +82,11 @@ _sessions: dict[str, dict] = {}
 _session_times: dict[str, float] = {}
 SESSION_TTL = 1800  # seconds
 
+# ── Pending approvals (in-memory, keyed by request_id) ───────────────────────
+# Populated by /commit when order_total > user's approval_threshold.
+# Consumed by /approvals (list) and /approvals/{id}/decide (approve/reject).
+_pending_approvals: dict[str, dict] = {}
+
 # ── ERP inbound state cache (populated by the Redis psubscribe task) ─────────
 # Keyed by transaction_id. Each entry carries the most-recent inbound webhook
 # payload from the ERP adapter (state, erp_reference_id, vendor, event_ts, …).
@@ -1116,6 +1121,7 @@ async def compare(request: web.Request) -> web.Response:
             })
             request_id = nr.get("request_id", "")
             requester_id = nr.get("requester_id")
+            approval_threshold = float(nr.get("approval_threshold") or 0.0)
             if request_id:
                 await _persist_audit(
                     session, "normalize", "request_created",
@@ -1349,16 +1355,17 @@ async def compare(request: web.Request) -> web.Response:
                 )
 
             _session_put(transaction_id, {
-                "transaction_id":  transaction_id,
-                "offerings":       offerings,
-                "selected":        selected,
-                "intent":          body,
-                "request_id":      request_id,
-                "requester_id":    requester_id,
-                "beckn_intent_id": beckn_intent_id,
-                "query_id":        query_id,
-                "offering_ids_map": offering_ids_map,
-                "score_ids_map":   score_ids_map,
+                "transaction_id":    transaction_id,
+                "offerings":         offerings,
+                "selected":          selected,
+                "intent":            body,
+                "request_id":        request_id,
+                "requester_id":      requester_id,
+                "approval_threshold": approval_threshold,
+                "beckn_intent_id":   beckn_intent_id,
+                "query_id":          query_id,
+                "offering_ids_map":  offering_ids_map,
+                "score_ids_map":     score_ids_map,
             })
 
         return web.json_response({
@@ -1434,6 +1441,9 @@ async def commit(request: web.Request) -> web.Response:
     except json.JSONDecodeError:
         raise web.HTTPBadRequest(reason="Invalid JSON")
 
+    actor = body.pop("actor", {})
+    actor_role = (actor.get("role") or "requester").lower()
+
     txn_id = body.get("transaction_id")
     chosen_item_id = body.get("chosen_item_id")
     if not txn_id or not chosen_item_id:
@@ -1453,6 +1463,40 @@ async def commit(request: web.Request) -> web.Response:
     bpp_id = chosen["bpp_id"]
     bpp_uri = chosen["bpp_uri"]
     quantity = state.get("intent", {}).get("quantity", 1)
+
+    # ── RBAC operating mode gate ──────────────────────────────────────────────
+    # All roles subject to threshold check: ≤ threshold → auto-confirm, > threshold → pending_approval.
+    if actor_role in ("requester", "approver", "admin"):
+        try:
+            order_total = Decimal(str(chosen["price_value"])) * Decimal(quantity)
+        except Exception:
+            order_total = Decimal("0")
+        threshold = Decimal(str(state.get("approval_threshold") or 0))
+        if order_total > threshold:
+            request_id = state.get("request_id", "")
+            if request_id:
+                try:
+                    async with aiohttp.ClientSession(
+                        headers={"Content-Type": "application/json"}
+                    ) as _s:
+                        await _persist_status(_s, request_id, "pending_approval")
+                except Exception as exc:
+                    logger.warning("[commit] pending_approval status update failed: %s", exc)
+            _pending_approvals[request_id] = {
+                "request_id":      request_id,
+                "transaction_id":  txn_id,
+                "chosen_item_id":  chosen_item_id,
+                "actor":           actor,
+                "amount_total":    float(order_total),
+                "item_description": state.get("intent", {}).get("item", ""),
+                "provider_name":   chosen.get("provider_name", ""),
+                "created_at":      _now_iso(),
+            }
+            return web.json_response({
+                "status":      "pending_approval",
+                "request_id":  request_id,
+                "amount_total": float(order_total),
+            }, status=202)
 
     # ── ERP budget gate (M3.1) ────────────────────────────────────────────────
     budget_hold_id: str | None = None
@@ -2062,6 +2106,186 @@ async def _on_cleanup_erp_subscriber(app: web.Application) -> None:
             pass
 
 
+async def _proxy_get(url: str) -> web.Response:
+    """Forward a GET to an upstream service and relay the response."""
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url, timeout=aiohttp.ClientTimeout(total=10)) as resp:
+            body = await resp.json()
+            return web.json_response(body, status=resp.status)
+
+
+async def _proxy_post(url: str, payload: dict) -> web.Response:
+    async with aiohttp.ClientSession(
+        headers={"Content-Type": "application/json"}
+    ) as session:
+        async with session.post(url, json=payload, timeout=aiohttp.ClientTimeout(total=10)) as resp:
+            body = await resp.json()
+            return web.json_response(body, status=resp.status)
+
+
+async def _proxy_patch(url: str, payload: dict) -> web.Response:
+    async with aiohttp.ClientSession(
+        headers={"Content-Type": "application/json"}
+    ) as session:
+        async with session.patch(url, json=payload, timeout=aiohttp.ClientTimeout(total=10)) as resp:
+            body = await resp.json()
+            return web.json_response(body, status=resp.status)
+
+
+async def list_users(request: web.Request) -> web.Response:
+    """GET /admin/users — proxy to data-normalizer."""
+    return await _proxy_get(f"{DATA_NORMALIZER_URL}/admin/users")
+
+
+async def update_user(request: web.Request) -> web.Response:
+    """PATCH /admin/users/{user_id} — proxy to data-normalizer."""
+    user_id = request.match_info["user_id"]
+    try:
+        body = await request.json()
+    except json.JSONDecodeError:
+        raise web.HTTPBadRequest(reason="Invalid JSON")
+    return await _proxy_patch(f"{DATA_NORMALIZER_URL}/admin/users/{user_id}", body)
+
+
+async def list_approvals(request: web.Request) -> web.Response:
+    """GET /approvals — list pending orders from in-memory store."""
+    return web.json_response(list(_pending_approvals.values()))
+
+
+async def decide_approval(request: web.Request) -> web.Response:
+    """POST /approvals/{request_id}/decide
+    Body: { decision: "approved" | "rejected" }
+
+    Rejected  → mark cancelled in DB, remove from queue.
+    Approved  → resume Beckn select→init→confirm; fall back to mock if session expired.
+    """
+    request_id = request.match_info["request_id"]
+    try:
+        body = await request.json()
+    except json.JSONDecodeError:
+        raise web.HTTPBadRequest(reason="Invalid JSON")
+
+    decision = body.get("decision")
+    if decision not in ("approved", "rejected"):
+        raise web.HTTPBadRequest(reason="decision must be 'approved' or 'rejected'")
+
+    entry = _pending_approvals.get(request_id)
+    if not entry:
+        raise web.HTTPNotFound(reason=f"No pending approval for request_id {request_id!r}")
+
+    if decision == "rejected":
+        async with aiohttp.ClientSession(
+            headers={"Content-Type": "application/json"}
+        ) as sess:
+            await _persist_status(sess, request_id, "cancelled")
+        _pending_approvals.pop(request_id, None)
+        return web.json_response({"request_id": request_id, "decision": "rejected", "status": "cancelled"})
+
+    # ── Approved: resume Beckn commit ─────────────────────────────────────────
+    txn_id       = entry["transaction_id"]
+    chosen_item_id = entry["chosen_item_id"]
+    state = _session_get(txn_id)
+
+    if state is None:
+        # Session expired (> 30 min) — synthesize a confirmed result.
+        async with aiohttp.ClientSession(
+            headers={"Content-Type": "application/json"}
+        ) as sess:
+            await _persist_status(sess, request_id, "confirmed")
+        _pending_approvals.pop(request_id, None)
+        return web.json_response({
+            "request_id":  request_id,
+            "decision":    "approved",
+            "status":      "mock",
+            "order_id":    f"approved-{request_id[:8]}",
+            "order_state": "CREATED",
+            "messages":    ["Session expired — order confirmed administratively"],
+        })
+
+    offerings: list[dict] = state.get("offerings", [])
+    chosen = next((o for o in offerings if o["item_id"] == chosen_item_id), None)
+    if chosen is None:
+        _pending_approvals.pop(request_id, None)
+        raise web.HTTPUnprocessableEntity(reason="Chosen item no longer in session offerings")
+
+    bpp_id   = chosen["bpp_id"]
+    bpp_uri  = chosen["bpp_uri"]
+    quantity = state.get("intent", {}).get("quantity", 1)
+    contract_id = str(uuid4())
+    items = [{
+        "id":             chosen["item_id"],
+        "quantity":       quantity,
+        "name":           chosen["item_name"],
+        "price_value":    chosen["price_value"],
+        "price_currency": chosen.get("price_currency", "INR"),
+    }]
+
+    try:
+        async with aiohttp.ClientSession(
+            headers={"Content-Type": "application/json"}
+        ) as sess:
+            intent: dict = state.get("intent") or {}
+
+            select_resp = await _post(sess, f"{BECKN_BAP_URL}/select", {
+                "transaction_id": txn_id, "bpp_id": bpp_id, "bpp_uri": bpp_uri,
+                "item_id": chosen["item_id"], "item_name": chosen["item_name"],
+                "provider_id": chosen.get("provider_id", ""),
+                "price_value": chosen["price_value"],
+                "price_currency": chosen.get("price_currency", "INR"),
+                "quantity": quantity,
+            })
+            init_resp = await _post(sess, f"{BECKN_BAP_URL}/init", {
+                "transaction_id": txn_id, "contract_id": contract_id,
+                "bpp_id": bpp_id, "bpp_uri": bpp_uri, "items": items,
+                "billing": _build_billing_info(), "fulfillment": _build_fulfillment_info(intent),
+            })
+            payment_terms = init_resp.get("payment_terms") or {
+                "type": "ON_FULFILLMENT", "collected_by": "BPP",
+                "currency": chosen.get("price_currency", "INR"), "status": "NOT-PAID",
+            }
+            confirm_resp = await _post(sess, f"{BECKN_BAP_URL}/confirm", {
+                "transaction_id": txn_id, "contract_id": contract_id,
+                "bpp_id": bpp_id, "bpp_uri": bpp_uri,
+                "items": items, "payment_terms": payment_terms,
+            })
+            order_id    = confirm_resp.get("order_id") or f"order-{uuid4().hex[:8]}"
+            order_state = confirm_resp.get("order_state") or "CREATED"
+
+            await _persist_status(sess, request_id, "confirmed")
+            await _persist_audit(
+                sess, "approve", "approver_approved",
+                reasoning_payload={"order_id": order_id, "approver": body.get("approver_id")},
+                request_id=request_id,
+            )
+
+        _pending_approvals.pop(request_id, None)
+        return web.json_response({
+            "request_id":    request_id,
+            "decision":      "approved",
+            "status":        "live",
+            "order_id":      order_id,
+            "order_state":   order_state,
+            "payment_terms": payment_terms,
+            "contract_id":   contract_id,
+        })
+
+    except Exception as exc:
+        logger.warning("[decide_approval] Beckn commit failed (%s) — mock fallback", exc)
+        _pending_approvals.pop(request_id, None)
+        async with aiohttp.ClientSession(
+            headers={"Content-Type": "application/json"}
+        ) as sess:
+            await _persist_status(sess, request_id, "confirmed")
+        return web.json_response({
+            "request_id":  request_id,
+            "decision":    "approved",
+            "status":      "mock",
+            "order_id":    f"mock-approved-{uuid4().hex[:8]}",
+            "order_state": "CREATED",
+            "messages":    [f"Beckn stack offline — order confirmed administratively: {exc}"],
+        })
+
+
 async def cancel(request: web.Request) -> web.Response:
     """PATCH /cancel — mark a procurement request as cancelled.
 
@@ -2121,6 +2345,10 @@ def create_app() -> web.Application:
     app.router.add_route("PATCH", "/cancel",               cancel)
     app.router.add_get("/status/{txn_id}/{order_id}",      order_status)
     app.router.add_get("/order/{request_id}",              order_detail)
+    app.router.add_get("/admin/users",                     list_users)
+    app.router.add_route("PATCH", "/admin/users/{user_id}", update_user)
+    app.router.add_get("/approvals",                       list_approvals)
+    app.router.add_post("/approvals/{request_id}/decide",  decide_approval)
     return app
 
 

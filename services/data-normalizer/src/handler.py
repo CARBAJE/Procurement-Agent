@@ -19,7 +19,8 @@ import uuid as _uuid
 from aiohttp import web
 
 from DataNormalizer import DataNormalizer
-from DataNormalizer.db import close_pool
+from DataNormalizer.db import close_pool, get_pool
+from DataNormalizer.repositories import approval_repo, user_repo
 
 # Absolute import (no leading dot): handler.py is launched as a script in
 # Docker (`python src/handler.py`), so `src` is not a package there. Tests
@@ -279,6 +280,127 @@ async def normalize_status(request: web.Request) -> web.Response:
     return web.json_response(result)
 
 
+# ── Admin users ───────────────────────────────────────────────────────────────
+
+async def list_users(request: web.Request) -> web.Response:
+    """GET /admin/users — return all users."""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT user_id::text, email, name, role::text, department,
+                   approval_threshold::float, keycloak_id,
+                   idp_provider::text, created_at::text
+            FROM users
+            ORDER BY name
+            """
+        )
+    return web.json_response([dict(r) for r in rows])
+
+
+async def update_user(request: web.Request) -> web.Response:
+    """PATCH /admin/users/{user_id} — update approval_threshold and/or department.
+
+    Role is not updatable here — Keycloak is the source of truth and overwrites
+    the DB value on every login via user_repo.resolve_user().
+    """
+    user_id_str = request.match_info["user_id"]
+    try:
+        body = await request.json()
+    except json.JSONDecodeError:
+        raise web.HTTPBadRequest(reason="Invalid JSON")
+
+    new_threshold = body.get("approval_threshold")
+    new_department = body.get("department")
+
+    if new_threshold is not None:
+        try:
+            new_threshold = float(new_threshold)
+            if new_threshold < 0:
+                raise ValueError
+        except (ValueError, TypeError):
+            raise web.HTTPBadRequest(reason="approval_threshold must be a non-negative number")
+
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        user_uuid = _uuid.UUID(user_id_str)
+        if new_threshold is not None:
+            await conn.execute(
+                "UPDATE users SET approval_threshold = $1 WHERE user_id = $2",
+                new_threshold, user_uuid,
+            )
+        if new_department is not None:
+            await conn.execute(
+                "UPDATE users SET department = $1 WHERE user_id = $2",
+                new_department, user_uuid,
+            )
+        row = await conn.fetchrow(
+            """
+            SELECT user_id::text, email, name, role::text, department,
+                   approval_threshold::float, keycloak_id,
+                   idp_provider::text, created_at::text
+            FROM users WHERE user_id = $1
+            """,
+            user_uuid,
+        )
+    if not row:
+        raise web.HTTPNotFound(reason=f"User {user_id_str!r} not found")
+    return web.json_response(dict(row))
+
+
+# ── Approvals ─────────────────────────────────────────────────────────────────
+
+async def list_approvals(request: web.Request) -> web.Response:
+    """GET /approvals — list procurement_requests in pending_approval status."""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT
+                pr.request_id::text,
+                pr.pending_transaction_id,
+                pr.pending_chosen_item_id,
+                pr.raw_input_text   AS item_description,
+                pr.created_at::text,
+                u.name              AS requester_name,
+                u.email             AS requester_email,
+                u.department        AS requester_department
+            FROM procurement_requests pr
+            LEFT JOIN users u ON u.user_id = pr.requester_id
+            WHERE pr.status = 'pending_approval'
+            ORDER BY pr.created_at
+            """
+        )
+    return web.json_response([dict(r) for r in rows])
+
+
+async def decide_approval(request: web.Request) -> web.Response:
+    """POST /approvals/{request_id}/decide
+    Body: { decision: "approved" | "rejected" }
+    """
+    request_id = request.match_info["request_id"]
+    try:
+        body = await request.json()
+    except json.JSONDecodeError:
+        raise web.HTTPBadRequest(reason="Invalid JSON")
+
+    decision = body.get("decision")
+    if decision not in ("approved", "rejected"):
+        raise web.HTTPBadRequest(reason="decision must be 'approved' or 'rejected'")
+
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            "SELECT request_id FROM procurement_requests WHERE request_id = $1 AND status = 'pending_approval'",
+            _uuid.UUID(request_id),
+        )
+        if not row:
+            raise web.HTTPNotFound(reason=f"Pending approval {request_id!r} not found")
+        await approval_repo.mark_decided(conn, request_id, decision)
+
+    return web.json_response({"request_id": request_id, "decision": decision})
+
+
 # ── App factory ───────────────────────────────────────────────────────────────
 
 async def _on_shutdown(app: web.Application) -> None:
@@ -297,6 +419,10 @@ def create_app() -> web.Application:
     app.router.add_post("/normalize/audit",     normalize_audit)
     app.router.add_route("PATCH", "/normalize/status",    normalize_status)
     app.router.add_route("PATCH", "/normalize/po_status", normalize_po_status)
+    app.router.add_get("/admin/users",                    list_users)
+    app.router.add_route("PATCH", "/admin/users/{user_id}", update_user)
+    app.router.add_get("/approvals",                      list_approvals)
+    app.router.add_post("/approvals/{request_id}/decide", decide_approval)
     app.on_shutdown.append(_on_shutdown)
     return app
 

@@ -123,7 +123,37 @@ export interface CommitResult {
   contract_id: string | null
   reasoning_steps: ReasoningStep[]
   messages: string[]
-  status: "live" | "mock"
+  /** "pending_approval" is returned as HTTP 202 when order_total > user threshold. */
+  status: "live" | "mock" | "pending_approval"
+  /** Set only when status === "pending_approval". */
+  amount_total?: number
+}
+
+// ── Approval workflow ────────────────────────────────────────────────────────
+
+export interface PendingApprovalItem {
+  request_id: string
+  transaction_id: string
+  chosen_item_id: string
+  actor: { keycloak_id: string; email: string; name: string; role: string }
+  amount_total: number
+  item_description: string
+  provider_name: string
+  created_at: string
+}
+
+// ── Admin ────────────────────────────────────────────────────────────────────
+
+export interface AdminUser {
+  user_id: string
+  email: string
+  name: string
+  role: UserRole
+  department: string
+  approval_threshold: number
+  keycloak_id: string
+  idp_provider: string
+  created_at: string
 }
 
 export interface StatusSnapshot {

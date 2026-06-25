@@ -1,5 +1,6 @@
 import axios from "axios"
 import type {
+  AdminUser,
   AnalyticsData,
   AnalyticsPeriod,
   BecknIntent,
@@ -8,6 +9,7 @@ import type {
   ComparisonResult,
   OrderDetail,
   ParseResult,
+  PendingApprovalItem,
   StatusSnapshot,
 } from "@/lib/types"
 
@@ -99,6 +101,42 @@ export async function getOrderStatus(
 export async function getOrderDetail(id: string): Promise<OrderDetail> {
   const { data } = await axios.get<OrderDetail>(
     `/api/procurement/order/${encodeURIComponent(id)}`,
+  )
+  return data
+}
+
+// ── Approvals ────────────────────────────────────────────────────────────────
+
+export async function fetchPendingApprovals(): Promise<PendingApprovalItem[]> {
+  const { data } = await axios.get<PendingApprovalItem[]>("/api/approvals")
+  return data
+}
+
+export async function decideApproval(
+  requestId: string,
+  decision: "approved" | "rejected",
+): Promise<CommitResult> {
+  const { data } = await axios.post<CommitResult>(
+    `/api/approvals/${encodeURIComponent(requestId)}/decide`,
+    { decision },
+  )
+  return data
+}
+
+// ── Admin users ───────────────────────────────────────────────────────────────
+
+export async function fetchAdminUsers(): Promise<AdminUser[]> {
+  const { data } = await axios.get<AdminUser[]>("/api/admin/users")
+  return data
+}
+
+export async function updateAdminUser(
+  userId: string,
+  patch: { approval_threshold?: number; department?: string },
+): Promise<AdminUser> {
+  const { data } = await axios.patch<AdminUser>(
+    `/api/admin/users/${encodeURIComponent(userId)}`,
+    patch,
   )
   return data
 }

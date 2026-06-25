@@ -5,6 +5,7 @@ Each public method maps 1:1 to a POST /normalize/<step> route.
 from __future__ import annotations
 
 import logging
+import uuid as _uuid
 
 from .db import get_pool
 from .repositories import (
@@ -40,8 +41,9 @@ class DataNormalizer:
         request to them. Any resolution failure falls back to the system user
         (requester_id stays None → request_repo uses SYSTEM_USER_ID).
 
-        Returns: {"request_id": str, "requester_id": str | None}
+        Returns: {"request_id": str, "requester_id": str | None, "approval_threshold": float}
         """
+        approval_threshold = 0.0
         if actor and actor.get("keycloak_id") and not requester_id:
             try:
                 pool = await get_pool()
@@ -53,6 +55,13 @@ class DataNormalizer:
                         name=actor.get("name"),
                         role=actor.get("role"),
                     )
+                    if requester_id:
+                        row = await conn.fetchrow(
+                            "SELECT approval_threshold::float FROM users WHERE user_id = $1",
+                            _uuid.UUID(requester_id),
+                        )
+                        if row:
+                            approval_threshold = row["approval_threshold"]
             except Exception as exc:  # noqa: BLE001 — never fail the write path on identity
                 logger.warning(
                     "[normalizer] user resolve failed (%s) — attributing to system user",
@@ -62,7 +71,7 @@ class DataNormalizer:
 
         request_id = await request_repo.create_request(raw_input_text, channel, requester_id)
         logger.info("[normalizer] created request %s (requester=%s)", request_id, requester_id or "system")
-        return {"request_id": request_id, "requester_id": requester_id}
+        return {"request_id": request_id, "requester_id": requester_id, "approval_threshold": approval_threshold}
 
     # ── /normalize/intent ─────────────────────────────────────────────────────
 

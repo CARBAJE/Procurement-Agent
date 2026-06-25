@@ -2,8 +2,10 @@
 
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import { ArrowLeft, Send, AlertCircle, Hash, Info, Loader2, Handshake } from "lucide-react"
+import { useSession } from "next-auth/react"
+import { ArrowLeft, Send, AlertCircle, Hash, Info, Loader2, Handshake, Eye, Clock } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 import ComparisonTable      from "@/components/procurement/ComparisonTable"
@@ -13,7 +15,7 @@ import ConfirmCommitDialog  from "@/components/procurement/ConfirmCommitDialog"
 import ConfirmCancelDialog  from "@/components/procurement/ConfirmCancelDialog"
 import { commitOrder, cancelRequest } from "@/lib/api"
 import { clearSession, loadSession, patchSession } from "@/lib/session-store"
-import type { ComparisonResult, BecknIntent } from "@/lib/types"
+import type { CommitResult, ComparisonResult, BecknIntent } from "@/lib/types"
 
 interface CompareViewProps {
   txnId: string
@@ -21,6 +23,9 @@ interface CompareViewProps {
 
 export default function CompareView({ txnId }: CompareViewProps) {
   const router = useRouter()
+  const { data: session } = useSession()
+  const role = session?.user.role ?? "requester"
+
   const [comparison, setComparison] = useState<ComparisonResult | null>(null)
   const [intent,     setIntent]     = useState<BecknIntent | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)
@@ -29,6 +34,7 @@ export default function CompareView({ txnId }: CompareViewProps) {
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error,      setError]      = useState("")
+  const [pendingApproval, setPendingApproval] = useState<CommitResult | null>(null)
 
   // Rehydrate from sessionStorage.
   useEffect(() => {
@@ -81,10 +87,21 @@ export default function CompareView({ txnId }: CompareViewProps) {
     setError("")
     try {
       const result = await commitOrder(txnId, selectedId)
+      if (result.status === "pending_approval") {
+        setDialogOpen(false)
+        setPendingApproval(result)
+        setSubmitting(false)
+        return
+      }
       patchSession(txnId, { commit: result })
       router.push(`/request/${encodeURIComponent(txnId)}/order`)
-    } catch (e) {
-      setError("Could not commit the order. The BAP backend may be offline.")
+    } catch (e: unknown) {
+      const status = (e as { response?: { status?: number } })?.response?.status
+      if (status === 403) {
+        setError("Your role does not allow placing orders.")
+      } else {
+        setError("Could not commit the order. The BAP backend may be offline.")
+      }
       // eslint-disable-next-line no-console
       console.error("commit error", e)
       setSubmitting(false)
@@ -165,6 +182,41 @@ export default function CompareView({ txnId }: CompareViewProps) {
   const recommended = offerings.find((o) => o.item_id === recommended_item_id)
   const selected    = offerings.find((o) => o.item_id === selectedId)
 
+  // Pending approval success state — replace action bar with confirmation banner.
+  if (pendingApproval) {
+    return (
+      <div className="space-y-6">
+        <Card className="border-amber-500/40 bg-amber-50/60">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-amber-800">
+              <Clock className="h-5 w-5 shrink-0" aria-hidden="true" />
+              Order Submitted for Approval
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3 text-sm text-amber-900">
+            <p>
+              Your order total of{" "}
+              <strong>
+                ₹{(pendingApproval.amount_total ?? 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+              </strong>{" "}
+              exceeds your auto-approval threshold and has been routed to an approver.
+            </p>
+            <p className="text-xs text-amber-700">
+              Reference ID: <span className="font-mono">{pendingApproval.request_id}</span>
+            </p>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => router.push("/request/new")}
+            >
+              Start a new request
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6">
       {/* ── Header ─────────────────────────────────────────────────────────── */}
@@ -185,6 +237,12 @@ export default function CompareView({ txnId }: CompareViewProps) {
             </span>
           </div>
         </div>
+        {role === "admin" && (
+          <Badge variant="outline" className="flex items-center gap-1 text-xs">
+            <Eye className="h-3 w-3" aria-hidden="true" />
+            View Only
+          </Badge>
+        )}
       </div>
 
       {/* ── Table + scoring panel ──────────────────────────────────────────── */}
@@ -230,38 +288,44 @@ export default function CompareView({ txnId }: CompareViewProps) {
           <ArrowLeft className="mr-2 h-4 w-4" aria-hidden="true" />
           Cancel and start over
         </Button>
-        <div className="flex items-center gap-3 flex-wrap">
-          {selectedId && selectedId !== recommended_item_id && (
-            <span className="text-xs text-muted-foreground">
-              Non-recommended choice — you will be asked to confirm
-            </span>
-          )}
-          <Button
-            variant="outline"
-            disabled={!selectedId || submitting}
-            onClick={goNegotiate}
-          >
-            <Handshake className="mr-2 h-4 w-4" aria-hidden="true" />
-            Negotiate Terms
-          </Button>
-          <Button
-            disabled={!selectedId || submitting}
-            onClick={onProceed}
-            aria-busy={submitting}
-          >
-            {submitting ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
-                Placing order…
-              </>
-            ) : (
-              <>
-                <Send className="mr-2 h-4 w-4" aria-hidden="true" />
-                Proceed with selection
-              </>
+        {role === "admin" ? (
+          <p role="status" className="text-sm text-muted-foreground">
+            Advisory mode — orders cannot be placed with the admin role.
+          </p>
+        ) : (
+          <div className="flex items-center gap-3 flex-wrap">
+            {selectedId && selectedId !== recommended_item_id && (
+              <span className="text-xs text-muted-foreground">
+                Non-recommended choice — you will be asked to confirm
+              </span>
             )}
-          </Button>
-        </div>
+            <Button
+              variant="outline"
+              disabled={!selectedId || submitting}
+              onClick={goNegotiate}
+            >
+              <Handshake className="mr-2 h-4 w-4" aria-hidden="true" />
+              Negotiate Terms
+            </Button>
+            <Button
+              disabled={!selectedId || submitting}
+              onClick={onProceed}
+              aria-busy={submitting}
+            >
+              {submitting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
+                  Placing order…
+                </>
+              ) : (
+                <>
+                  <Send className="mr-2 h-4 w-4" aria-hidden="true" />
+                  Proceed with selection
+                </>
+              )}
+            </Button>
+          </div>
+        )}
       </div>
 
       {submitting && !error && (
