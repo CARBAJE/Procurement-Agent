@@ -10,14 +10,13 @@ services:
       - ./IntentParser:/app/IntentParser    # repo module mounted at runtime
       - ./shared:/app/shared                # shared models
     environment:
-      # Host Ollama (GPU). Reachable now that UFW allows docker bridges → :11434.
-      - OLLAMA_URL=http://host.docker.internal:11434/v1
-      # Use qwen3:8b (present on the host daemon; qwen3:1.7b is not loaded there).
-      - COMPLEX_MODEL=qwen2.5:1.5b
-      - SIMPLE_MODEL=qwen2.5:1.5b
+      # Claude Code OpenAI proxy (host-side, :8012). Falls back to Ollama if proxy is down.
+      - OLLAMA_URL=http://host.docker.internal:8012/v1
+      - COMPLEX_MODEL=claude-sonnet-4-6
+      - SIMPLE_MODEL=claude-sonnet-4-6
       - PYTHONPATH=/app
     extra_hosts:
-      - "host.docker.internal:host-gateway"   # Linux: resolve host Ollama
+      - "host.docker.internal:host-gateway"
     networks:
       - beckn_network
 
