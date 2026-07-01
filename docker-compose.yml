@@ -295,7 +295,7 @@ services:
       - KAFKA_TOPIC=po.status.changed
       - KAFKA_GROUP_ID=notification-dispatcher
       # Leave empty to skip that channel. Configure in .env for real delivery.
-      - SLACK_WEBHOOK_URL=${SLACK_WEBHOOK_URL:-}
+      - SLACK_WEBHOOK_URL=https://hooks.slack.com/services/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
       - TEAMS_WEBHOOK_URL=${TEAMS_WEBHOOK_URL:-}
       - SMTP_HOST=${SMTP_HOST:-}
       - SMTP_PORT=${SMTP_PORT:-587}
@@ -383,7 +383,7 @@ services:
       # Default OFF preserves manual-test workflows (curl webhook, kafka producer).
       # Set to "true" to demo a realistic BPP that pushes ACCEPTED → PACKED →
       # SHIPPED → OUT_FOR_DELIVERY → DELIVERED autonomously.
-      - SIM_BPP_AUTO_ADVANCE=${SIM_BPP_AUTO_ADVANCE:-false}
+      - SIM_BPP_AUTO_ADVANCE=true
       - SIM_BPP_ADVANCE_INTERVAL_SECS=${SIM_BPP_ADVANCE_INTERVAL_SECS:-5}
       # Kafka + data-normalizer endpoints (used only when auto-advance is on)
       - KAFKA_BOOTSTRAP=kafka:9092
