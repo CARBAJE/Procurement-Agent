@@ -41,12 +41,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "milestones/phase2_core_intelligence_transaction_flow.md",
+                "file": "tests/phase2/phase2_real_time_tracking.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "phase2_core_intelligence_transaction_flow"
+              "title": "phase2_real_time_tracking"
             }
           }
         ],
@@ -214,12 +214,12 @@
   },
   "active": "d0ab1d9047f72bb6",
   "lastOpenFiles": [
+    "components/real_time_tracking.md",
+    "milestones/phase2_core_intelligence_transaction_flow.md",
+    "milestones/phase3_advanced_intelligence_enterprise_features.md",
     "tests/phase2/phase2_real_time_tracking.md",
     "tests/phase2/phase2_microservices.md",
     "tests/phase2/phase2_data_normalizer.md",
-    "milestones/phase3_advanced_intelligence_enterprise_features.md",
-    "components/real_time_tracking.md",
-    "milestones/phase2_core_intelligence_transaction_flow.md",
     "tests/phase1/phase1_bap_monolith.md",
     "tests/phase1",
     "components/data_normalizer.md",

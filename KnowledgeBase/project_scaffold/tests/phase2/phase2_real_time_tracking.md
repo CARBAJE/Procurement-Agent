@@ -314,6 +314,7 @@ Cuando se dispara un canal verás:
 3. Menú izquierdo: **Incoming Webhooks** → toggle **Activate** → ON.
 4. Botón **Add New Webhook to Workspace** → escoge un canal (ej. `#general`).
 5. Copia el URL: `https://hooks.slack.com/services/T01ABC.../B02DEF.../xyz123...`
+6. Entrar para recibir las notificaciones: https://app.slack.com/client/T0BEATQ7VNZ/C0BEHUUM7PE?entry_point=redirect_flow
 
 #### Configurar y reiniciar el dispatcher
 
