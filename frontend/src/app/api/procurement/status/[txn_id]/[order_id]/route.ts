@@ -22,10 +22,7 @@ export async function GET(
     }
     console.error("[status proxy] BAP error:", err)
     return NextResponse.json(
-      {
-        error: "BAP backend unavailable",
-        detail: "Start it with: python -m src.server (from Bap-1/)",
-      },
+      { error: "Unable to retrieve order status. Please try again." },
       { status: 502 },
     )
   }

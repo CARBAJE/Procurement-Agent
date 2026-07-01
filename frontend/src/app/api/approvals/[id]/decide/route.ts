@@ -25,6 +25,6 @@ export async function POST(
     if (axios.isAxiosError(err) && err.response) {
       return NextResponse.json(err.response.data ?? {}, { status: err.response.status })
     }
-    return NextResponse.json({ error: "BAP backend unavailable" }, { status: 502 })
+    return NextResponse.json({ error: "Unable to record the decision. Please try again." }, { status: 502 })
   }
 }

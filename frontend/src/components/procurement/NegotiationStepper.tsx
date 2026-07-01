@@ -302,9 +302,15 @@ export function NegotiationStepper({
       </p>
 
       {error && (
-        <p role="alert" className="text-sm text-destructive">
-          {error}
-        </p>
+        <div role="alert" className="space-y-3">
+          <p className="text-sm text-destructive">{error}</p>
+          {onReject && (
+            <Button variant="outline" onClick={onReject}>
+              <ArrowLeft className="mr-2 h-4 w-4" aria-hidden="true" />
+              Back to Compare
+            </Button>
+          )}
+        </div>
       )}
 
       {/* Round-by-round transcript */}

@@ -24,12 +24,7 @@ export async function POST(req: NextRequest) {
     }
     console.error("[demo/score proxy] gateway error:", err)
     return NextResponse.json(
-      {
-        error: "Demo gateway unavailable",
-        detail:
-          "Start it with: cd services/frontend_demo_gateway && " +
-          "uvicorn frontend_demo_gateway.main:app --port 8005",
-      },
+      { error: "Scoring service is temporarily unavailable. Please try again." },
       { status: 502 },
     )
   }

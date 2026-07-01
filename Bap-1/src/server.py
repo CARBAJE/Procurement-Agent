@@ -401,7 +401,7 @@ async def parse(request: web.Request) -> web.Response:
         # aiohttp forbids newlines in the HTTP reason phrase. Return JSON
         # instead so the frontend proxy can fall back to the stub intent.
         return web.json_response(
-            {"error": "Intent parsing failed", "detail": str(exc).splitlines()[0][:200]},
+            {"error": "Unable to process your request. Please try again in a moment."},
             status=500,
         )
 
@@ -898,7 +898,7 @@ async def list_users(request: web.Request) -> web.Response:
         return web.json_response([dict(r) for r in rows])
     except Exception as exc:
         logger.error("list_users failed: %s", exc)
-        return web.json_response({"error": str(exc)}, status=500)
+        return web.json_response({"error": "Unable to load users. Please try again."}, status=500)
 
 
 async def update_user(request: web.Request) -> web.Response:
@@ -953,7 +953,7 @@ async def update_user(request: web.Request) -> web.Response:
         raise
     except Exception as exc:
         logger.error("update_user failed: %s", exc)
-        return web.json_response({"error": str(exc)}, status=500)
+        return web.json_response({"error": "Unable to update user. Please try again."}, status=500)
 
 
 # ── App wiring ────────────────────────────────────────────────────────────────

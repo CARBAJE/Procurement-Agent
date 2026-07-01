@@ -30,10 +30,7 @@ export async function POST(req: NextRequest) {
       )
     }
     return NextResponse.json(
-      {
-        error: "IntentParser unreachable",
-        detail: "Start the BAP server: python -m src.server (from Bap-1/)",
-      },
+      { error: "Unable to analyze your request. Please try again." },
       { status: 502 },
     )
   }

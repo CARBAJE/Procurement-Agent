@@ -7,6 +7,13 @@ export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions)
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
+  if (session.user.role === "admin") {
+    return NextResponse.json(
+      { error: "Forbidden — admin role cannot place orders" },
+      { status: 403 },
+    )
+  }
+
   const body = await req.json()
   // Carry the authenticated identity (the requester is resolved from the
   // session at /compare; included here for symmetry / future approver use).
@@ -27,10 +34,7 @@ export async function POST(req: NextRequest) {
     }
     console.error("[commit proxy] BAP error:", err)
     return NextResponse.json(
-      {
-        error: "BAP backend unavailable",
-        detail: "Start it with: python -m src.server (from Bap-1/)",
-      },
+      { error: "Unable to place your order. Please try again." },
       { status: 502 },
     )
   }

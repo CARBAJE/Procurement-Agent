@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
-import { AlertCircle, Hash, Loader2 } from "lucide-react"
+import { AlertCircle, ArrowLeft, Hash, Loader2 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -72,7 +72,7 @@ export default function NegotiateView({
     } catch (e) {
       // eslint-disable-next-line no-console
       console.error("commit error", e)
-      setError("Could not commit the order. The BAP backend may be offline.")
+      setError("Unable to place the order. Please try again.")
       setCommitting(false)
     }
   }
@@ -140,9 +140,13 @@ export default function NegotiateView({
             </p>
           )}
           {error && (
-            <p role="alert" className="text-sm text-destructive">
-              {error}
-            </p>
+            <div role="alert" className="space-y-3">
+              <p className="text-sm text-destructive">{error}</p>
+              <Button variant="outline" onClick={backToCompare}>
+                <ArrowLeft className="mr-2 h-4 w-4" aria-hidden="true" />
+                Back to Compare
+              </Button>
+            </div>
           )}
         </>
       )}

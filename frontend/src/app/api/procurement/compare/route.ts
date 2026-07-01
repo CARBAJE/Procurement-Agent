@@ -23,10 +23,7 @@ export async function POST(req: NextRequest) {
   } catch (err) {
     console.error("[compare proxy] BAP error:", err)
     return NextResponse.json(
-      {
-        error: "BAP backend unavailable",
-        detail: "Start it with: python -m src.server (from Bap-1/)",
-      },
+      { error: "Unable to search for suppliers. Please try again." },
       { status: 502 },
     )
   }

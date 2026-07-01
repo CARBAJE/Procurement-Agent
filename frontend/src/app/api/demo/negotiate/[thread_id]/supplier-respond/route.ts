@@ -27,7 +27,7 @@ export async function POST(
     }
     console.error("[demo/negotiate/:thread_id/supplier-respond proxy] gateway error:", err)
     return NextResponse.json(
-      { error: "Demo gateway unavailable" },
+      { error: "Negotiation service is temporarily unavailable. Please try again." },
       { status: 502 },
     )
   }

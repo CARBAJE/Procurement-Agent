@@ -18,7 +18,7 @@ export async function PATCH(req: NextRequest) {
     }
     console.error("[cancel proxy] BAP error:", err)
     return NextResponse.json(
-      { error: "BAP backend unavailable" },
+      { error: "Unable to cancel the request. Please try again." },
       { status: 502 },
     )
   }

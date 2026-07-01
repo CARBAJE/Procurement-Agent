@@ -13,8 +13,8 @@ services:
       # Host Ollama (GPU). Reachable now that UFW allows docker bridges → :11434.
       - OLLAMA_URL=http://host.docker.internal:11434/v1
       # Use qwen3:8b (present on the host daemon; qwen3:1.7b is not loaded there).
-      - COMPLEX_MODEL=qwen3:8b
-      - SIMPLE_MODEL=qwen3:8b
+      - COMPLEX_MODEL=qwen2.5:1.5b
+      - SIMPLE_MODEL=qwen2.5:1.5b
       - PYTHONPATH=/app
     extra_hosts:
       - "host.docker.internal:host-gateway"   # Linux: resolve host Ollama

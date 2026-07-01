@@ -13,6 +13,14 @@ import ScoringPanel         from "@/components/procurement/ScoringPanel"
 import ReasoningPanel       from "@/components/procurement/ReasoningPanel"
 import ConfirmCommitDialog  from "@/components/procurement/ConfirmCommitDialog"
 import ConfirmCancelDialog  from "@/components/procurement/ConfirmCancelDialog"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { commitOrder, cancelRequest } from "@/lib/api"
 import { clearSession, loadSession, patchSession } from "@/lib/session-store"
 import type { CommitResult, ComparisonResult, BecknIntent } from "@/lib/types"
@@ -35,6 +43,7 @@ export default function CompareView({ txnId }: CompareViewProps) {
   const [submitting, setSubmitting] = useState(false)
   const [error,      setError]      = useState("")
   const [pendingApproval, setPendingApproval] = useState<CommitResult | null>(null)
+  const [budgetDialogOpen, setBudgetDialogOpen] = useState(false)
 
   // Rehydrate from sessionStorage.
   useEffect(() => {
@@ -57,10 +66,7 @@ export default function CompareView({ txnId }: CompareViewProps) {
     const requestId = comparison?.request_id
     if (!requestId) {
       setCancelDialogOpen(false)
-      setError(
-        "No request_id available for this comparison — the DB row was never created. " +
-        "Check that the data-normalizer container is running.",
-      )
+      setError("Unable to cancel this request. Please try again or contact support.")
       return
     }
     setSubmitting(true)
@@ -70,10 +76,7 @@ export default function CompareView({ txnId }: CompareViewProps) {
     } catch (err) {
       console.error("[cancel] failed for requestId:", requestId, err)
       setCancelDialogOpen(false)
-      setError(
-        "Could not mark the request as cancelled in the database. " +
-        "The data-normalizer may be offline — check the logs.",
-      )
+      setError("Unable to cancel the request. Please try again.")
       setSubmitting(false)
       return
     }
@@ -100,7 +103,7 @@ export default function CompareView({ txnId }: CompareViewProps) {
       if (status === 403) {
         setError("Your role does not allow placing orders.")
       } else {
-        setError("Could not commit the order. The BAP backend may be offline.")
+        setError("Unable to place the order. Please try again.")
       }
       // eslint-disable-next-line no-console
       console.error("commit error", e)
@@ -109,8 +112,30 @@ export default function CompareView({ txnId }: CompareViewProps) {
   }
 
   function onProceed() {
+    if (!comparison || !selectedId) return
+    // Budget gate: if the order total exceeds the user's stated maximum,
+    // pause here and ask for explicit confirmation. Does not affect
+    // the "Negotiate Terms" path — negotiation is a price-reduction step.
+    const offer = comparison.offerings.find((o) => o.item_id === selectedId)
+    const budgetMax = intent?.budget_constraints?.max ?? null
+    if (offer && budgetMax !== null) {
+      const totalCost = parseFloat(offer.price_value) * (intent?.quantity ?? 1)
+      if (totalCost > budgetMax) {
+        setBudgetDialogOpen(true)
+        return
+      }
+    }
     // Happy path (recommended) → no dialog, straight to commit.
     // Alternative pick → confirm dialog with diff.
+    if (selectedId === comparison.recommended_item_id) {
+      doCommit()
+    } else {
+      setDialogOpen(true)
+    }
+  }
+
+  function onProceedDespiteBudget() {
+    setBudgetDialogOpen(false)
     if (!comparison || !selectedId) return
     if (selectedId === comparison.recommended_item_id) {
       doCommit()
@@ -216,6 +241,10 @@ export default function CompareView({ txnId }: CompareViewProps) {
       </div>
     )
   }
+
+  const budgetMax = intent?.budget_constraints?.max ?? null
+  const orderTotal = selected ? parseFloat(selected.price_value) * (intent?.quantity ?? 1) : 0
+  const budgetOverage = budgetMax !== null && orderTotal > budgetMax ? orderTotal - budgetMax : null
 
   return (
     <div className="space-y-6">
@@ -361,6 +390,42 @@ export default function CompareView({ txnId }: CompareViewProps) {
         submitting={submitting}
         onConfirm={cancel}
       />
+
+      {/* ── Budget exceeded confirmation dialog ──────────────────────────── */}
+      <Dialog
+        open={budgetDialogOpen}
+        onOpenChange={(o) => { if (!submitting) setBudgetDialogOpen(o) }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertCircle className="h-5 w-5 text-destructive" aria-hidden="true" />
+              Order exceeds your budget
+            </DialogTitle>
+            <DialogDescription>
+              This order total of{" "}
+              <strong>₹{orderTotal.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</strong>{" "}
+              exceeds your stated maximum of{" "}
+              <strong>₹{(budgetMax ?? 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</strong>{" "}
+              by{" "}
+              <strong>₹{(budgetOverage ?? 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</strong>.
+              You can proceed or go back to choose a different offering.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setBudgetDialogOpen(false)}
+              disabled={submitting}
+            >
+              Choose a different offering
+            </Button>
+            <Button onClick={onProceedDespiteBudget} disabled={submitting}>
+              Continue anyway
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

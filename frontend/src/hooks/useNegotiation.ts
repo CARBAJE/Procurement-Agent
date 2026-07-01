@@ -137,14 +137,21 @@ export function useNegotiation(): UseNegotiation {
       if (alive()) setStatus("done")
     } catch (err) {
       if (!alive()) return
-      const detail =
-        (err as { response?: { data?: { detail?: string; error?: string } } })
-          ?.response?.data?.detail ??
-        (err as { response?: { data?: { error?: string } } })?.response?.data
-          ?.error ??
-        (err as Error)?.message ??
-        "Negotiation failed"
-      setError(String(detail))
+      const response = (
+        err as { response?: { status?: number; data?: { detail?: string; error?: string } } }
+      )?.response
+      const fromServer = response?.data?.detail ?? response?.data?.error
+      let message: string
+      if (fromServer) {
+        message = fromServer
+      } else if (!response) {
+        message = "Unable to reach the negotiation service. Please check your connection and try again."
+      } else if (response.status === 404) {
+        message = "Negotiation session not found. Please go back and start a new one from the compare page."
+      } else {
+        message = "Negotiation failed. Please try again."
+      }
+      setError(message)
       setStatus("error")
     }
   }, [])

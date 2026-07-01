@@ -1065,10 +1065,10 @@ async def parse(request: web.Request) -> web.Response:
         return web.json_response(result)
     except aiohttp.ClientError as exc:
         logger.error("[parse proxy] Intention parser unreachable: %s", exc)
-        raise web.HTTPBadGateway(reason=f"Intention parser unreachable: {exc}")
+        raise web.HTTPBadGateway(reason="The AI service is temporarily unavailable. Please try again.")
     except Exception as exc:
         logger.error("[parse proxy] Error: %s", exc)
-        raise web.HTTPInternalServerError(reason=f"Parse failed: {exc}")
+        raise web.HTTPInternalServerError(reason="Unable to process your request. Please try again.")
 
 
 async def compare(request: web.Request) -> web.Response:
@@ -1946,10 +1946,10 @@ async def discover(request: web.Request) -> web.Response:
         result = await run_pipeline_from_intent(beckn_intent)
     except aiohttp.ClientError as exc:
         logger.error("Service call failed: %s", exc)
-        raise web.HTTPBadGateway(reason=f"Upstream service unavailable: {exc}")
+        raise web.HTTPBadGateway(reason="A backend service is temporarily unavailable. Please try again.")
     except Exception as exc:
         logger.error("Pipeline error: %s", exc)
-        raise web.HTTPInternalServerError(reason=f"Pipeline failed: {exc}")
+        raise web.HTTPInternalServerError(reason="An unexpected error occurred. Please try again.")
 
     return web.json_response(result)
 
@@ -2012,10 +2012,10 @@ async def run(request: web.Request) -> web.Response:
         result = await run_pipeline(query)
     except aiohttp.ClientError as exc:
         logger.error("Service call failed: %s", exc)
-        raise web.HTTPBadGateway(reason=f"Upstream service unavailable: {exc}")
+        raise web.HTTPBadGateway(reason="A backend service is temporarily unavailable. Please try again.")
     except Exception as exc:
         logger.error("Pipeline error: %s", exc)
-        raise web.HTTPInternalServerError(reason=f"Pipeline failed: {exc}")
+        raise web.HTTPInternalServerError(reason="An unexpected error occurred. Please try again.")
 
     return web.json_response(result)
 

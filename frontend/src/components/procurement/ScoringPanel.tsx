@@ -4,7 +4,25 @@ import { Trophy, Sparkles } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
 import CriterionBar from "@/components/procurement/CriterionBar"
-import type { Offering, Scoring } from "@/lib/types"
+import type { Offering, Scoring, ScoringRanking, ScoringRow } from "@/lib/types"
+
+function criterionDisplayName(key: string): string {
+  if (key === "ml_score") return "ML Score"
+  if (key === "price") return "Price"
+  return key.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase())
+}
+
+function criterionExplanation(
+  key: string,
+  row: ScoringRow,
+  ranking: ScoringRanking[],
+  totalOffers: number,
+): string {
+  if (key !== "ml_score") return row.explanation
+  const rank = ranking.find((r) => r.item_id === row.item_id)?.rank
+  if (!rank) return row.explanation
+  return rank === 1 ? "Top-ranked offer" : `Ranked #${rank} of ${totalOffers}`
+}
 
 interface ScoringPanelProps {
   scoring: Scoring
@@ -68,27 +86,20 @@ export default function ScoringPanel({
             return (
               <div key={c.key}>
                 <div className="flex items-center justify-between mb-1">
-                  <span className="text-sm font-medium">{c.label}</span>
+                  <span className="text-sm font-medium">{criterionDisplayName(c.key)}</span>
                   <span className="text-xs text-muted-foreground">
                     Weight {Math.round(c.weight * 100)}%
                   </span>
                 </div>
-                <CriterionBar score={row.normalized} label={c.label} />
-                <p className="text-xs text-muted-foreground mt-1">{row.explanation}</p>
+                <CriterionBar score={row.normalized} label={criterionDisplayName(c.key)} />
+                <p className="text-xs text-muted-foreground mt-1">
+                  {criterionExplanation(c.key, row, scoring.ranking, offerings.length)}
+                </p>
               </div>
             )
           })}
         </div>
 
-        {/* Forward-compat note: today only "price" is scored. The future
-            Comparison Engine will inject TCO, reputation, delivery reliability
-            and compliance criteria — this panel renders whatever arrives. */}
-        {scoring.criteria.length === 1 && (
-          <p className="text-xs text-muted-foreground italic">
-            More criteria (delivery reliability, reputation, compliance) will be
-            added by the scoring engine.
-          </p>
-        )}
       </CardContent>
     </Card>
   )

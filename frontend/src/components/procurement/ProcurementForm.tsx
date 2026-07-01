@@ -15,9 +15,8 @@ import type { ParseResult } from "@/lib/types"
 
 function extractServerError(err: unknown, fallback: string): string {
   if (axios.isAxiosError(err) && err.response?.data) {
-    const data = err.response.data as { error?: string; detail?: string }
-    if (data.detail) return `${data.error ?? "Server error"}: ${data.detail}`
-    if (data.error)  return data.error
+    const data = err.response.data as { error?: string }
+    if (data.error) return data.error
   }
   return fallback
 }
@@ -50,7 +49,7 @@ export default function ProcurementForm() {
     } catch (err) {
       setError(extractServerError(
         err,
-        "Could not connect to the server. Make sure the backend services are running (ports 8001 and 8004).",
+        "Unable to process your request. Please try again.",
       ))
     } finally {
       setLoading(false)
@@ -84,7 +83,7 @@ export default function ProcurementForm() {
     } catch (err) {
       setError(extractServerError(
         err,
-        "Error contacting the BAP backend. Make sure it is running on :8000.",
+        "Unable to retrieve supplier offers. Please try again.",
       ))
     } finally {
       setLoading(false)
