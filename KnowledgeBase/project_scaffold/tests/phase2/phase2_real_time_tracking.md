@@ -223,12 +223,14 @@ Si activaste auto-advance en el Paso 3 Vía D, este checklist confirma que **TOD
    SIM_BPP_AUTO_ADVANCE=true SIM_BPP_ADVANCE_INTERVAL_SECS=5 \
      docker compose up -d --force-recreate sim-bpp
    docker compose logs --tail=10 sim-bpp
+   
+   SIM_BPP_AUTO_ADVANCE=true docker compose up -d --force-recreate sim-bpp
    ```
-   Debes ver `sim-bpp starting on :3002`. (El flag se confirma indirectamente cuando aparezca un log "auto-advance: started" después del primer `/commit`.)
+2. Debes ver `sim-bpp starting on :3002`. (El flag se confirma indirectamente cuando aparezca un log "auto-advance: started" después del primer `/commit`.)
 
-2. **Crea una orden completa** desde el frontend (Login → Parse → Confirm → Commit). Anota `order_id`.
+3. **Crea una orden completa** desde el frontend (Login → Parse → Confirm → Commit). Anota `order_id`.
 
-3. **En Terminal 3 (psql watch)** observa cómo `purchase_orders.status` cambia solo:
+4. **En Terminal 3 (psql watch)** observa cómo `purchase_orders.status` cambia solo:
    | Aproximadamente | Status esperado | Beckn state interno |
    |---|---|---|
    | `/commit` retorna | `pending` | (sin lifecycle aún) |
@@ -238,7 +240,7 @@ Si activaste auto-advance en el Paso 3 Vía D, este checklist confirma que **TOD
    | T+20 s | `shipped` | OUT_FOR_DELIVERY |
    | T+25 s | `delivered` | DELIVERED — terminal |
 
-4. **En Terminal 1 / logs sim-bpp**, durante esos ~25 s verás:
+5. **En Terminal 1 / logs sim-bpp**, durante esos ~25 s verás:
    ```
    sim-bpp | auto-advance: started order=<ORDER> txn=<TXN> interval=5s
    sim-bpp | kafka published state=ACCEPTED order=<ORDER>
@@ -249,16 +251,16 @@ Si activaste auto-advance en el Paso 3 Vía D, este checklist confirma que **TOD
    sim-bpp | auto-advance: order=<ORDER> → DELIVERED (delivered)
    ```
 
-5. **En los logs del orchestrator** las 5 reenvíos a WebSocket:
+6. **En los logs del orchestrator** las 5 reenvíos a WebSocket:
    ```
    orchestrator-1 | [kafka] forwarded state=ACCEPTED txn=... to 1 ws client(s)
    orchestrator-1 | [kafka] forwarded state=PACKED txn=... to 1 ws client(s)
    …
    ```
 
-6. **En el browser**, la timeline avanza paso a paso sin que toques nada y termina en "Tracking stopped — order delivered".
+7. **En el browser**, la timeline avanza paso a paso sin que toques nada y termina en "Tracking stopped — order delivered".
 
-7. **Probar cancelación mid-flow:**
+8. **Probar cancelación mid-flow:**
    - Crea una nueva orden y, dentro de los primeros ~10 s post-Commit, llama al endpoint `/cancel`:
      ```bash
      curl -X PATCH http://localhost:8004/cancel \

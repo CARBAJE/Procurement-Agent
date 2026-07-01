@@ -2074,6 +2074,10 @@ async def commit(request: web.Request) -> web.Response:
                     },
                     request_id=committed_request_id,
                 )
+            # Status update is decoupled from scoring linkage — the Beckn
+            # confirm succeeded regardless of whether the normalizer stored
+            # a score record (e.g. first run before data-normalizer is healthy).
+            if committed_request_id:
                 await _persist_status(
                     session, committed_request_id, "confirmed"
                 )
