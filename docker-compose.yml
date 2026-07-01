@@ -106,7 +106,7 @@ services:
     ports:
       - "8009:8009"
     environment:
-      - DB_HOST=procurement-postgres
+      - DB_HOST=${DB_HOST:-host.docker.internal}
       - DB_PORT=5432
       - DB_NAME=procurement_agent
       - DB_USER=postgres
@@ -302,11 +302,11 @@ services:
       - SMTP_USER=${SMTP_USER:-}
       - SMTP_PASSWORD=${SMTP_PASSWORD:-}
       - SMTP_FROM=${SMTP_FROM:-noreply@procurement-agent.local}
-      - DB_HOST=host.docker.internal
+      - DB_HOST=${DB_HOST:-host.docker.internal}
       - DB_PORT=5432
       - DB_NAME=procurement_agent
-      - DB_USER=cristianmontiel
-      - DB_PASSWORD=
+      - DB_USER=${DB_USER:-postgres}
+      - DB_PASSWORD=${DB_PASSWORD:-postgres123}
       - PYTHONPATH=/app
     networks:
       - beckn_network
@@ -496,7 +496,8 @@ services:
       dockerfile: ./services/frontend_demo_gateway/Dockerfile
     container_name: demo-gateway
     restart: unless-stopped
-    network_mode: host
+    ports:
+      - "8015:8015"
     command:
       - uvicorn
       - services.frontend_demo_gateway.main:app
@@ -505,24 +506,26 @@ services:
       - --port
       - "8015"
     environment:
-      NEGOTIATION_ENGINE_URL: http://localhost:18004
-      REDIS_URL: redis://localhost:6379/0
+      # Bridge networking: reach engine/redis via Docker DNS, proxy via host.docker.internal.
+      NEGOTIATION_ENGINE_URL: http://negotiation-engine:8004
+      REDIS_URL: redis://redis:6379/0
       REDIS_ON_SELECT_CHANNEL: beckn_on_select_results
-      # MIGRATED to the Claude Code OpenAI proxy (host-networked → localhost:8012).
-      OLLAMA_BASE_URL: http://localhost:8012/v1
+      OLLAMA_BASE_URL: http://host.docker.internal:8012/v1
       OLLAMA_API_KEY: your-local-proxy-key
       SUPPLIER_MODEL: claude-3-5-sonnet
       BUYER_HUMANIZE_MODEL: gpt-4o-mini
       SUPPLIER_ACCEPTABLE_DISCOUNT_FLOOR: "0.10"
       SUPPLIER_MAX_ROUNDS: "3"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       negotiation-engine:
         condition: service_healthy
       redis:
         condition: service_healthy
+    networks:
+      - beckn_network
     healthcheck:
-      # /healthz is liveness-only (does NOT probe Ollama) so the 15s probe
-      # never competes with qwen3 inference on the GPU during a negotiation.
       test: ["CMD", "curl", "-fsS", "http://localhost:8015/healthz"]
       interval: 15s
       timeout: 5s
