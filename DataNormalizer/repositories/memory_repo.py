@@ -114,6 +114,7 @@ async def search_similar_transactions(
             rows = await conn.fetch(
                 """
                 SELECT metadata,
+                       indexed_at,
                        1 - (embedding_vector <=> $1::vector) AS similarity
                 FROM   agent_memory_vectors
                 WHERE  entity_type = 'transaction'
@@ -130,6 +131,7 @@ async def search_similar_transactions(
                 continue
             meta = json.loads(row["metadata"]) if isinstance(row["metadata"], str) else dict(row["metadata"])
             meta["similarity"] = round(sim, 3)
+            meta["indexed_at"] = row["indexed_at"].isoformat() if row["indexed_at"] else None
             results.append(meta)
             if len(results) >= limit:
                 break
