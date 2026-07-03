@@ -11,6 +11,7 @@ from .repositories import (
     audit_repo,
     discovery_repo,
     intent_repo,
+    memory_repo,
     order_read_repo,
     order_repo,
     request_repo,
@@ -232,3 +233,38 @@ class DataNormalizer:
         """
         await request_repo.update_status(request_id, status, category)
         return {"request_id": request_id, "status": status}
+
+    # ── /normalize/memory ─────────────────────────────────────────────────────
+
+    async def write_memory(
+        self,
+        item_text: str,
+        provider_name: str,
+        price: float,
+        currency: str,
+        delivery_hours: int,
+        request_id: str | None,
+    ) -> dict:
+        """Embed a confirmed transaction and store in agent_memory_vectors.
+
+        Fire-and-forget — never raises. Returns {"stored": bool}.
+        """
+        await memory_repo.write_transaction_memory(
+            item_text=item_text,
+            provider_name=provider_name,
+            price=price,
+            currency=currency,
+            delivery_hours=delivery_hours,
+            request_id=request_id,
+        )
+        return {"stored": True}
+
+    async def search_memory(self, item_text: str, limit: int = 3) -> dict:
+        """ANN search agent_memory_vectors for past transactions similar to item_text.
+
+        Returns: {"results": [...], "count": int}
+        Each result has: item_text, provider_name, price, currency,
+                         delivery_hours, text_summary, similarity.
+        """
+        results = await memory_repo.search_similar_transactions(item_text, limit=limit)
+        return {"results": results, "count": len(results)}

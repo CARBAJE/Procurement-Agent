@@ -557,6 +557,65 @@ async def _persist_status(
         logger.warning("[data-normalizer] status update skipped: %s", exc)
 
 
+async def _persist_memory(
+    item_text: str,
+    provider_name: str,
+    price: float,
+    currency: str,
+    delivery_hours: int,
+    request_id: str | None,
+) -> None:
+    """Fire-and-forget POST to /normalize/memory/write. Never raises."""
+    if not DATA_NORMALIZER_URL or not item_text:
+        return
+    try:
+        async with aiohttp.ClientSession(
+            headers={"Content-Type": "application/json"}
+        ) as session:
+            async with session.post(
+                f"{DATA_NORMALIZER_URL}/normalize/memory/write",
+                json={
+                    "item_text":      item_text,
+                    "provider_name":  provider_name,
+                    "price":          price,
+                    "currency":       currency,
+                    "delivery_hours": delivery_hours,
+                    "request_id":     request_id,
+                },
+                timeout=aiohttp.ClientTimeout(total=30),
+            ) as resp:
+                if resp.status < 300:
+                    logger.info("[memory] stored transaction for %s", item_text)
+                else:
+                    logger.warning("[memory] write returned HTTP %s", resp.status)
+    except Exception as exc:
+        logger.warning("[memory] write skipped: %s", exc)
+
+
+async def _fetch_memory_context(item_text: str, limit: int = 3) -> list[dict]:
+    """POST /normalize/memory/search — returns similar past transactions or [].
+
+    Uses a short timeout so a slow embedding never delays the compare response.
+    """
+    if not DATA_NORMALIZER_URL or not item_text:
+        return []
+    try:
+        async with aiohttp.ClientSession(
+            headers={"Content-Type": "application/json"}
+        ) as session:
+            async with session.post(
+                f"{DATA_NORMALIZER_URL}/normalize/memory/search",
+                json={"item_text": item_text, "limit": limit},
+                timeout=aiohttp.ClientTimeout(total=5),
+            ) as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    return data.get("results", [])
+    except Exception as exc:
+        logger.debug("[memory] search skipped: %s", exc)
+    return []
+
+
 async def _patch_status_strict(
     session: aiohttp.ClientSession,
     request_id: str,
@@ -1401,6 +1460,25 @@ async def compare(request: web.Request) -> web.Response:
                 "score_ids_map":   score_ids_map,
             })
 
+        # Agent memory — surface similar past transactions in the reasoning panel.
+        # Runs outside the DB session (session already closed); short timeout so
+        # it never delays the compare response if the model is still loading.
+        item_query = body.get("item", "")
+        memory_hits = await _fetch_memory_context(item_query, limit=3)
+        if memory_hits:
+            summaries = "; ".join(
+                f"{h.get('provider_name','?')} ₹{h.get('price','?')} "
+                f"{h.get('currency','INR')} ({h.get('delivery_hours','?')}h)"
+                for h in memory_hits
+            )
+            reasoning_steps.append({
+                "node":      "memory_context",
+                "role":      "observe",
+                "summary":   f"Found {len(memory_hits)} similar past order(s): {summaries}",
+                "details":   {"past_orders": memory_hits},
+                "timestamp": _now_iso(),
+            })
+
         return web.json_response({
             "transaction_id":      transaction_id,
             "request_id":          request_id,
@@ -1655,6 +1733,16 @@ async def commit(request: web.Request) -> web.Response:
                 await _persist_status(
                     session, committed_request_id, "confirmed"
                 )
+            # Agent memory — embed the confirmed transaction in the background
+            # so future compare() calls can surface "last time you ordered X…" context.
+            asyncio.create_task(_persist_memory(
+                item_text=chosen.get("item_name") or chosen.get("item_id", ""),
+                provider_name=chosen.get("provider_name", ""),
+                price=float(chosen.get("price_value", "0")),
+                currency=chosen.get("price_currency", "INR"),
+                delivery_hours=int(chosen_hours) if chosen_hours else 24,
+                request_id=committed_request_id or None,
+            ))
 
         reasoning_steps = [
             {
