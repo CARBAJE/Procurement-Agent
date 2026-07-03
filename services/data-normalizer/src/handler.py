@@ -8,6 +8,8 @@ Routes:
     POST /normalize/scoring
     POST /normalize/order
     PATCH /normalize/status
+    POST /normalize/memory/write
+    POST /normalize/memory/search
 """
 from __future__ import annotations
 
@@ -401,6 +403,62 @@ async def decide_approval(request: web.Request) -> web.Response:
     return web.json_response({"request_id": request_id, "decision": decision})
 
 
+# ── /normalize/memory/write ──────────────────────────────────────────────────
+
+async def normalize_memory_write(request: web.Request) -> web.Response:
+    """POST /normalize/memory/write
+    Body: {item_text, provider_name, price, currency, delivery_hours, request_id?}
+    Returns: {stored: true}
+
+    Embeds a confirmed transaction and inserts into agent_memory_vectors.
+    Never returns an error — silently skips on embedding or DB failure.
+    """
+    try:
+        body = await request.json()
+    except json.JSONDecodeError:
+        raise web.HTTPBadRequest(reason="Invalid JSON")
+
+    item_text = (body.get("item_text") or "").strip()
+    if not item_text:
+        raise web.HTTPBadRequest(reason="item_text is required")
+
+    result = await _normalizer.write_memory(
+        item_text=item_text,
+        provider_name=body.get("provider_name", "unknown"),
+        price=float(body.get("price", 0.0)),
+        currency=body.get("currency", "INR"),
+        delivery_hours=int(body.get("delivery_hours", 24)),
+        request_id=body.get("request_id"),
+    )
+    return web.json_response(result, status=201)
+
+
+# ── /normalize/memory/search ──────────────────────────────────────────────────
+
+async def normalize_memory_search(request: web.Request) -> web.Response:
+    """POST /normalize/memory/search
+    Body: {item_text, limit?}
+    Returns: {results: [...], count: int}
+
+    ANN search for past transactions semantically similar to item_text.
+    Returns empty results on any failure.
+    """
+    try:
+        body = await request.json()
+    except json.JSONDecodeError:
+        raise web.HTTPBadRequest(reason="Invalid JSON")
+
+    item_text = (body.get("item_text") or "").strip()
+    if not item_text:
+        raise web.HTTPBadRequest(reason="item_text is required")
+
+    result = await _normalizer.search_memory(
+        item_text=item_text,
+        limit=int(body.get("limit", 3)),
+    )
+    return web.json_response(result)
+
+
 # ── App factory ───────────────────────────────────────────────────────────────
 
 async def _on_shutdown(app: web.Application) -> None:
@@ -419,10 +477,12 @@ def create_app() -> web.Application:
     app.router.add_post("/normalize/audit",     normalize_audit)
     app.router.add_route("PATCH", "/normalize/status",    normalize_status)
     app.router.add_route("PATCH", "/normalize/po_status", normalize_po_status)
-    app.router.add_get("/admin/users",                    list_users)
-    app.router.add_route("PATCH", "/admin/users/{user_id}", update_user)
-    app.router.add_get("/approvals",                      list_approvals)
-    app.router.add_post("/approvals/{request_id}/decide", decide_approval)
+    app.router.add_get("/admin/users",                       list_users)
+    app.router.add_route("PATCH", "/admin/users/{user_id}",  update_user)
+    app.router.add_get("/approvals",                         list_approvals)
+    app.router.add_post("/approvals/{request_id}/decide",    decide_approval)
+    app.router.add_post("/normalize/memory/write",           normalize_memory_write)
+    app.router.add_post("/normalize/memory/search",          normalize_memory_search)
     app.on_shutdown.append(_on_shutdown)
     return app
 

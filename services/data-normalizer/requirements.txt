@@ -2,6 +2,7 @@ aiohttp>=3.9
 asyncpg>=0.29
 pydantic>=2.0
 pydantic-settings>=2.0
+fastembed>=0.3.0
 
 # Test deps (kept here so a single `pip install -r requirements.txt` boots tests too)
 pytest>=8.0
