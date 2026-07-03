@@ -26,9 +26,11 @@ import hashlib
 import hmac
 import json
 import logging
+import math
 import os
 import sys
 import time
+from collections import defaultdict
 from decimal import Decimal
 from datetime import datetime, timedelta, timezone
 from uuid import uuid4
@@ -614,6 +616,80 @@ async def _fetch_memory_context(item_text: str, limit: int = 3) -> list[dict]:
     except Exception as exc:
         logger.debug("[memory] search skipped: %s", exc)
     return []
+
+
+def _apply_memory_adjustments(
+    offerings: list[dict],
+    scoring_ranking: list[dict],
+    memory_hits: list[dict],
+    *,
+    max_delta: float = 0.10,
+    decay_halflife_days: float = 90.0,
+    max_orders_per_provider: int = 5,
+) -> tuple[list[dict], str | None, bool]:
+    """Post-process a scoring ranking with memory-based loyalty bonuses.
+
+    Anti-bias guarantees:
+    - Providers with no history receive delta=0 (never penalised for being new).
+    - max_delta caps the total adjustment to ±0.10, regardless of order count.
+    - Exponential time decay: orders older than decay_halflife_days contribute half as much.
+    - Volume cap: only the first max_orders_per_provider records per provider count.
+
+    Returns (adjusted_ranking, new_recommended_item_id, ranking_changed).
+    """
+    if not scoring_ranking or not memory_hits:
+        rec = scoring_ranking[0]["item_id"] if scoring_ranking else None
+        return scoring_ranking, rec, False
+
+    id_to_provider = {o["item_id"]: o.get("provider_name", "") for o in offerings}
+
+    # Group memory hits by provider (volume-capped)
+    provider_history: dict[str, list[dict]] = defaultdict(list)
+    for hit in memory_hits:
+        pname = hit.get("provider_name", "")
+        if pname and len(provider_history[pname]) < max_orders_per_provider:
+            provider_history[pname].append(hit)
+
+    now = datetime.now(timezone.utc)
+
+    def _delta(pname: str) -> float:
+        history = provider_history.get(pname, [])
+        if not history:
+            return 0.0  # neutral — never penalise unknown providers
+        raw = 0.0
+        for h in history:
+            indexed_at_str = h.get("indexed_at")
+            if indexed_at_str:
+                try:
+                    indexed_at = datetime.fromisoformat(
+                        indexed_at_str.replace("Z", "+00:00")
+                    )
+                    days_old = max(0, (now - indexed_at).days)
+                    decay = math.exp(-days_old * math.log(2) / decay_halflife_days)
+                except (ValueError, TypeError):
+                    decay = 1.0
+            else:
+                decay = 1.0
+            raw += 0.03 * decay  # base contribution per past order
+        return max(-max_delta, min(max_delta, raw))
+
+    adjusted = []
+    for item in scoring_ranking:
+        pname = id_to_provider.get(item["item_id"], "")
+        delta = _delta(pname)
+        adjusted.append({
+            **item,
+            "memory_delta": round(delta, 4),
+            "composite_score": round(item["composite_score"] + delta, 4),
+        })
+
+    adjusted.sort(key=lambda x: x["composite_score"], reverse=True)
+    for i, item in enumerate(adjusted, start=1):
+        item["rank"] = i
+
+    new_rec = adjusted[0]["item_id"] if adjusted else None
+    old_rec = scoring_ranking[0]["item_id"] if scoring_ranking else None
+    return adjusted, new_rec, (new_rec != old_rec)
 
 
 async def _patch_status_strict(
@@ -1460,22 +1536,71 @@ async def compare(request: web.Request) -> web.Response:
                 "score_ids_map":   score_ids_map,
             })
 
-        # Agent memory — surface similar past transactions in the reasoning panel.
-        # Runs outside the DB session (session already closed); short timeout so
-        # it never delays the compare response if the model is still loading.
+        # ── Agent memory: post-process ranking + surface context ────────────
+        # Runs outside the DB session; short 5s timeout so model loading never
+        # blocks the compare response. Fetches 10 hits (more than displayed) so
+        # the adjustment has enough history even when one provider dominates.
         item_query = body.get("item", "")
-        memory_hits = await _fetch_memory_context(item_query, limit=3)
+        memory_hits = await _fetch_memory_context(item_query, limit=10)
+
+        if memory_hits and scoring_block.get("ranking"):
+            id_to_provider = {o["item_id"]: o.get("provider_name", "") for o in offerings}
+            adjusted_ranking, mem_rec_id, ranking_changed = _apply_memory_adjustments(
+                offerings, scoring_block["ranking"], memory_hits
+            )
+            if ranking_changed:
+                old_provider = id_to_provider.get(recommended_item_id, recommended_item_id)
+                new_provider = id_to_provider.get(mem_rec_id, mem_rec_id)
+                reasoning_steps.append({
+                    "node":    "memory_adjustment",
+                    "role":    "reason",
+                    "summary": (
+                        f"Memory re-ranked: {new_provider} preferred over "
+                        f"{old_provider} based on past orders"
+                    ),
+                    "details": {
+                        "ml_recommended":     old_provider,
+                        "memory_recommended": new_provider,
+                        "adjusted_ranking": [
+                            {
+                                "rank":           r["rank"],
+                                "provider":       id_to_provider.get(r["item_id"], r["item_id"]),
+                                "ml_score":       round(r["composite_score"] - r.get("memory_delta", 0), 4),
+                                "memory_delta":   r.get("memory_delta", 0),
+                                "adjusted_score": r["composite_score"],
+                            }
+                            for r in adjusted_ranking
+                        ],
+                        "anti_bias": {
+                            "max_delta":             0.10,
+                            "decay_halflife_days":   90,
+                            "max_orders_considered": 5,
+                        },
+                    },
+                    "timestamp": _now_iso(),
+                })
+                recommended_item_id = mem_rec_id
+                selected = next(
+                    (o for o in offerings if o["item_id"] == mem_rec_id), selected
+                )
+            # Always update scoring_block ranking with adjusted scores
+            # (even when top stays the same, deltas are informative)
+            scoring_block["ranking"] = adjusted_ranking
+            scoring_block["recommended_item_id"] = recommended_item_id
+
+        # Surface top-3 memory hits as human-readable context node
         if memory_hits:
+            top3 = memory_hits[:3]
             summaries = "; ".join(
                 f"{h.get('provider_name','?')} ₹{h.get('price','?')} "
                 f"{h.get('currency','INR')} ({h.get('delivery_hours','?')}h)"
-                for h in memory_hits
+                for h in top3
             )
             reasoning_steps.append({
-                "node":      "memory_context",
-                "role":      "observe",
-                "summary":   f"Found {len(memory_hits)} similar past order(s): {summaries}",
-                "details":   {"past_orders": memory_hits},
+                "node":    "memory_context",
+                "role":    "observe",
+                "summary": f"Found {len(memory_hits)} similar past order(s): {summaries}",
+                "details": {"past_orders": top3},
                 "timestamp": _now_iso(),
             })
 
