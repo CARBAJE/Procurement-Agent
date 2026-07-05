@@ -24,6 +24,7 @@ from aiohttp import web
 import budget_routes
 import oracle_routes
 import po_routes
+import policy_routes
 import sap_routes
 from config import from_env
 
@@ -40,6 +41,7 @@ def create_app() -> web.Application:
     app["cfg"] = cfg
     app.router.add_get("/health", health)
     budget_routes.register(app)
+    policy_routes.register(app)
     po_routes.register(app)
     sap_routes.register(app)
     oracle_routes.register(app)

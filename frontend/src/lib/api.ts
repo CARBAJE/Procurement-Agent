@@ -7,9 +7,11 @@ import type {
   BenchmarkReport,
   CommitResult,
   ComparisonResult,
+  ExecutionMode,
   OrderDetail,
   ParseResult,
   PendingApprovalItem,
+  RunResult,
   StatusSnapshot,
 } from "@/lib/types"
 
@@ -41,6 +43,51 @@ export async function commitOrder(
     transaction_id: transactionId,
     chosen_item_id: chosenItemId,
   })
+  return data
+}
+
+// ── /run — orchestrated procurement state machine ────────────────────────────
+
+/** Start a new procurement run. Returns the initial stage and offerings. */
+export async function startRun(
+  intent: BecknIntent,
+  rawQuery: string,
+  executionMode: ExecutionMode,
+): Promise<RunResult> {
+  const { data } = await axios.post<RunResult>("/api/procurement/run", {
+    ...intent,
+    raw_query:      rawQuery,
+    execution_mode: executionMode,
+  })
+  return data
+}
+
+/** Poll the current state of a run (stage, offerings, decision). */
+export async function getRun(runId: string): Promise<RunResult> {
+  const { data } = await axios.get<RunResult>(
+    `/api/procurement/run/${encodeURIComponent(runId)}`,
+  )
+  return data
+}
+
+/**
+ * Advance a run after a human decision.
+ * - awaiting_selection: decision="proceed" + chosenItemId required
+ * - awaiting_approval: decision="proceed" (approve) or "reject"
+ */
+export async function decideRun(
+  runId: string,
+  decision: "proceed" | "reject",
+  chosenItemId?: string,
+  negotiatedPrice?: number,
+): Promise<RunResult> {
+  const body: Record<string, string | number> = { decision }
+  if (chosenItemId)    body.chosen_item_id   = chosenItemId
+  if (negotiatedPrice) body.negotiated_price = negotiatedPrice
+  const { data } = await axios.post<RunResult>(
+    `/api/procurement/run/${encodeURIComponent(runId)}/decide`,
+    body,
+  )
   return data
 }
 

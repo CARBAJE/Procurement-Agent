@@ -33,6 +33,7 @@ export default async function NegotiatePage({ params, searchParams }: PageProps)
           quantity={quantityRaw ? Number(quantityRaw) : undefined}
           listPrice={listPriceRaw ? Number(listPriceRaw) : undefined}
           deliveryDate={one(searchParams.delivery_date)}
+          returnTo={one(searchParams.return_to)}
         />
       </main>
     </>

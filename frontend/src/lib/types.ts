@@ -307,6 +307,73 @@ export interface BenchmarkReport {
   categories: BenchmarkCategory[]
 }
 
+// ── /run — orchestrated procurement state machine ────────────────────────────
+
+export type ExecutionMode = "advisory" | "hitl" | "autonomous"
+
+export type RunStage =
+  | "awaiting_selection"      // advisory: user picks from table
+  | "awaiting_approval"       // hitl: user approves agent's recommendation
+  | "awaiting_rbac_approval"  // amount > threshold; sent to approver queue
+  | "auto_commit"             // autonomous (transient, transitions to confirmed)
+  | "confirmed"               // order committed
+  | "rejected"                // run cancelled
+  | "no_offerings"            // discovery returned empty
+
+export interface PolicyRule {
+  rule_id: string
+  source: string
+  applied: boolean
+  input_summary: string
+  outcome: string
+}
+
+export interface PolicyDecision {
+  ml_item_id: string | null
+  ml_provider_name: string | null
+  final_item_id: string | null
+  final_provider_name: string | null
+  next_stage: RunStage
+  policy: {
+    selection_required: boolean
+    approval_required: boolean
+    auto_commit: boolean
+  }
+  rules_applied: PolicyRule[]
+  explanation: string
+  flags: string[]
+  erp_fallback: boolean
+  requires_negotiation?: boolean
+}
+
+export interface RunResult {
+  run_id: string
+  transaction_id: string
+  request_id: string
+  stage: RunStage
+  execution_mode?: ExecutionMode
+  offerings?: Offering[]
+  recommended_item_id?: string | null
+  scoring?: Scoring
+  reasoning_steps?: ReasoningStep[]
+  messages?: string[]
+  decision?: PolicyDecision
+  // confirmed path
+  order_id?: string | null
+  order_state?: OrderState | null
+  payment_terms?: PaymentTerms | null
+  contract_id?: string | null
+  bpp_id?: string
+  bpp_uri?: string
+  status?: "live" | "mock"
+  // awaiting_rbac_approval / awaiting_selection after rejection
+  amount_total?: number
+  explanation?: string
+  message?: string
+  // autonomous confirmed: settled price after negotiation (null = no deal / not attempted)
+  negotiation_settled_price?: number | null
+}
+
 // ── Auth ────────────────────────────────────────────────────────────────────
 
 export type UserRole = "requester" | "approver" | "admin"

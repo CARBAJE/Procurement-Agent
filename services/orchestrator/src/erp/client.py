@@ -48,6 +48,35 @@ class BudgetCheckRequest:
 
 
 @dataclass
+class PolicyEvaluateRequest:
+    """Input for POST /api/v1/policy/evaluate.
+
+    Mirrors services/erp-adapter/src/models.py::PolicyEvaluateRequest — keep
+    field names identical on both sides.
+    """
+    transaction_id: str
+    cost_center: str
+    order_total: Decimal
+    currency: str = "INR"
+    category: str = "uncategorized"
+    requester_id: str = "anonymous"
+    item_ids: list[str] = field(default_factory=list)
+    provider_ids: list[str] = field(default_factory=list)
+
+    def to_json(self) -> dict[str, Any]:
+        return {
+            "transaction_id": self.transaction_id,
+            "cost_center":    self.cost_center,
+            "order_total":    str(self.order_total),
+            "currency":       self.currency,
+            "category":       self.category,
+            "requester_id":   self.requester_id,
+            "item_ids":       self.item_ids,
+            "provider_ids":   self.provider_ids,
+        }
+
+
+@dataclass
 class BudgetCheckResult:
     allowed: bool
     available_balance: str | None = None
@@ -146,6 +175,43 @@ class ErpAdapterClient:
                     continue
                 raise
         raise last_exc if last_exc else RuntimeError("unreachable")
+
+    async def policy_evaluate(self, req: PolicyEvaluateRequest) -> dict[str, Any]:
+        """Fetch ERP procurement policy envelope. Always fail-open.
+
+        Returns a dict with at minimum:
+          preferred_supplier_ids, approval_required, auto_commit_allowed, fallback.
+        fallback=True signals the PolicyEngine that ERP was unavailable and it
+        should apply the base policy only.
+        """
+        _FAIL_OPEN: dict[str, Any] = {
+            "preferred_supplier_ids": [],
+            "approval_required":      False,
+            "auto_commit_allowed":    True,
+            "fallback":               True,
+            "constraints":            [],
+        }
+        url = f"{self._base_url}/api/v1/policy/evaluate"
+        body = req.to_json()
+        try:
+            async with aiohttp.ClientSession(
+                headers=self._headers, timeout=self._timeout
+            ) as s:
+                async with s.post(url, json=body) as resp:
+                    data = await resp.json()
+                    if resp.status >= 400:
+                        logger.warning(
+                            "policy_evaluate non-2xx status=%s txn=%s",
+                            resp.status, req.transaction_id,
+                        )
+                        return _FAIL_OPEN
+                    return data
+        except Exception as exc:
+            logger.warning(
+                "policy_evaluate unavailable txn=%s — fail-open err=%s",
+                req.transaction_id, exc,
+            )
+            return _FAIL_OPEN
 
     async def enqueue_sync(self, normalized_po: dict[str, Any]) -> None:
         """Fire-and-forget. Logs on failure; never raises into the caller."""

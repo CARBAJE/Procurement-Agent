@@ -120,6 +120,59 @@ class InboundStatus(BaseModel):
     raw: dict[str, Any] = Field(default_factory=dict)
 
 
+# ── Policy evaluation ─────────────────────────────────────────────────────────
+
+class PolicyConstraintKind(str):
+    """Stable string enum for constraint kinds (avoids an extra Enum import)."""
+    REQUIRES_APPROVAL = "requires_approval"
+    PREFERRED_SUPPLIER = "preferred_supplier"
+    BLOCKED_SUPPLIER = "blocked_supplier"
+    BLOCKED_CATEGORY = "blocked_category"
+    BUDGET_EXCEEDED = "budget_exceeded"
+    AUTO_COMMIT_BLOCKED = "auto_commit_blocked"
+
+
+class PolicyConstraint(BaseModel):
+    """One ERP-sourced procurement constraint, attached to a PolicyEnvelope for audit."""
+    kind: str = Field(..., description="Stable kind key from PolicyConstraintKind")
+    value: Optional[str] = None    # supplier_id, category, etc.
+    source: str = "erp"            # "cost_center" | "po_policy" | "category_policy" | …
+    note: Optional[str] = None
+
+
+class PolicyEvaluateRequest(BaseModel):
+    """Input sent to POST /api/v1/policy/evaluate.
+
+    Mirrors services/orchestrator/src/erp/client.py::PolicyEvaluateRequest — keep
+    field names identical on both sides.
+    """
+    transaction_id: str = Field(..., description="Beckn transaction_id — used for tracing")
+    cost_center: str = Field(default="default")
+    order_total: Decimal = Field(..., gt=0)
+    currency: str = Field(default="INR", min_length=3, max_length=3)
+    category: str = Field(default="uncategorized")
+    requester_id: str = Field(default="anonymous")
+    item_ids: list[str] = Field(default_factory=list)
+    provider_ids: list[str] = Field(default_factory=list)
+
+
+class PolicyEnvelope(BaseModel):
+    """ERP policy evaluation result.
+
+    The PolicyEngine reads preferred_supplier_ids, approval_required,
+    auto_commit_allowed, and fallback. constraints is for the audit trail.
+    """
+    preferred_supplier_ids: list[str] = Field(default_factory=list)
+    approval_required: bool = False
+    auto_commit_allowed: bool = True
+    fallback: bool = Field(
+        default=False,
+        description="True when the orchestrator used a fail-open result (ERP unavailable).",
+    )
+    constraints: list[PolicyConstraint] = Field(default_factory=list)
+    vendor: Optional[str] = None
+
+
 # ── Health/readiness response shapes (not strictly needed but documents intent)
 
 class HealthResponse(BaseModel):

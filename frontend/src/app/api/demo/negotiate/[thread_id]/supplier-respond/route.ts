@@ -11,7 +11,7 @@ export async function POST(
   _req: NextRequest,
   { params }: { params: { thread_id: string } },
 ) {
-  const gatewayUrl = process.env.DEMO_GATEWAY_URL ?? "http://localhost:8005"
+  const gatewayUrl = process.env.DEMO_GATEWAY_URL ?? "http://localhost:8015"
   const threadId = encodeURIComponent(params.thread_id)
 
   try {

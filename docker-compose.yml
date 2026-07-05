@@ -139,6 +139,8 @@ services:
       - ERP_BUDGET_CHECK_TIMEOUT_MS=800
       - ERP_SYNC_ENABLED=true
       - ERP_DEFAULT_COST_CENTER=CC-IND-PROC-01
+      # Demo gateway — on the same beckn_network bridge, reachable by service name
+      - DEMO_GATEWAY_URL=http://demo-gateway:8015
       # Buyer billing — read by _build_billing_info() in workflow.py
       - BUYER_NAME=Infosys Limited - Procurement Desk
       - BUYER_EMAIL=procurement@infosys.com
@@ -157,6 +159,7 @@ services:
       - data-normalizer
       - analytics
       - erp-adapter
+      - demo-gateway
 
   # ── ERP Adapter (vendor-neutral SAP/Oracle integration) ────────────────────
   erp-adapter:
@@ -387,20 +390,23 @@ services:
   #   supplier counter-party (in-process), publishing its replies to Redis to
   #   resume the parked buyer graph.
   #
-  #   network_mode: host — REQUIRED on this machine: nftables drops ALL
-  #   docker-bridge → host traffic, so a bridged container cannot reach the
-  #   host Ollama (127.0.0.1:11434). Sharing the host netns lets the gateway
-  #   reach Ollama on localhost directly, with NO firewall/Ollama change and
-  #   WITHOUT putting Ollama in compose. Consequence of host netns: no port
-  #   mapping (binds host :8015 via the command override below), and engine/
-  #   redis are reached via their published host ports, not docker DNS.
+  #   On Windows Docker Desktop, network_mode: host uses the WSL2 VM's netns,
+  #   not the Windows host's — so published host ports are unreachable from
+  #   Windows localhost without explicit port mapping. Use bridge + ports so
+  #   the Next.js dev server (Windows process) can reach :8015.
+  #   Internal services (negotiation-engine, redis) are reached via Docker DNS.
+  #   The Claude Code OpenAI proxy runs on the Windows host and is reached via
+  #   host.docker.internal from inside a bridge container.
   demo-gateway:
     build:
       context: .
       dockerfile: ./services/frontend_demo_gateway/Dockerfile
     container_name: demo-gateway
     restart: unless-stopped
-    network_mode: host
+    networks:
+      - beckn_network
+    ports:
+      - "8015:8015"
     command:
       - uvicorn
       - services.frontend_demo_gateway.main:app
@@ -409,11 +415,12 @@ services:
       - --port
       - "8015"
     environment:
-      NEGOTIATION_ENGINE_URL: http://localhost:18004
-      REDIS_URL: redis://localhost:6379/0
+      NEGOTIATION_ENGINE_URL: http://negotiation-engine:8004
+      REDIS_URL: redis://redis:6379/0
       REDIS_ON_SELECT_CHANNEL: beckn_on_select_results
-      # MIGRATED to the Claude Code OpenAI proxy (host-networked → localhost:8012).
-      OLLAMA_BASE_URL: http://localhost:8012/v1
+      # Claude Code OpenAI proxy runs on the Windows host — use host.docker.internal
+      # from bridge networking (replaces localhost:8012 from old host-netns config).
+      OLLAMA_BASE_URL: http://host.docker.internal:8012/v1
       OLLAMA_API_KEY: your-local-proxy-key
       SUPPLIER_MODEL: claude-3-5-sonnet
       BUYER_HUMANIZE_MODEL: gpt-4o-mini
@@ -425,8 +432,6 @@ services:
       redis:
         condition: service_healthy
     healthcheck:
-      # /healthz is liveness-only (does NOT probe Ollama) so the 15s probe
-      # never competes with qwen3 inference on the GPU during a negotiation.
       test: ["CMD", "curl", "-fsS", "http://localhost:8015/healthz"]
       interval: 15s
       timeout: 5s

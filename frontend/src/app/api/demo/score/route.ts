@@ -13,7 +13,7 @@ import axios from "axios"
 
 export async function POST(req: NextRequest) {
   const body = await req.json()
-  const gatewayUrl = process.env.DEMO_GATEWAY_URL ?? "http://localhost:8005"
+  const gatewayUrl = process.env.DEMO_GATEWAY_URL ?? "http://localhost:8015"
 
   try {
     const { data } = await axios.post(`${gatewayUrl}/api/demo/score`, body)

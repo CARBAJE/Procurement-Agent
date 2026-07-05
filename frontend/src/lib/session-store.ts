@@ -11,6 +11,7 @@ import type {
   BecknIntent,
   CommitResult,
   ComparisonResult,
+  RunResult,
 } from "@/lib/types"
 
 const KEY_PREFIX = "procurement:session:"
@@ -65,4 +66,28 @@ export function patchSession(
 export function clearSession(txnId: string): void {
   if (typeof window === "undefined") return
   sessionStorage.removeItem(KEY_PREFIX + txnId)
+}
+
+// ── Run session — keyed by run_id, stores the latest RunResult ───────────────
+
+const RUN_KEY_PREFIX = "procurement:run:"
+
+export function saveRunSession(runId: string, result: RunResult): void {
+  if (typeof window === "undefined") return
+  try {
+    sessionStorage.setItem(RUN_KEY_PREFIX + runId, JSON.stringify(result))
+  } catch {
+    // sessionStorage full or disabled — swallow silently
+  }
+}
+
+export function loadRunSession(runId: string): RunResult | null {
+  if (typeof window === "undefined") return null
+  try {
+    const raw = sessionStorage.getItem(RUN_KEY_PREFIX + runId)
+    if (!raw) return null
+    return JSON.parse(raw) as RunResult
+  } catch {
+    return null
+  }
 }

@@ -3,28 +3,23 @@ import { getServerSession } from "next-auth/next"
 import axios from "axios"
 import { authOptions } from "@/lib/auth"
 
-export async function POST(
-  req: NextRequest,
-  { params }: { params: { id: string } },
+export async function GET(
+  _req: NextRequest,
+  { params }: { params: { run_id: string } },
 ) {
   const session = await getServerSession(authOptions)
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-  if (session.user.role !== "approver" && session.user.role !== "admin") {
-    return NextResponse.json({ error: "Forbidden — approver or admin role required" }, { status: 403 })
-  }
 
-  const body = await req.json()
   const bapUrl = process.env.BAP_URL ?? "http://localhost:8000"
   try {
-    const { data } = await axios.post(
-      `${bapUrl}/approvals/${encodeURIComponent(params.id)}/decide`,
-      body,
+    const { data } = await axios.get(
+      `${bapUrl}/run/${encodeURIComponent(params.run_id)}`,
     )
     return NextResponse.json(data)
   } catch (err) {
     if (axios.isAxiosError(err) && err.response) {
       return NextResponse.json(err.response.data ?? {}, { status: err.response.status })
     }
-    return NextResponse.json({ error: "Unable to record the decision. Please try again." }, { status: 502 })
+    return NextResponse.json({ error: "Run not found" }, { status: 502 })
   }
 }

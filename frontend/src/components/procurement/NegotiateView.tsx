@@ -19,6 +19,9 @@ export interface NegotiateViewProps {
   quantity?: number
   listPrice?: number
   deliveryDate?: string
+  /** When set, skip commitOrder after negotiation and navigate here instead.
+   *  Used by the HITL flow so the user still approves before the commit runs. */
+  returnTo?: string
 }
 
 /**
@@ -37,6 +40,7 @@ export default function NegotiateView({
   quantity,
   listPrice,
   deliveryDate,
+  returnTo,
 }: NegotiateViewProps) {
   const router = useRouter()
   const [committing, setCommitting] = useState(false)
@@ -59,6 +63,14 @@ export default function NegotiateView({
         supplier_id: supplierId ?? null,
       },
     })
+    // HITL flow: skip commitOrder — the user still needs to explicitly approve.
+    // returnTo points back to the run page; negotiated terms are already in the
+    // bridge WizardSession so RunView can read them.
+    if (returnTo) {
+      router.push(returnTo)
+      return
+    }
+
     if (!itemId) {
       router.push(`/request/${encodeURIComponent(txnId)}/order`)
       return
@@ -78,7 +90,7 @@ export default function NegotiateView({
   }
 
   function backToCompare() {
-    router.push(`/request/${encodeURIComponent(txnId)}/compare`)
+    router.push(returnTo ?? `/request/${encodeURIComponent(txnId)}/compare`)
   }
 
   return (

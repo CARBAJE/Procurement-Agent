@@ -9,12 +9,8 @@ import {
   AlertCircle,
   BarChart2,
   CheckCircle,
-  DollarSign,
   PlusCircle,
   RefreshCw,
-  Settings,
-  Users,
-  Zap,
 } from "lucide-react"
 
 import Navbar from "@/components/layout/Navbar"
@@ -28,21 +24,12 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import DrillDownModal, {
   type DrillDownColumn,
   type DrillDownRow,
 } from "@/components/analytics/DrillDownModal"
-import { fetchAnalytics, fetchBenchmark, fetchBusinessImpact } from "@/lib/api"
-import type { AnalyticsData, AnalyticsPeriod, BenchmarkReport, BusinessImpact } from "@/lib/types"
+import { fetchAnalytics, fetchBenchmark } from "@/lib/api"
+import type { AnalyticsData, AnalyticsPeriod, BenchmarkReport } from "@/lib/types"
 
 // Recharts uses browser APIs — disable SSR for all chart components.
 const CycleTimeBarChart = dynamic(
@@ -240,12 +227,6 @@ export default function DashboardPage() {
   const [benchmark, setBenchmark]         = useState<BenchmarkReport | null>(null)
   const [benchmarkLoading, setBenchmarkLoading] = useState(false)
   const [benchmarkError, setBenchmarkError] = useState<string | null>(null)
-  const [teamSizeFte, setTeamSizeFte] = useState(5)
-  const [businessImpact, setBusinessImpact] = useState<BusinessImpact>({
-    platform_licensing: { baseline_monthly: 50_000, actual_monthly: 50_000 },
-    team_productivity:  { requests_per_fte_before: 12, requests_per_fte_after: 12 },
-    audit_prep_hours:   { before: 40, after: 40 },
-  })
 
   useEffect(() => {
     if (status === "unauthenticated") router.push("/login")
@@ -261,38 +242,6 @@ export default function DashboardPage() {
       .finally(() => setLoading(false))
   }, [period, status])
 
-  // Populate Business Impact "after" values from real DB data when available.
-  // Baselines stay user-configurable; only the "actual" side is overwritten.
-  useEffect(() => {
-    if (status !== "authenticated") return
-    fetchBusinessImpact(period)
-      .then((live) => {
-        setBusinessImpact((prev) => ({
-          platform_licensing: {
-            ...prev.platform_licensing,
-            actual_monthly: Math.max(
-              0,
-              prev.platform_licensing.baseline_monthly - live.monthly_savings,
-            ),
-          },
-          team_productivity: {
-            ...prev.team_productivity,
-            requests_per_fte_after: Math.max(
-              prev.team_productivity.requests_per_fte_before + 1,
-              Math.round(live.requests_this_month / teamSizeFte),
-            ),
-          },
-          audit_prep_hours: {
-            ...prev.audit_prep_hours,
-            after: Math.max(
-              1,
-              Math.round(prev.audit_prep_hours.before * (live.avg_cycle_time_hours / 72.0)),
-            ),
-          },
-        }))
-      })
-      .catch(() => { /* keep defaults on unavailable analytics */ })
-  }, [period, status, teamSizeFte])
 
   if (status === "loading" || (status === "authenticated" && loading)) {
     return <DashboardSkeleton />
@@ -592,153 +541,8 @@ export default function DashboardPage() {
           </Card>
         </div>
 
-        {/* Row 5 — Business Impact */}
-        <div>
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
-              <span className="h-5 w-1 rounded-full bg-primary shrink-0" aria-hidden="true" />
-              <h2 className="text-sm font-semibold text-foreground">Business Impact vs. Baseline</h2>
-            </div>
-            <Dialog>
-              <DialogTrigger asChild>
-                <Button variant="outline" size="sm">
-                  <Settings className="mr-2 h-3.5 w-3.5" aria-hidden="true" />
-                  Configure Baseline
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="max-w-sm">
-                <DialogHeader>
-                  <DialogTitle>Configure Baselines</DialogTitle>
-                </DialogHeader>
-                <div className="space-y-4 pt-2">
-                  <div className="space-y-1">
-                    <Label htmlFor="baseline-licensing">Monthly licensing cost without agent (₹)</Label>
-                    <Input
-                      id="baseline-licensing"
-                      type="number"
-                      min={0}
-                      value={businessImpact.platform_licensing.baseline_monthly}
-                      onChange={(e) => setBusinessImpact((prev) => ({
-                        ...prev,
-                        platform_licensing: { ...prev.platform_licensing, baseline_monthly: Number(e.target.value) },
-                      }))}
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label htmlFor="baseline-requests-fte">Requests per FTE per month (before)</Label>
-                    <Input
-                      id="baseline-requests-fte"
-                      type="number"
-                      min={1}
-                      value={businessImpact.team_productivity.requests_per_fte_before}
-                      onChange={(e) => setBusinessImpact((prev) => ({
-                        ...prev,
-                        team_productivity: { ...prev.team_productivity, requests_per_fte_before: Number(e.target.value) },
-                      }))}
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label htmlFor="baseline-audit">Audit prep hours per cycle (before)</Label>
-                    <Input
-                      id="baseline-audit"
-                      type="number"
-                      min={1}
-                      value={businessImpact.audit_prep_hours.before}
-                      onChange={(e) => setBusinessImpact((prev) => ({
-                        ...prev,
-                        audit_prep_hours: { ...prev.audit_prep_hours, before: Number(e.target.value) },
-                      }))}
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label htmlFor="baseline-fte">Procurement team size (FTEs)</Label>
-                    <Input
-                      id="baseline-fte"
-                      type="number"
-                      min={1}
-                      value={teamSizeFte}
-                      onChange={(e) => setTeamSizeFte(Math.max(1, Number(e.target.value)))}
-                    />
-                  </div>
-                </div>
-              </DialogContent>
-            </Dialog>
-          </div>
-
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-            {/* Platform Licensing */}
-            <Card>
-              <CardContent className="pt-5">
-                <div className="flex items-start gap-3">
-                  <div className="rounded-md bg-primary/10 p-2 text-primary shrink-0">
-                    <DollarSign className="h-4 w-4" aria-hidden="true" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs text-muted-foreground">Platform Licensing</p>
-                    <p className="text-3xl font-bold tabular-nums leading-none mt-1">
-                      ₹{((businessImpact.platform_licensing.baseline_monthly - businessImpact.platform_licensing.actual_monthly) / 1000).toFixed(0)}K
-                    </p>
-                    <p className="text-xs text-muted-foreground mt-1">saved / month</p>
-                    <div className="flex items-center gap-1.5 mt-2 text-xs text-muted-foreground">
-                      <span>₹{(businessImpact.platform_licensing.baseline_monthly / 1000).toFixed(0)}K baseline</span>
-                      <span>→</span>
-                      <span className="text-green-600 font-medium">₹{(businessImpact.platform_licensing.actual_monthly / 1000).toFixed(0)}K now</span>
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Team Productivity */}
-            <Card>
-              <CardContent className="pt-5">
-                <div className="flex items-start gap-3">
-                  <div className="rounded-md bg-primary/10 p-2 text-primary shrink-0">
-                    <Users className="h-4 w-4" aria-hidden="true" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs text-muted-foreground">Team Productivity</p>
-                    <p className="text-3xl font-bold tabular-nums leading-none mt-1">
-                      {Math.round(((businessImpact.team_productivity.requests_per_fte_after - businessImpact.team_productivity.requests_per_fte_before) / businessImpact.team_productivity.requests_per_fte_before) * 100)}%
-                    </p>
-                    <p className="text-xs text-muted-foreground mt-1">more requests / FTE</p>
-                    <div className="flex items-center gap-1.5 mt-2 text-xs text-muted-foreground">
-                      <span>{businessImpact.team_productivity.requests_per_fte_before} req/FTE before</span>
-                      <span>→</span>
-                      <span className="text-green-600 font-medium">{businessImpact.team_productivity.requests_per_fte_after} now</span>
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Audit Prep Time */}
-            <Card>
-              <CardContent className="pt-5">
-                <div className="flex items-start gap-3">
-                  <div className="rounded-md bg-primary/10 p-2 text-primary shrink-0">
-                    <Zap className="h-4 w-4" aria-hidden="true" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs text-muted-foreground">Audit Prep Time</p>
-                    <p className="text-3xl font-bold tabular-nums leading-none mt-1">
-                      {businessImpact.audit_prep_hours.before - businessImpact.audit_prep_hours.after}h
-                    </p>
-                    <p className="text-xs text-muted-foreground mt-1">saved per cycle</p>
-                    <div className="flex items-center gap-1.5 mt-2 text-xs text-muted-foreground">
-                      <span>{businessImpact.audit_prep_hours.before}h before</span>
-                      <span>→</span>
-                      <span className="text-green-600 font-medium">{businessImpact.audit_prep_hours.after}h now</span>
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        </div>
-
-        {/* Row 6 — CPO Benchmarking */}
-        <Card>
+        {/* CPO Benchmarking */}
+        <Card className="mt-6">
           <CardHeader className="pb-2">
             <div className="flex items-center justify-between">
               <div>

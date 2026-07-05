@@ -9,9 +9,9 @@ import { Textarea } from "@/components/ui/textarea"
 import { Label }    from "@/components/ui/label"
 import { Card, CardContent } from "@/components/ui/card"
 import IntentPreview from "@/components/procurement/IntentPreview"
-import { compareOfferings, parseIntent } from "@/lib/api"
-import { saveSession } from "@/lib/session-store"
-import type { ParseResult } from "@/lib/types"
+import { startRun, parseIntent } from "@/lib/api"
+import { saveRunSession } from "@/lib/session-store"
+import type { ExecutionMode, ParseResult } from "@/lib/types"
 
 function extractServerError(err: unknown, fallback: string): string {
   if (axios.isAxiosError(err) && err.response?.data) {
@@ -29,7 +29,15 @@ const EXAMPLES = [
 
 type Step = "input" | "preview"
 
-export default function ProcurementForm() {
+interface ProcurementFormProps {
+  executionMode?: ExecutionMode
+  modeSelector?: React.ReactNode
+}
+
+export default function ProcurementForm({
+  executionMode = "advisory",
+  modeSelector,
+}: ProcurementFormProps) {
   const router = useRouter()
   const [query,       setQuery]       = useState("")
   const [step,        setStep]        = useState<Step>("input")
@@ -61,25 +69,16 @@ export default function ProcurementForm() {
     setError("")
     setLoading(true)
     try {
-      const comparison = await compareOfferings(parseResult.beckn_intent, query)
-      // Honest empty state: discovery ran but no supplier responded. Don't
-      // navigate to an empty comparison — tell the user and let them adjust.
-      if (!comparison.offerings || comparison.offerings.length === 0) {
+      const run = await startRun(parseResult.beckn_intent, query, executionMode)
+      if (run.stage === "no_offerings") {
         setError(
           "No suppliers responded for this request. Try adjusting the item, " +
           "quantity, or delivery window and search again.",
         )
         return
       }
-      // Persist intent + comparison under the transaction id. CompareView
-      // will overwrite with the user's pick and the commit result.
-      saveSession(comparison.transaction_id, {
-        intent: parseResult.beckn_intent,
-        comparison,
-        chosenItemId: comparison.recommended_item_id,
-        commit: null,
-      })
-      router.push(`/request/${encodeURIComponent(comparison.transaction_id)}/compare`)
+      saveRunSession(run.run_id, run)
+      router.push(`/request/${encodeURIComponent(run.run_id)}/run`)
     } catch (err) {
       setError(extractServerError(
         err,
@@ -116,6 +115,7 @@ export default function ProcurementForm() {
                   required
                 />
               </div>
+              {modeSelector}
               {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
               <Button type="submit" disabled={loading || !query.trim()}>
                 {loading
@@ -153,15 +153,14 @@ export default function ProcurementForm() {
               <ArrowLeft className="mr-2 h-4 w-4" />
               Edit
             </Button>
-            <Button
-              onClick={handleConfirm}
-              disabled={loading || parseResult.intent === "unknown"}
-            >
-              {loading
-                ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Searching providers…</>
-                : <><Send className="mr-2 h-4 w-4" />Compare offers</>
-              }
-            </Button>
+            {parseResult.intent !== "unknown" && (
+              <Button onClick={handleConfirm} disabled={loading}>
+                {loading
+                  ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Searching suppliers…</>
+                  : <><Send className="mr-2 h-4 w-4" />Search suppliers</>
+                }
+              </Button>
+            )}
           </div>
         </div>
       )}

@@ -23,6 +23,8 @@ from models import (
     BudgetCheckResult,
     InboundStatus,
     NormalizedPO,
+    PolicyEnvelope,
+    PolicyEvaluateRequest,
     PushResult,
 )
 from resilience import breaker_call
@@ -69,6 +71,29 @@ class MockERPAdapter(ERPAdapter):
                 return BudgetCheckResult(vendor=self.vendor, **body)
         except ClientError as exc:
             raise VendorTransientError(f"mock budget network: {exc}") from exc
+
+    async def evaluate_policy(self, req: PolicyEvaluateRequest) -> PolicyEnvelope:
+        if self._breaker is not None:
+            return await breaker_call(self._breaker, self._evaluate_policy_impl, req)
+        return await self._evaluate_policy_impl(req)
+
+    async def _evaluate_policy_impl(self, req: PolicyEvaluateRequest) -> PolicyEnvelope:
+        url = f"{self._base_url}/mock/policy/evaluate"
+        payload = req.model_dump(mode="json")
+        headers: dict[str, str] = {}
+        scenario = mock_scenario_ctx.get()
+        if scenario:
+            headers["X-Mock-Scenario"] = scenario
+        try:
+            async with self._http.post(url, json=payload, headers=headers) as resp:
+                body = await resp.json()
+                if 500 <= resp.status < 600:
+                    raise VendorTransientError(f"mock policy 5xx: {resp.status} {body}")
+                if resp.status >= 400:
+                    raise VendorPermanentError(f"mock policy {resp.status}: {body}")
+                return PolicyEnvelope.model_validate(body)
+        except ClientError as exc:
+            raise VendorTransientError(f"mock policy network: {exc}") from exc
 
     async def push_po(self, po: NormalizedPO, idempotency_key: str) -> PushResult:
         if self._breaker is not None:

@@ -13,6 +13,8 @@ from models import (
     BudgetCheckResult,
     InboundStatus,
     NormalizedPO,
+    PolicyEnvelope,
+    PolicyEvaluateRequest,
     PushResult,
 )
 
@@ -47,6 +49,8 @@ class ERPAdapter(Protocol):
     vendor: ClassVar[str]
 
     async def check_budget(self, req: BudgetCheckRequest) -> BudgetCheckResult: ...
+
+    async def evaluate_policy(self, req: PolicyEvaluateRequest) -> PolicyEnvelope: ...
 
     async def push_po(self, po: NormalizedPO, idempotency_key: str) -> PushResult: ...
 

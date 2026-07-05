@@ -191,6 +191,70 @@ def _bucket(amount: Decimal) -> str:
 
 # ── Internal: /api/v1/po/sync ────────────────────────────────────────────────
 
+async def policy_evaluate(request: web.Request) -> web.Response:
+    """ERP policy gate for the /run orchestration flow.
+
+    Fail-open: on vendor timeout or transient error returns a neutral envelope
+    with fallback=True. The orchestrator's PolicyEngine treats fallback=True as
+    "ERP unavailable, apply base policy only".
+
+    On VendorPermanentError (4xx from the ERP adapter) returns HTTP 502 so the
+    orchestrator surfaces it as a hard failure rather than silently failing open.
+    """
+    from models import PolicyEvaluateRequest
+    from adapters.base import VendorPermanentError, VendorTransientError
+    from adapters.mock import mock_scenario_ctx
+
+    _FAIL_OPEN_ENVELOPE = {
+        "preferred_supplier_ids": [],
+        "approval_required": False,
+        "auto_commit_allowed": True,
+        "fallback": True,
+        "constraints": [],
+    }
+
+    try:
+        body = await request.json()
+        req = PolicyEvaluateRequest.model_validate(body)
+    except Exception as exc:
+        return web.json_response({"error": "bad_request", "detail": str(exc)}, status=400)
+
+    adapter = request.app["adapter"]
+    settings = request.app["settings"]
+    vendor_label = ",".join(settings.erp_vendors)
+
+    scenario_token = mock_scenario_ctx.set(request.headers.get("X-Mock-Scenario"))
+    try:
+        try:
+            result = await asyncio.wait_for(
+                adapter.evaluate_policy(req),
+                timeout=settings.budget_check_total_timeout_ms / 1000,
+            )
+        finally:
+            mock_scenario_ctx.reset(scenario_token)
+    except asyncio.TimeoutError:
+        audit.emit("POLICY_EVAL", vendor=vendor_label, outcome="timeout",
+                   transaction_id=req.transaction_id, reason="adapter_timeout")
+        return web.json_response({**_FAIL_OPEN_ENVELOPE, "vendor": vendor_label})
+    except VendorTransientError as exc:
+        audit.emit("POLICY_EVAL", vendor=vendor_label, outcome="error",
+                   transaction_id=req.transaction_id, reason=str(exc))
+        return web.json_response({**_FAIL_OPEN_ENVELOPE, "vendor": vendor_label})
+    except VendorPermanentError as exc:
+        return web.json_response(
+            {"error": "vendor_permanent", "detail": str(exc)}, status=502
+        )
+
+    audit.emit(
+        "POLICY_EVAL", vendor=vendor_label, outcome="ok",
+        transaction_id=req.transaction_id,
+        approval_required=result.approval_required,
+        auto_commit_allowed=result.auto_commit_allowed,
+        preferred_count=len(result.preferred_supplier_ids),
+    )
+    return web.json_response(result.model_dump(mode="json"))
+
+
 async def po_sync(request: web.Request) -> web.Response:
     """Enqueue a PO push. Idempotent on `transaction_id` (per vendor).
 
@@ -445,6 +509,7 @@ def register(app: web.Application) -> None:
     app.router.add_get("/metrics", metrics_endpoint)
 
     app.router.add_post("/api/v1/budget/check", budget_check)
+    app.router.add_post("/api/v1/policy/evaluate", policy_evaluate)
     app.router.add_post("/api/v1/po/sync", po_sync)
     app.router.add_get("/api/v1/po/sync/{sync_id}", po_sync_status)
 

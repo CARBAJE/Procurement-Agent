@@ -30,6 +30,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { Skeleton } from "@/components/ui/skeleton"
+import axios from "axios"
 import { fetchPendingApprovals, decideApproval } from "@/lib/api"
 import type { PendingApprovalItem } from "@/lib/types"
 
@@ -69,8 +70,13 @@ export default function ApprovalsPage() {
     try {
       await decideApproval(requestId, decision)
       setItems((prev) => prev.filter((i) => i.request_id !== requestId))
-    } catch {
-      setError("Failed to record decision. Please try again.")
+    } catch (err: unknown) {
+      if (axios.isAxiosError(err) && err.response?.data) {
+        const d = err.response.data as { error?: string }
+        setError(d.error ?? "Failed to record decision. Please try again.")
+      } else {
+        setError("Failed to record decision. Please try again.")
+      }
     } finally {
       setDeciding(null)
     }
