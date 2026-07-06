@@ -913,6 +913,91 @@ def _apply_memory_adjustments(
     return adjusted, new_rec, (new_rec != old_rec)
 
 
+async def _enrich_with_memory(
+    offerings: list[dict],
+    scoring_block: dict,
+    item_query: str,
+    limit: int = 10,
+) -> tuple[dict, list[dict], str | None]:
+    """Apply memory-based loyalty bonus to a scoring_block.
+
+    Fetches similar past transactions via pgvector ANN, computes time-decayed
+    loyalty deltas per provider, and builds memory_adjustment / memory_context
+    reasoning nodes.
+
+    Returns (updated_scoring_block, reasoning_nodes, new_recommended_item_id).
+    new_recommended_item_id reflects the top item after memory adjustment
+    (unchanged if no hits or if ranking did not shift).
+    """
+    if not item_query:
+        return scoring_block, [], scoring_block.get("recommended_item_id")
+
+    memory_hits = await _fetch_memory_context(item_query, limit=limit)
+    reasoning_nodes: list[dict] = []
+    current_rec_id: str | None = scoring_block.get("recommended_item_id")
+
+    if memory_hits and scoring_block.get("ranking"):
+        id_to_provider = {o["item_id"]: o.get("provider_name", "") for o in offerings}
+        adjusted_ranking, mem_rec_id, ranking_changed = _apply_memory_adjustments(
+            offerings, scoring_block["ranking"], memory_hits
+        )
+        if ranking_changed:
+            old_provider = id_to_provider.get(current_rec_id, current_rec_id)
+            new_provider = id_to_provider.get(mem_rec_id, mem_rec_id)
+            reasoning_nodes.append({
+                "node":    "memory_adjustment",
+                "role":    "reason",
+                "summary": (
+                    f"Memory re-ranked: {new_provider} preferred over "
+                    f"{old_provider} based on past orders"
+                ),
+                "details": {
+                    "ml_recommended":     old_provider,
+                    "memory_recommended": new_provider,
+                    "adjusted_ranking": [
+                        {
+                            "rank":           r["rank"],
+                            "provider":       id_to_provider.get(r["item_id"], r["item_id"]),
+                            "ml_score":       round(r["composite_score"] - r.get("memory_delta", 0), 4),
+                            "memory_delta":   r.get("memory_delta", 0),
+                            "adjusted_score": r["composite_score"],
+                        }
+                        for r in adjusted_ranking
+                    ],
+                    "anti_bias": {
+                        "max_delta":             0.10,
+                        "decay_halflife_days":   90,
+                        "max_orders_considered": 5,
+                    },
+                },
+                "timestamp": _now_iso(),
+            })
+            current_rec_id = mem_rec_id
+
+        scoring_block = {
+            **scoring_block,
+            "ranking":             adjusted_ranking,
+            "recommended_item_id": current_rec_id,
+        }
+
+    if memory_hits:
+        top3 = memory_hits[:3]
+        summaries = "; ".join(
+            f"{h.get('provider_name','?')} ₹{h.get('price','?')} "
+            f"{h.get('currency','INR')} ({h.get('delivery_hours','?')}h)"
+            for h in top3
+        )
+        reasoning_nodes.append({
+            "node":    "memory_context",
+            "role":    "observe",
+            "summary": f"Found {len(memory_hits)} similar past order(s): {summaries}",
+            "details": {"past_orders": top3},
+            "timestamp": _now_iso(),
+        })
+
+    return scoring_block, reasoning_nodes, current_rec_id
+
+
 async def _patch_status_strict(
     session: aiohttp.ClientSession,
     request_id: str,
@@ -1124,13 +1209,30 @@ async def run_pipeline_from_intent(beckn_intent: dict, request_id: str | None = 
             )
             await _persist_status(session, request_id, "negotiating")
 
+        # ── Agent memory: enrich ranking with past transaction history ────────
+        reasoning_steps: list[dict] = []
+        if selected and offerings:
+            item_query = beckn_intent.get("item", "")
+            scoring_block = _build_scoring(
+                offerings, selected.get("item_id") if selected else None
+            )
+            scoring_block, mem_steps, mem_rec_id = await _enrich_with_memory(
+                offerings, scoring_block, item_query
+            )
+            reasoning_steps.extend(mem_steps)
+            if mem_rec_id and mem_rec_id != selected.get("item_id"):
+                selected = next(
+                    (o for o in offerings if o["item_id"] == mem_rec_id), selected
+                )
+
         if not selected:
             return {
-                "transaction_id": transaction_id,
-                "offerings": offerings,
-                "selected": None,
-                "messages": messages,
-                "status": "live",
+                "transaction_id":  transaction_id,
+                "offerings":       offerings,
+                "selected":        None,
+                "messages":        messages,
+                "reasoning_steps": reasoning_steps,
+                "status":          "live",
             }
 
         # ── Step 4: Beckn BAP Client Lambda (select) ─────────────────────────
@@ -1167,6 +1269,7 @@ async def run_pipeline_from_intent(beckn_intent: dict, request_id: str | None = 
             "offerings":       offerings,
             "selected":        selected,
             "messages":        messages,
+            "reasoning_steps": reasoning_steps,
             "status":          "live",
             "_persist": {
                 "request_id":       request_id,
@@ -1361,15 +1464,31 @@ async def run_pipeline(query: str) -> dict:
             )
             await _persist_status(session, request_id, "negotiating")
 
+        # ── Agent memory: enrich ranking with past transaction history ────────
+        reasoning_steps: list[dict] = []
+        if selected and offerings:
+            scoring_block = _build_scoring(
+                offerings, selected.get("item_id") if selected else None
+            )
+            scoring_block, mem_steps, mem_rec_id = await _enrich_with_memory(
+                offerings, scoring_block, query
+            )
+            reasoning_steps.extend(mem_steps)
+            if mem_rec_id and mem_rec_id != selected.get("item_id"):
+                selected = next(
+                    (o for o in offerings if o["item_id"] == mem_rec_id), selected
+                )
+
         if not selected:
             return {
-                "transaction_id": transaction_id,
-                "offerings": offerings,
-                "selected": None,
-                "messages": messages,
-                "parse_result": parse_result,
+                "transaction_id":  transaction_id,
+                "offerings":       offerings,
+                "selected":        None,
+                "messages":        messages,
+                "reasoning_steps": reasoning_steps,
+                "parse_result":    parse_result,
                 "discover_result": discover_result,
-                "score_result": score_result,
+                "score_result":    score_result,
             }
 
         # ── Step 4: Beckn BAP Client Lambda (select) ─────────────────────────
@@ -1407,6 +1526,7 @@ async def run_pipeline(query: str) -> dict:
             "offerings":       offerings,
             "selected":        selected,
             "messages":        messages,
+            "reasoning_steps": reasoning_steps,
             "parse_result":    parse_result,
             "discover_result": discover_result,
             "score_result":    score_result,
@@ -1797,72 +1917,18 @@ async def compare(request: web.Request) -> web.Response:
             })
 
         # ── Agent memory: post-process ranking + surface context ────────────
-        # Runs outside the DB session; short 5s timeout so model loading never
-        # blocks the compare response. Fetches 10 hits (more than displayed) so
-        # the adjustment has enough history even when one provider dominates.
-        item_query = body.get("item", "")
-        memory_hits = await _fetch_memory_context(item_query, limit=10)
-
-        if memory_hits and scoring_block.get("ranking"):
-            id_to_provider = {o["item_id"]: o.get("provider_name", "") for o in offerings}
-            adjusted_ranking, mem_rec_id, ranking_changed = _apply_memory_adjustments(
-                offerings, scoring_block["ranking"], memory_hits
+        # raw_query is the full NL text — produces richer embeddings than the
+        # short extracted item name for cosine similarity against stored vectors.
+        item_query = raw_query or body.get("item", "")
+        scoring_block, mem_steps, mem_rec_id = await _enrich_with_memory(
+            offerings, scoring_block, item_query
+        )
+        reasoning_steps.extend(mem_steps)
+        if mem_rec_id and mem_rec_id != recommended_item_id:
+            recommended_item_id = mem_rec_id
+            selected = next(
+                (o for o in offerings if o["item_id"] == mem_rec_id), selected
             )
-            if ranking_changed:
-                old_provider = id_to_provider.get(recommended_item_id, recommended_item_id)
-                new_provider = id_to_provider.get(mem_rec_id, mem_rec_id)
-                reasoning_steps.append({
-                    "node":    "memory_adjustment",
-                    "role":    "reason",
-                    "summary": (
-                        f"Memory re-ranked: {new_provider} preferred over "
-                        f"{old_provider} based on past orders"
-                    ),
-                    "details": {
-                        "ml_recommended":     old_provider,
-                        "memory_recommended": new_provider,
-                        "adjusted_ranking": [
-                            {
-                                "rank":           r["rank"],
-                                "provider":       id_to_provider.get(r["item_id"], r["item_id"]),
-                                "ml_score":       round(r["composite_score"] - r.get("memory_delta", 0), 4),
-                                "memory_delta":   r.get("memory_delta", 0),
-                                "adjusted_score": r["composite_score"],
-                            }
-                            for r in adjusted_ranking
-                        ],
-                        "anti_bias": {
-                            "max_delta":             0.10,
-                            "decay_halflife_days":   90,
-                            "max_orders_considered": 5,
-                        },
-                    },
-                    "timestamp": _now_iso(),
-                })
-                recommended_item_id = mem_rec_id
-                selected = next(
-                    (o for o in offerings if o["item_id"] == mem_rec_id), selected
-                )
-            # Always update scoring_block ranking with adjusted scores
-            # (even when top stays the same, deltas are informative)
-            scoring_block["ranking"] = adjusted_ranking
-            scoring_block["recommended_item_id"] = recommended_item_id
-
-        # Surface top-3 memory hits as human-readable context node
-        if memory_hits:
-            top3 = memory_hits[:3]
-            summaries = "; ".join(
-                f"{h.get('provider_name','?')} ₹{h.get('price','?')} "
-                f"{h.get('currency','INR')} ({h.get('delivery_hours','?')}h)"
-                for h in top3
-            )
-            reasoning_steps.append({
-                "node":    "memory_context",
-                "role":    "observe",
-                "summary": f"Found {len(memory_hits)} similar past order(s): {summaries}",
-                "details": {"past_orders": top3},
-                "timestamp": _now_iso(),
-            })
 
         return web.json_response({
             "transaction_id":      result["transaction_id"],

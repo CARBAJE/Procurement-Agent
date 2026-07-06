@@ -321,3 +321,121 @@ async def test_confidence_above_one_gets_clamped(client: TestClient, db_pool):
             uuid.UUID(iid),
         )
     assert score == 1.0
+
+
+# ── /normalize/memory/write ──────────────────────────────────────────────────
+
+async def test_memory_write_stores_transaction(client: TestClient, db_pool):
+    import json as _json
+    # request_id is omitted — it is a nullable FK (only set after a real /commit).
+    resp = await client.post("/normalize/memory/write", json={
+        "item_text":      "A4 paper 80gsm ream 500 sheets",
+        "provider_name":  "PaperDirect India",
+        "price":          168.0,
+        "currency":       "INR",
+        "delivery_hours": 48,
+    })
+    assert resp.status == 201
+    body = await resp.json()
+    assert body["stored"] is True
+
+    async with db_pool.acquire() as conn:
+        row = await conn.fetchrow(
+            "SELECT entity_type, metadata FROM agent_memory_vectors ORDER BY indexed_at DESC LIMIT 1"
+        )
+    assert row is not None
+    assert row["entity_type"] == "transaction"
+    meta = _json.loads(row["metadata"]) if isinstance(row["metadata"], str) else dict(row["metadata"])
+    assert meta["item_text"] == "A4 paper 80gsm ream 500 sheets"
+    assert meta["provider_name"] == "PaperDirect India"
+    assert meta["price"] == 168.0
+
+
+async def test_memory_write_default_fields(client: TestClient, db_pool):
+    import json as _json
+    resp = await client.post("/normalize/memory/write", json={"item_text": "office chair"})
+    assert resp.status == 201
+    assert (await resp.json())["stored"] is True
+
+    async with db_pool.acquire() as conn:
+        row = await conn.fetchrow(
+            "SELECT metadata FROM agent_memory_vectors ORDER BY indexed_at DESC LIMIT 1"
+        )
+    meta = _json.loads(row["metadata"]) if isinstance(row["metadata"], str) else dict(row["metadata"])
+    assert meta["provider_name"] == "unknown"
+    assert meta["price"] == 0.0
+    assert meta["delivery_hours"] == 24
+    assert meta["currency"] == "INR"
+
+
+async def test_memory_write_missing_item_text_returns_400(client: TestClient):
+    resp = await client.post("/normalize/memory/write", json={
+        "provider_name": "SomeCo",
+        "price": 100.0,
+    })
+    assert resp.status == 400
+
+
+async def test_memory_write_blank_item_text_returns_400(client: TestClient):
+    resp = await client.post("/normalize/memory/write", json={"item_text": "   "})
+    assert resp.status == 400
+
+
+# ── /normalize/memory/search ─────────────────────────────────────────────────
+
+async def test_memory_search_returns_similar(client: TestClient, db_pool):
+    await client.post("/normalize/memory/write", json={
+        "item_text":      "A4 paper 80gsm ream office supplies",
+        "provider_name":  "OfficeWorld Supplies",
+        "price":          195.0,
+        "currency":       "INR",
+        "delivery_hours": 24,
+    })
+
+    resp = await client.post("/normalize/memory/search", json={
+        "item_text": "A4 paper office ream sheets",
+        "limit":     3,
+    })
+    assert resp.status == 200
+    body = await resp.json()
+    assert body["count"] >= 1
+    first = body["results"][0]
+    assert first["similarity"] >= 0.75
+    assert first["provider_name"] == "OfficeWorld Supplies"
+    assert "text_summary" in first
+    assert "indexed_at" in first
+
+
+async def test_memory_search_no_match_below_threshold(client: TestClient):
+    resp = await client.post("/normalize/memory/search", json={
+        "item_text": "industrial diesel fuel tanker truck refinery",
+        "limit":     3,
+    })
+    assert resp.status == 200
+    body = await resp.json()
+    assert body["count"] == 0
+    assert body["results"] == []
+
+
+async def test_memory_search_missing_item_text_returns_400(client: TestClient):
+    resp = await client.post("/normalize/memory/search", json={"limit": 3})
+    assert resp.status == 400
+
+
+async def test_memory_search_respects_limit(client: TestClient, db_pool):
+    for i in range(5):
+        await client.post("/normalize/memory/write", json={
+            "item_text":      f"A4 paper variant {i} 80gsm ream",
+            "provider_name":  f"PaperSupplier{i}",
+            "price":          150.0 + i * 10,
+            "delivery_hours": 24,
+        })
+
+    resp = await client.post("/normalize/memory/search", json={
+        "item_text": "A4 paper 80gsm ream",
+        "limit":     1,
+    })
+    assert resp.status == 200
+    body = await resp.json()
+    assert body["count"] <= 1
+    assert len(body["results"]) <= 1

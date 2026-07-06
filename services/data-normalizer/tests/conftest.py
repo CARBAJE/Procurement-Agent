@@ -34,6 +34,7 @@ SQL_DIR = REPO_ROOT / "database" / "sql"
 # Tables to TRUNCATE between tests, ordered child → parent so FK CASCADE
 # trimming does the right thing.
 _TRUNCATE_TABLES = [
+    "agent_memory_vectors",
     "audit_trail_events",
     "erp_sync_records",
     "purchase_orders",
