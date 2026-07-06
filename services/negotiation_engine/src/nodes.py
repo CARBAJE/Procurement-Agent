@@ -557,15 +557,19 @@ def wait_for_async_callback(state: NegotiationState) -> dict:
 def evaluate_response(state: NegotiationState) -> dict:
     """Classify the ``/on_select`` payload and advance the round counter.
 
-    Placeholder: always treats the payload as a counter (the synthetic
-    callback never says "accepted") and increments the round counter so
-    the bounded-loop guard at ``round + 1 ≥ max_rounds`` will eventually
-    terminate the cycle.
+    Reads ``status`` and ``proposed_price`` from the supplier's callback
+    payload. On a COUNTER, updates ``current_target.price`` with the
+    supplier's new price so ``compute_counter_offer`` uses the correct
+    reference next round — without this the buyer's offer never moves.
+    On ACCEPT, stamps ``final_outcome`` so the router short-circuits to
+    ``finalize`` without re-entering ``analyze_target``.
     """
     round_no = int(state.get("negotiation_round") or 0)
     next_round = round_no + 1
     payload = state.get("last_on_select_payload") or {}
-    return {
+    supplier_status = str(payload.get("status") or "counter").lower()
+
+    result: dict = {
         "negotiation_round": next_round,
         "round_history": [
             {
@@ -573,14 +577,34 @@ def evaluate_response(state: NegotiationState) -> dict:
                 "provider_id": (state.get("current_target") or {}).get("provider_id", ""),
                 "sent": state.get("current_counter_offer") or {},
                 "received": payload,
-                "decision": "counter",
+                "decision": supplier_status if supplier_status in ("accept", "counter", "reject") else "counter",
                 "elapsed_ms": 0,
             }
         ],
         "audit_events": [
-            _audit("evaluate_response", "round_evaluated", round_no=next_round),
+            _audit(
+                "evaluate_response",
+                "round_evaluated",
+                round_no=next_round,
+                status=supplier_status,
+            ),
         ],
     }
+
+    if supplier_status == "accepted":
+        result["final_outcome"] = "accepted"
+    elif supplier_status == "counter":
+        # Update the active target's price with the supplier's new counter
+        # so compute_counter_offer calculates the next offer from the
+        # updated reference, not the original list price.
+        proposed_price = payload.get("proposed_price")
+        current_target = dict(state.get("current_target") or {})
+        if proposed_price is not None and float(proposed_price) > 0:
+            current_target["price"] = float(proposed_price)
+            current_target["round_received"] = next_round
+            result["current_target"] = current_target
+
+    return result
 
 
 def human_escalation(state: NegotiationState) -> dict:

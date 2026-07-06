@@ -99,6 +99,55 @@ function RbacPendingCard({ run }: { run: RunResult }) {
   )
 }
 
+// ── Session persistence helper ───────────────────────────────────────────────
+// Persist a confirmed RunResult to the WizardSession store so the order page
+// can render Payment, Contract, Reasoning, and Live Tracking without a DB
+// round-trip. Used by both handleProceed (advisory/hitl) and the confirmed
+// useEffect (autonomous). Always overwrites so stale sessions are replaced.
+function persistConfirmedSession(result: RunResult): void {
+  if (!result.request_id) return
+  const offerings   = result.offerings ?? []
+  const chosenItemId = result.decision?.final_item_id ?? result.recommended_item_id ?? null
+  const chosenOffer  = offerings.find((o) => o.item_id === chosenItemId)
+  if (!offerings.length || !chosenOffer) return
+
+  const commit = {
+    transaction_id:  result.transaction_id,
+    request_id:      result.request_id,
+    order_id:        result.order_id        ?? null,
+    order_state:     result.order_state     ?? null,
+    payment_terms:   result.payment_terms   ?? null,
+    fulfillment_eta: null,
+    bpp_id:          result.bpp_id          ?? "",
+    bpp_uri:         result.bpp_uri         ?? "",
+    contract_id:     result.contract_id     ?? null,
+    reasoning_steps: result.reasoning_steps ?? [],
+    messages:        result.messages        ?? [],
+    status:          result.status          ?? "live",
+  }
+  const negotiation =
+    result.negotiation_settled_price != null && result.negotiation_settled_price > 0
+      ? { settled_price: result.negotiation_settled_price, agreed_delivery_date: null }
+      : null
+
+  saveSession(result.request_id, {
+    intent:      { quantity: chosenOffer.available_quantity ?? 1 } as BecknIntent,
+    comparison:  {
+      transaction_id:      result.transaction_id,
+      request_id:          result.request_id,
+      offerings,
+      recommended_item_id: chosenItemId,
+      scoring:             result.scoring ?? { recommended_item_id: null, criteria: [], ranking: [] },
+      reasoning_steps:     result.reasoning_steps ?? [],
+      messages:            result.messages        ?? [],
+      status:              "live",
+    } as ComparisonResult,
+    chosenItemId,
+    commit,
+    negotiation,
+  })
+}
+
 // ── Main RunView ──────────────────────────────────────────────────────────────
 
 export default function RunView({ runId }: RunViewProps) {
@@ -111,54 +160,11 @@ export default function RunView({ runId }: RunViewProps) {
   const [error,      setError]      = useState("")
 
   // Redirect to the full order page whenever the run reaches the confirmed stage.
-  // For autonomous mode, also write a WizardSession keyed by request_id so the
-  // order page (OrderView path 1) can display negotiated price info without a DB
-  // round-trip.
+  // persistConfirmedSession writes the WizardSession for all modes (autonomous,
+  // advisory, hitl) — overwriting any stale session from a prior attempt.
   useEffect(() => {
     if (run?.stage !== "confirmed" || !run.request_id) return
-
-    // Build a WizardSession only when the confirmed result carries offering data
-    // (autonomous mode). Advisory/HITL sessions are written earlier in the flow.
-    const offerings = run.offerings ?? []
-    const chosenItemId = run.decision?.final_item_id ?? run.recommended_item_id ?? null
-    const chosenOffer = offerings.find((o) => o.item_id === chosenItemId)
-    if (offerings.length > 0 && chosenOffer && !loadSession(run.request_id)) {
-      const commit = {
-        transaction_id:  run.transaction_id,
-        request_id:      run.request_id,
-        order_id:        run.order_id ?? null,
-        order_state:     run.order_state ?? null,
-        payment_terms:   run.payment_terms ?? null,
-        fulfillment_eta: null,
-        bpp_id:          run.bpp_id ?? "",
-        bpp_uri:         run.bpp_uri ?? "",
-        contract_id:     run.contract_id ?? null,
-        reasoning_steps: run.reasoning_steps ?? [],
-        messages:        run.messages ?? [],
-        status:          run.status ?? "live",
-      }
-      const negotiation =
-        run.negotiation_settled_price != null && run.negotiation_settled_price > 0
-          ? { settled_price: run.negotiation_settled_price, agreed_delivery_date: null }
-          : null
-      saveSession(run.request_id, {
-        intent:      { quantity: chosenOffer.available_quantity ?? 1 } as BecknIntent,
-        comparison:  {
-          transaction_id:      run.transaction_id,
-          request_id:          run.request_id,
-          offerings,
-          recommended_item_id: chosenItemId,
-          scoring:             run.scoring ?? { recommended_item_id: null, criteria: [], ranking: [] },
-          reasoning_steps:     run.reasoning_steps ?? [],
-          messages:            run.messages ?? [],
-          status:              "live",
-        } as ComparisonResult,
-        chosenItemId,
-        commit,
-        negotiation,
-      })
-    }
-
+    persistConfirmedSession(run)
     router.push(`/request/${encodeURIComponent(run.request_id)}/order`)
   }, [run, router])
 
@@ -205,6 +211,9 @@ export default function RunView({ runId }: RunViewProps) {
         negotiatedPrice,
       )
       saveRunSession(runId, result)
+      // Advisory / HITL: save the WizardSession synchronously here so the order
+      // page has Payment, Contract, and Reasoning before the useEffect fires.
+      if (result.stage === "confirmed") persistConfirmedSession(result)
       setRun(result)
       setSelectedId(result.recommended_item_id ?? selectedId)
     } catch (err) {

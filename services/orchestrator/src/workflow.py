@@ -99,6 +99,12 @@ _sessions: dict[str, dict] = {}
 _session_times: dict[str, float] = {}
 SESSION_TTL = 1800  # seconds
 
+# ── Order enrichment cache (keyed by request_id, no TTL for demo lifetime) ───
+# Stores payment_terms, contract_id, reasoning_steps so the order-detail
+# endpoint (/order/{request_id}) can overlay them on the DB response.
+# Written by /commit and decide_run when an order is confirmed.
+_order_enrichments: dict[str, dict] = {}
+
 # ── Pending approvals (in-memory, keyed by request_id) ───────────────────────
 # Populated by /commit when order_total > user's approval_threshold.
 # Consumed by /approvals (list) and /approvals/{id}/decide (approve/reject).
@@ -2449,18 +2455,26 @@ async def commit(request: web.Request) -> web.Response:
             except Exception as exc:
                 logger.warning("[erp-sync] enqueue build failed txn=%s err=%s", txn_id, exc)
 
+        if committed_request_id:
+            _order_enrichments[committed_request_id] = {
+                "payment_terms":   payment_terms,
+                "contract_id":     contract_id,
+                "reasoning_steps": reasoning_steps,
+                "messages":        messages,
+            }
         return web.json_response({
-            "transaction_id": txn_id,
-            "order_id":       order_id,
-            "order_state":    order_state,
-            "payment_terms":  payment_terms,
+            "transaction_id":  txn_id,
+            "request_id":      committed_request_id,
+            "order_id":        order_id,
+            "order_state":     order_state,
+            "payment_terms":   payment_terms,
             "fulfillment_eta": None,
-            "bpp_id":         bpp_id,
-            "bpp_uri":        bpp_uri,
-            "contract_id":    contract_id,
+            "bpp_id":          bpp_id,
+            "bpp_uri":         bpp_uri,
+            "contract_id":     contract_id,
             "reasoning_steps": reasoning_steps,
-            "messages":       messages,
-            "status":         "live",
+            "messages":        messages,
+            "status":          "live",
         })
 
     except (web.HTTPBadRequest, web.HTTPNotFound, web.HTTPUnprocessableEntity):
@@ -2484,6 +2498,7 @@ def _mock_commit_response(
         "currency":     chosen.get("price_currency", "INR"),
         "status":       "NOT-PAID",
     }
+    mock_request_id = state.get("request_id", "")
     _session_put(txn_id, {
         **state,
         "order_id":      order_id,
@@ -2500,18 +2515,27 @@ def _mock_commit_response(
         }],
         "contract_id": contract_id,
     })
+    mock_messages = ["[mock] Beckn stack offline — mock order generated"]
+    if mock_request_id:
+        _order_enrichments[mock_request_id] = {
+            "payment_terms":   payment_terms,
+            "contract_id":     contract_id,
+            "reasoning_steps": [],
+            "messages":        mock_messages,
+        }
     return web.json_response({
-        "transaction_id": txn_id,
-        "order_id":       order_id,
-        "order_state":    "CREATED",
-        "payment_terms":  payment_terms,
+        "transaction_id":  txn_id,
+        "request_id":      mock_request_id,
+        "order_id":        order_id,
+        "order_state":     "CREATED",
+        "payment_terms":   payment_terms,
         "fulfillment_eta": None,
-        "bpp_id":         chosen["bpp_id"],
-        "bpp_uri":        chosen["bpp_uri"],
-        "contract_id":    contract_id,
+        "bpp_id":          chosen["bpp_id"],
+        "bpp_uri":         chosen["bpp_uri"],
+        "contract_id":     contract_id,
         "reasoning_steps": [],
-        "messages":       ["[mock] Beckn stack offline — mock order generated"],
-        "status":         "mock",
+        "messages":        mock_messages,
+        "status":          "mock",
     })
 
 
@@ -2693,7 +2717,9 @@ async def order_detail(request: web.Request) -> web.Response:
     """GET /order/{request_id} — proxy to data-normalizer's order read endpoint.
 
     Lets the frontend render an order whose browser session is gone (e.g. opened
-    from the dashboard). Passes through 404 for an unknown request_id.
+    from the dashboard). Overlays payment_terms, contract_id, reasoning_steps, and
+    messages from the in-memory enrichment cache (populated at order-confirm time)
+    when available, so the dashboard view shows the same fidelity as the live session.
     """
     request_id = request.match_info["request_id"]
     if not DATA_NORMALIZER_URL:
@@ -2707,6 +2733,9 @@ async def order_detail(request: web.Request) -> web.Response:
                 if resp.status == 404:
                     return web.json_response({"found": False}, status=404)
                 body = await resp.json()
+                enrichment = _order_enrichments.get(request_id)
+                if enrichment and isinstance(body.get("order"), dict):
+                    body["order"] = {**body["order"], **enrichment}
                 return web.json_response(body, status=resp.status)
     except aiohttp.ClientError as exc:
         logger.warning("Data-normalizer unreachable for order %s: %s", request_id, exc)
@@ -3369,6 +3398,11 @@ async def run_procurement(request: web.Request) -> web.Response:
                 "score_ids_map":      result["score_ids_map"],
                 "erp_policy":         erp_envelope,
                 "decision":           decision.to_dict(),
+                # Stored so decide_run can include them in the confirmed response
+                # (advisory/hitl flow), enabling the order page to display the
+                # full reasoning trace and scoring without a DB round-trip.
+                "reasoning_steps":    result.get("reasoning_steps", []),
+                "scoring_block":      result.get("scoring_block"),
             })
             _run_id_put(run_id, result["transaction_id"])
 
@@ -3818,6 +3852,15 @@ async def decide_run(request: web.Request) -> web.Response:
         "bpp_id":         cr["bpp_id"],
         "bpp_uri":        cr["bpp_uri"],
     })
+    decide_reasoning = state.get("reasoning_steps", []) + cr.get("reasoning_steps", [])
+    decide_messages  = state.get("messages", [])        + cr.get("messages", [])
+    if request_id:
+        _order_enrichments[request_id] = {
+            "payment_terms":   cr["payment_terms"],
+            "contract_id":     contract_id,
+            "reasoning_steps": decide_reasoning,
+            "messages":        decide_messages,
+        }
 
     if ERP_SYNC_ENABLED and cr.get("order_id") and not is_mock:
         try:
@@ -3837,19 +3880,23 @@ async def decide_run(request: web.Request) -> web.Response:
             logger.warning("[decide_run/erp-sync] build failed txn=%s err=%s", txn_id, exc)
 
     return web.json_response({
-        "run_id":          run_id,
-        "transaction_id":  txn_id,
-        "request_id":      request_id,
-        "stage":           "confirmed",
-        "order_id":        cr["order_id"],
-        "order_state":     cr["order_state"],
-        "payment_terms":   cr["payment_terms"],
-        "contract_id":     contract_id,
-        "bpp_id":          cr["bpp_id"],
-        "bpp_uri":         cr["bpp_uri"],
-        "reasoning_steps": cr.get("reasoning_steps", []),
-        "messages":        cr.get("messages", []),
-        "status":          "mock" if is_mock else "live",
+        "run_id":              run_id,
+        "transaction_id":      txn_id,
+        "request_id":          request_id,
+        "stage":               "confirmed",
+        "execution_mode":      state.get("execution_mode", "advisory"),
+        "order_id":            cr["order_id"],
+        "order_state":         cr["order_state"],
+        "payment_terms":       cr["payment_terms"],
+        "contract_id":         contract_id,
+        "bpp_id":              cr["bpp_id"],
+        "bpp_uri":             cr["bpp_uri"],
+        "offerings":           offerings,
+        "recommended_item_id": chosen_item_id,
+        "scoring":             state.get("scoring_block"),
+        "reasoning_steps":     decide_reasoning,
+        "messages":            decide_messages,
+        "status":              "mock" if is_mock else "live",
     })
 
 

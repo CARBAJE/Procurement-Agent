@@ -177,6 +177,11 @@ export interface OrderDetailOrder {
   status: "live" | "mock"
   quantity: number
   offering: Offering
+  // Enriched by the orchestrator when the in-memory order cache is still alive.
+  payment_terms?: PaymentTerms | null
+  contract_id?: string | null
+  reasoning_steps?: ReasoningStep[]
+  messages?: string[]
 }
 
 export interface OrderDetail {

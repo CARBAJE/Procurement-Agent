@@ -107,11 +107,17 @@ def _log_model_compat(model: Phase2Scorer, model_name: str):
     """Handle mlflow 2.x -> 2.10+ API rename: ``artifact_path`` -> ``name``."""
     try:
         return mlflow.pytorch.log_model(
-            model, name="phase2_ranker", registered_model_name=model_name
+            model,
+            name="phase2_ranker",
+            registered_model_name=model_name,
+            serialization_format="pickle",
         )
     except TypeError:
         return mlflow.pytorch.log_model(
-            model, artifact_path="phase2_ranker", registered_model_name=model_name
+            model,
+            artifact_path="phase2_ranker",
+            registered_model_name=model_name,
+            serialization_format="pickle",
         )
 
 

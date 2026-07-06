@@ -181,10 +181,6 @@ async def kickoff(req: NegotiateKickoff, request: Request) -> KickoffResult:
         req.delivery_hours
     )
 
-    # The engine pops ONE candidate per round (analyze_target). To negotiate
-    # the SAME supplier across multiple rounds we seed one identical offer per
-    # demo round — the buyer holds at its guardrail-capped counter while the
-    # qwen3 supplier concedes toward it round over round.
     offer = {
         "provider_id": req.supplier_id,
         "item_id": _slug(req.item),
@@ -197,7 +193,7 @@ async def kickoff(req: NegotiateKickoff, request: Request) -> KickoffResult:
     engine_req = {
         "transaction_id": thread_id,
         "category": req.category,
-        "ranked_offers": [dict(offer) for _ in range(req.max_rounds)],
+        "ranked_offers": [offer],
         "policy": {
             "budget_unit_price": req.target_price,
             "hitl_gap_pct": _ENGINE_HITL_GAP_PCT,

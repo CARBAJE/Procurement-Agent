@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import NegotiationStepper from "@/components/procurement/NegotiationStepper"
 import { commitOrder } from "@/lib/api"
-import { patchSession } from "@/lib/session-store"
+import { patchSession, saveSession } from "@/lib/session-store"
 
 export interface NegotiateViewProps {
   txnId: string
@@ -79,8 +79,17 @@ export default function NegotiateView({
     setError("")
     try {
       const result = await commitOrder(txnId, itemId)
-      patchSession(txnId, { commit: result })
-      router.push(`/request/${encodeURIComponent(txnId)}/order`)
+      const patched = patchSession(txnId, { commit: result })
+      // Use request_id (DB UUID) for the order URL so the Audit Trail link
+      // also resolves correctly (audit events are keyed by request_id, not
+      // by the Beckn transaction_id used as txnId in the negotiate URL).
+      const orderPageId = (result.request_id && result.request_id !== txnId)
+        ? result.request_id
+        : txnId
+      if (patched && orderPageId !== txnId) {
+        saveSession(orderPageId, patched)
+      }
+      router.push(`/request/${encodeURIComponent(orderPageId)}/order`)
     } catch (e) {
       // eslint-disable-next-line no-console
       console.error("commit error", e)

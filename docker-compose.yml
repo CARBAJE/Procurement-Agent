@@ -10,10 +10,9 @@ services:
       - ./IntentParser:/app/IntentParser    # repo module mounted at runtime
       - ./shared:/app/shared                # shared models
     environment:
-      # Claude Code OpenAI proxy (host-side, :8012). Falls back to Ollama if proxy is down.
-      - OLLAMA_URL=http://host.docker.internal:8012/v1
-      - COMPLEX_MODEL=claude-sonnet-4-6
-      - SIMPLE_MODEL=claude-sonnet-4-6
+      - OLLAMA_URL=http://host.docker.internal:11434/v1
+      - COMPLEX_MODEL=qwen3:1.7b
+      - SIMPLE_MODEL=qwen3:1.7b
       - PYTHONPATH=/app
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -501,8 +500,6 @@ services:
       dockerfile: ./services/frontend_demo_gateway/Dockerfile
     container_name: demo-gateway
     restart: unless-stopped
-    networks:
-      - beckn_network
     ports:
       - "8015:8015"
     command:

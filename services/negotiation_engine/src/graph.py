@@ -72,9 +72,13 @@ def _route_from_wait_for_async_callback(state: NegotiationState) -> str:
 
 
 def _route_from_evaluate_response(state: NegotiationState) -> str:
-    """Accept → finalize; bounded counter loop → analyze_target; gap > HITL → escalate."""
+    """Accept → finalize; counter with rounds left → same supplier via
+    compute_counter_offer; rounds exhausted or gap > HITL → escalate;
+    reject → analyze_target (try next candidate)."""
     payload = state.get("last_on_select_payload") or {}
-    if payload.get("status") == "accepted":
+    supplier_status = str(payload.get("status") or "").lower()
+
+    if supplier_status == "accepted" or state.get("final_outcome") == "accepted":
         return "finalize"
 
     round_no = int(state.get("negotiation_round") or 0)
@@ -87,6 +91,14 @@ def _route_from_evaluate_response(state: NegotiationState) -> str:
         return "human_escalation"
     if round_no >= max_rounds:
         return "human_escalation"
+
+    if supplier_status == "counter":
+        # Continue with the SAME supplier — current_target was already updated
+        # with proposed_price in evaluate_response; skip analyze_target so we
+        # don't pop the next candidate off ranked_candidates.
+        return "compute_counter_offer"
+
+    # "rejected" or unknown status → try the next ranked candidate.
     return "analyze_target"
 
 
@@ -171,12 +183,13 @@ def build_graph(checkpointer: Optional[BaseCheckpointSaver] = None):
         },
     )
 
-    # --- evaluate_response → {finalize | analyze_target | human_escalation} ---
+    # --- evaluate_response → {finalize | compute_counter_offer | analyze_target | human_escalation} ---
     builder.add_conditional_edges(
         "evaluate_response",
         _route_from_evaluate_response,
         {
             "finalize": "finalize",
+            "compute_counter_offer": "compute_counter_offer",
             "analyze_target": "analyze_target",
             "human_escalation": "human_escalation",
         },

@@ -73,13 +73,13 @@ export default function OrderView({ txnId }: OrderViewProps) {
             request_id:      d.request_id,
             order_id:        o.order_id,
             order_state:     o.order_state,
-            payment_terms:   null,
+            payment_terms:   o.payment_terms   ?? null,
             fulfillment_eta: o.fulfillment_eta,
             bpp_id:          o.bpp_id,
             bpp_uri:         o.bpp_uri,
-            contract_id:     null,
-            reasoning_steps: [],
-            messages:        [],
+            contract_id:     o.contract_id     ?? null,
+            reasoning_steps: o.reasoning_steps ?? [],
+            messages:        o.messages        ?? [],
             status:          o.status,
           }
           setResolved({ commit, offering: o.offering, intent: d.intent, negotiated: null })
