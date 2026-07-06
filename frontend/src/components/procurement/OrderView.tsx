@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import { ArrowLeft, Hash, AlertCircle } from "lucide-react"
+import Link from "next/link"
+import { ArrowLeft, Hash, AlertCircle, ShieldCheck } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -189,6 +190,12 @@ export default function OrderView({ txnId }: OrderViewProps) {
             <Button variant="ghost" onClick={() => router.push("/request/new")}>
               <ArrowLeft className="mr-2 h-4 w-4" />
               New request
+            </Button>
+            <Button variant="ghost" asChild>
+              <Link href={`/request/${txnId}/audit`}>
+                <ShieldCheck className="mr-2 h-4 w-4" aria-hidden="true" />
+                View Audit Trail
+              </Link>
             </Button>
           </div>
         </div>
