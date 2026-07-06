@@ -194,6 +194,15 @@ class DataNormalizer:
         logger.info("[normalizer] audit %s (%s) → %s", event_type, agent_action, event_id)
         return {"event_id": event_id}
 
+    async def get_audit_events_by_request(self, request_id: str, limit: int = 100) -> list[dict]:
+        return await audit_repo.get_events_by_request(request_id, limit)
+
+    async def get_audit_events_by_po(self, po_id: str, limit: int = 100) -> list[dict]:
+        return await audit_repo.get_events_by_po(po_id, limit)
+
+    async def get_audit_event(self, event_id: str) -> dict | None:
+        return await audit_repo.get_event_by_id(event_id)
+
     # ── /normalize/po_status ──────────────────────────────────────────────────
 
     async def normalize_po_status(self, beckn_confirm_ref: str, state: str) -> dict:

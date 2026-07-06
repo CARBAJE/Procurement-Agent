@@ -229,6 +229,52 @@ async def normalize_audit(request: web.Request) -> web.Response:
     return web.json_response(result, status=201)
 
 
+# ── GET /normalize/audit ─────────────────────────────────────────────────────
+
+async def get_audit_event(request: web.Request) -> web.Response:
+    """GET /normalize/audit/{event_id}
+    Returns a single audit event or 404 when event_id is unknown.
+    """
+    event_id = request.match_info["event_id"]
+    try:
+        _uuid.UUID(event_id)
+    except (ValueError, AttributeError):
+        raise web.HTTPBadRequest(reason="event_id is not a valid UUID")
+    event = await _normalizer.get_audit_event(event_id)
+    if event is None:
+        raise web.HTTPNotFound(reason="Audit event not found")
+    return web.json_response(event)
+
+
+async def list_audit_events(request: web.Request) -> web.Response:
+    """GET /normalize/audit?request_id=X&limit=N  or  ?po_id=X&limit=N
+    Returns {"count": int, "events": [...]} ordered by event_timestamp ASC.
+    At least one of request_id or po_id is required; limit defaults to 100 (max 500).
+    """
+    params = request.rel_url.query
+    try:
+        limit = min(int(params.get("limit", 100)), 500)
+    except ValueError:
+        raise web.HTTPBadRequest(reason="limit must be an integer")
+
+    if "request_id" in params:
+        try:
+            _uuid.UUID(params["request_id"])
+        except ValueError:
+            raise web.HTTPBadRequest(reason="request_id is not a valid UUID")
+        events = await _normalizer.get_audit_events_by_request(params["request_id"], limit)
+    elif "po_id" in params:
+        try:
+            _uuid.UUID(params["po_id"])
+        except ValueError:
+            raise web.HTTPBadRequest(reason="po_id is not a valid UUID")
+        events = await _normalizer.get_audit_events_by_po(params["po_id"], limit)
+    else:
+        raise web.HTTPBadRequest(reason="request_id or po_id query parameter is required")
+
+    return web.json_response({"count": len(events), "events": events})
+
+
 # ── PATCH /normalize/po_status ────────────────────────────────────────────────
 
 async def normalize_po_status(request: web.Request) -> web.Response:
@@ -352,7 +398,9 @@ def create_app() -> web.Application:
     app.router.add_post("/normalize/scoring",   normalize_scoring)
     app.router.add_post("/normalize/order",     normalize_order)
     app.router.add_get("/order/{request_id}",   get_order)
-    app.router.add_post("/normalize/audit",     normalize_audit)
+    app.router.add_post("/normalize/audit",               normalize_audit)
+    app.router.add_get("/normalize/audit/{event_id}",     get_audit_event)
+    app.router.add_get("/normalize/audit",                list_audit_events)
     app.router.add_route("PATCH", "/normalize/status",    normalize_status)
     app.router.add_route("PATCH", "/normalize/po_status", normalize_po_status)
     app.router.add_post("/normalize/memory/write",        normalize_memory_write)

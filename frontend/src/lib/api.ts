@@ -2,6 +2,7 @@ import axios from "axios"
 import type {
   AnalyticsData,
   AnalyticsPeriod,
+  AuditTrailResponse,
   BecknIntent,
   BenchmarkReport,
   CommitResult,
@@ -99,6 +100,18 @@ export async function getOrderStatus(
 export async function getOrderDetail(id: string): Promise<OrderDetail> {
   const { data } = await axios.get<OrderDetail>(
     `/api/procurement/order/${encodeURIComponent(id)}`,
+  )
+  return data
+}
+
+// ── /audit — audit trail for a request ──────────────────────────────────────
+
+export async function getAuditEvents(
+  requestId: string,
+  limit = 100,
+): Promise<AuditTrailResponse> {
+  const { data } = await axios.get<AuditTrailResponse>(
+    `/api/audit?request_id=${encodeURIComponent(requestId)}&limit=${limit}`,
   )
   return data
 }

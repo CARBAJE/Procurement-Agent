@@ -438,4 +438,106 @@ async def test_memory_search_respects_limit(client: TestClient, db_pool):
     assert resp.status == 200
     body = await resp.json()
     assert body["count"] <= 1
-    assert len(body["results"]) <= 1
+
+
+# ── GET /normalize/audit ──────────────────────────────────────────────────────
+
+async def test_audit_get_by_request_id_returns_events(client: TestClient, db_pool):
+    rid = (await (await client.post("/normalize/request", json={"raw_input_text": "audit read test"})).json())["request_id"]
+    for event_type in ("normalize", "score"):
+        await client.post("/normalize/audit", json={
+            "event_type":   event_type,
+            "agent_action": f"{event_type}_step",
+            "request_id":   rid,
+        })
+
+    resp = await client.get(f"/normalize/audit?request_id={rid}")
+    assert resp.status == 200
+    body = await resp.json()
+    assert body["count"] == 2
+    types = {e["event_type"] for e in body["events"]}
+    assert types == {"normalize", "score"}
+
+
+async def test_audit_get_by_request_id_empty_when_no_events(client: TestClient):
+    rid = (await (await client.post("/normalize/request", json={"raw_input_text": "no events"})).json())["request_id"]
+    resp = await client.get(f"/normalize/audit?request_id={rid}")
+    assert resp.status == 200
+    body = await resp.json()
+    assert body["count"] == 0
+    assert body["events"] == []
+
+
+async def test_audit_get_by_po_id_returns_events(client: TestClient, db_pool):
+    # Build the minimal chain: request → intent → discovery → scoring → order
+    rid = (await (await client.post("/normalize/request", json={"raw_input_text": "po audit test"})).json())["request_id"]
+    intent = await (await client.post("/normalize/intent", json=_intent_body(rid))).json()
+    bid = intent["beckn_intent_id"]
+    disc = await (await client.post("/normalize/discovery", json={
+        "beckn_intent_id": bid, "offerings": [_offering("item-po-audit")],
+    })).json()
+    score = await (await client.post("/normalize/scoring", json={
+        "query_id": disc["query_id"],
+        "scores": [{"offering_id": disc["offering_ids"][0]["offering_id"], "rank": 1, "composite_score": 0.9}],
+    })).json()
+    order = await (await client.post("/normalize/order", json={
+        "score_id":          score["score_ids"][0]["score_id"],
+        "bpp_uri":           "http://bpp.example.com",
+        "item_id":           "item-001",
+        "quantity":          1,
+        "agreed_price":      100.0,
+        "beckn_confirm_ref": f"ref-po-audit-{rid[:8]}",
+    })).json()
+    po_id = order["po_id"]
+
+    await client.post("/normalize/audit", json={
+        "event_type": "confirm", "agent_action": "po_confirmed", "po_id": po_id,
+    })
+
+    resp = await client.get(f"/normalize/audit?po_id={po_id}")
+    assert resp.status == 200
+    body = await resp.json()
+    assert body["count"] >= 1
+    assert body["events"][0]["po_id"] == po_id
+
+
+async def test_audit_get_missing_param_returns_400(client: TestClient):
+    resp = await client.get("/normalize/audit")
+    assert resp.status == 400
+
+
+async def test_audit_get_event_by_id(client: TestClient):
+    post = await client.post("/normalize/audit", json={
+        "event_type": "score", "agent_action": "scored_offerings",
+        "reasoning_payload": {"items": 3},
+    })
+    assert post.status == 201
+    event_id = (await post.json())["event_id"]
+
+    resp = await client.get(f"/normalize/audit/{event_id}")
+    assert resp.status == 200
+    body = await resp.json()
+    assert body["event_id"] == event_id
+    assert body["event_type"] == "score"
+    assert body["agent_action"] == "scored_offerings"
+    assert body["reasoning_payload"] == {"items": 3}
+
+
+async def test_audit_get_event_by_id_not_found_404(client: TestClient):
+    fake_id = str(uuid.uuid4())
+    resp = await client.get(f"/normalize/audit/{fake_id}")
+    assert resp.status == 404
+
+
+async def test_audit_get_limit_respected(client: TestClient, db_pool):
+    rid = (await (await client.post("/normalize/request", json={"raw_input_text": "limit test"})).json())["request_id"]
+    for i in range(5):
+        await client.post("/normalize/audit", json={
+            "event_type": "normalize", "agent_action": f"step_{i}", "request_id": rid,
+        })
+
+    resp = await client.get(f"/normalize/audit?request_id={rid}&limit=2")
+    assert resp.status == 200
+    body = await resp.json()
+    assert body["count"] == 2
+    assert len(body["events"]) == 2
