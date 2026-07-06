@@ -22,14 +22,16 @@ const ROLE_META: Record<string, {
 // Fallback: parse legacy "[node] text" strings when reasoning_steps is empty.
 // Kept for resilience — backend always emits both, but safer to handle nulls.
 const NODE_ROLE: Record<string, "reason" | "act" | "observe"> = {
-  parse_intent: "reason",
-  discover: "act",
-  rank_and_select: "reason",
-  send_select: "act",
-  send_init: "act",
-  send_confirm: "act",
-  send_status: "act",
-  present_results: "observe",
+  parse_intent:      "reason",
+  discover:          "act",
+  rank_and_select:   "reason",
+  memory_adjustment: "reason",
+  send_select:       "act",
+  send_init:         "act",
+  send_confirm:      "act",
+  send_status:       "act",
+  present_results:   "observe",
+  memory_context:    "observe",
 }
 
 function parseLegacyMessage(msg: string): ReasoningStep | null {
