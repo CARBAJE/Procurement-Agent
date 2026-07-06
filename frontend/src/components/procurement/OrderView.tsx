@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
-import { ArrowLeft, Hash, AlertCircle, ShieldCheck } from "lucide-react"
+import { ArrowLeft, Hash, AlertCircle, ShieldCheck, Plus } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -147,13 +147,12 @@ export default function OrderView({ txnId }: OrderViewProps) {
       {/* ── Header ─────────────────────────────────────────────────────────── */}
       <div className="flex items-center justify-between flex-wrap gap-2">
         <div>
-          <p className="text-xs text-muted-foreground mb-1">
-            <span className="text-foreground">Request</span>
-            {" → "}
-            <span className="text-foreground">Compare offers</span>
-            {" → "}
-            <span className="text-foreground font-medium">Order</span>
-          </p>
+          <Button variant="ghost" size="sm" asChild className="-ml-2 mb-1">
+            <Link href="/dashboard">
+              <ArrowLeft className="h-4 w-4 mr-1" aria-hidden="true" />
+              Back to Dashboard
+            </Link>
+          </Button>
           <h1 className="text-4xl font-extrabold tracking-tight">Order Confirmed</h1>
           <div className="flex items-center gap-1.5 mt-1">
             <Hash className="h-3 w-3 text-muted-foreground" />
@@ -184,14 +183,14 @@ export default function OrderView({ txnId }: OrderViewProps) {
         <div className="space-y-6">
           <OrderLifecycleTimeline state={state} />
           <div className="flex flex-col gap-2">
-            <Button variant="outline" onClick={() => router.push("/dashboard")}>
-              Back to Dashboard
-            </Button>
-            <Button variant="ghost" onClick={() => router.push("/request/new")}>
-              <ArrowLeft className="mr-2 h-4 w-4" />
+            <Button
+              className="bg-blue-600 hover:bg-blue-700 text-white border-0"
+              onClick={() => router.push("/request/new")}
+            >
+              <Plus className="mr-2 h-4 w-4" aria-hidden="true" />
               New request
             </Button>
-            <Button variant="ghost" asChild>
+            <Button className="bg-green-600 hover:bg-green-700 text-white border-0" asChild>
               <Link href={`/request/${txnId}/audit`}>
                 <ShieldCheck className="mr-2 h-4 w-4" aria-hidden="true" />
                 View Audit Trail
