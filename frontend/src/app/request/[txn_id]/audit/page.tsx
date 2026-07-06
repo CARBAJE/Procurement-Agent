@@ -5,7 +5,7 @@ import Navbar from "@/components/layout/Navbar"
 import AuditTrailView from "@/components/procurement/AuditTrailView"
 
 interface PageProps {
-  params: { id: string }
+  params: { txn_id: string }
 }
 
 export default async function AuditTrailPage({ params }: PageProps) {
@@ -16,7 +16,7 @@ export default async function AuditTrailPage({ params }: PageProps) {
     <>
       <Navbar />
       <main id="main-content" className="container py-8 max-w-4xl">
-        <AuditTrailView requestId={params.id} />
+        <AuditTrailView requestId={params.txn_id} />
       </main>
     </>
   )
