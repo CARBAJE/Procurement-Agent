@@ -3,6 +3,7 @@ import type {
   AdminUser,
   AnalyticsData,
   AnalyticsPeriod,
+  AuditTrailResponse,
   BecknIntent,
   BenchmarkReport,
   CommitResult,
@@ -184,6 +185,18 @@ export async function updateAdminUser(
   const { data } = await axios.patch<AdminUser>(
     `/api/admin/users/${encodeURIComponent(userId)}`,
     patch,
+  )
+  return data
+}
+
+// ── /audit — audit trail for a request ──────────────────────────────────────
+
+export async function getAuditEvents(
+  requestId: string,
+  limit = 100,
+): Promise<AuditTrailResponse> {
+  const { data } = await axios.get<AuditTrailResponse>(
+    `/api/audit?request_id=${encodeURIComponent(requestId)}&limit=${limit}`,
   )
   return data
 }

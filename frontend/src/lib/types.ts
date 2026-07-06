@@ -374,6 +374,31 @@ export interface RunResult {
   negotiation_settled_price?: number | null
 }
 
+// ── Audit Trail ─────────────────────────────────────────────────────────────
+
+export type AuditEventType =
+  | "discover" | "normalize" | "score" | "negotiate"
+  | "approve"  | "confirm"  | "override" | "erp_sync" | "notification"
+
+export interface AuditEvent {
+  event_id:          string
+  request_id:        string | null
+  po_id:             string | null
+  actor_id:          string | null
+  event_type:        AuditEventType
+  agent_action:      string
+  reasoning_payload: Record<string, unknown>
+  kafka_offset:      number
+  splunk_indexed:    boolean
+  event_timestamp:   string
+  retention_until:   string
+}
+
+export interface AuditTrailResponse {
+  count:  number
+  events: AuditEvent[]
+}
+
 // ── Auth ────────────────────────────────────────────────────────────────────
 
 export type UserRole = "requester" | "approver" | "admin"
