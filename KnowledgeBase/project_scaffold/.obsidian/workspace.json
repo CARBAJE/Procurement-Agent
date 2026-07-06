@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "components/agent_memory_learning.md",
+                "file": "tests/phase3/phase3_agent_memory_learning.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "agent_memory_learning"
+              "title": "phase3_agent_memory_learning"
             }
           },
           {
@@ -215,20 +215,19 @@
   "active": "d0ab1d9047f72bb6",
   "lastOpenFiles": [
     "tests/phase3/phase3_audit_trail_system.md",
-    "tests/phase3/phase3_agent_memory_learning.md",
-    "tests/phase3",
-    "tests/phase2/phase2_real_time_tracking.md",
-    "tests/phase1/phase1_bap_monolith.md",
-    "tests/phase1",
-    "tests/phase1_bap_monolith.md",
     "components/audit_trail_system.md",
     "components/agent_memory_learning.md",
     "milestones/phase3_advanced_intelligence_enterprise_features.md",
+    "tests/phase3/phase3_agent_memory_learning.md",
     "milestones/phase4_hardening_testing_production.md",
     "components/real_time_tracking.md",
+    "tests/phase3",
     "milestones/phase2_core_intelligence_transaction_flow.md",
+    "tests/phase2/phase2_real_time_tracking.md",
     "tests/phase2/phase2_microservices.md",
     "tests/phase2/phase2_data_normalizer.md",
+    "tests/phase1/phase1_bap_monolith.md",
+    "tests/phase1",
     "components/data_normalizer.md",
     "components/catalog_normalizer.md",
     "infrastructure/postgresql_local_setup.md",
@@ -243,6 +242,8 @@
     "architecture/negotiation_engine/01_langgraph_state_machine.md",
     "architecture/discovery_engine/_discovery_engine_index.md",
     "architecture/discovery_engine/03_catalog_deduplication.md",
+    "architecture/discovery_engine/02_graceful_degradation.md",
+    "architecture/discovery_engine/01_multi_network_fan_out.md",
     "architecture/negotiation_engine",
     "architecture/discovery_engine",
     "architecture",
