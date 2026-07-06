@@ -24,7 +24,7 @@ Complete PostgreSQL schema setup, automation, and integration tests for the **Ag
 | Dependency | Minimum version | Purpose |
 |---|---|---|
 | PostgreSQL | 16 | Database engine |
-| pgvector extension | 0.7.0 | `vector(3072)` type for `agent_memory_vectors` |
+| pgvector extension | 0.7.0 | `vector(384)` type for `agent_memory_vectors` (all-MiniLM-L6-v2) |
 | Python | 3.10 | Setup and test scripts |
 | psycopg2-binary | 2.9 | PostgreSQL adapter for Python |
 | pytest | 7.0 | Test runner |
@@ -95,7 +95,14 @@ database/
     ├── 14_audit_trail_events.sql     ← Entity 14: AuditTrailEvent
     ├── 15_agent_memory_vectors.sql   ← Entity 15: AgentMemoryVector (pgvector mirror of Qdrant)
     ├── 16_model_governance_records.sql ← Entity 16: ModelGovernanceRecord
-    └── 17_indexes.sql                ← 22 operational and audit indexes
+    ├── 17_indexes.sql                ← 22 operational and audit indexes
+    ├── 18_bpp_catalog_semantic_cache.sql ← HNSW semantic cache for BPP validation (vector(384))
+    ├── 19_erp_enum_extensions.sql    ← Adds `in_progress` to erp_sync_status; `mock` to erp_system_type
+    ├── 19b_erp_sync_records_outbox.sql ← 8 outbox columns, makes po_id nullable, adds 2 indexes
+    ├── 20_negotiation_schema.sql     ← negotiation_session, negotiation_round, negotiation_policy_decision
+    ├── 21_order_detail_fidelity.sql  ← item_name column on seller_offerings and purchase_orders
+    ├── 22_agent_memory_vector_dim.sql ← Changes embedding_vector from vector(3072) → vector(384); adds all-MiniLM-L6-v2 enum value
+    └── 22_pending_approval_columns.sql ← pending_chosen_item_id, pending_transaction_id on procurement_requests
 ```
 
 The numeric prefix determines execution order. The setup script sorts files lexicographically, so `00_` always runs before `01_`, and so on.
@@ -197,14 +204,14 @@ Step 1 — Create database
 Connecting to database...
   Connected to 'procurement_agent'.
 
-Step 3 — Executing 18 SQL scripts
+Step 3 — Executing SQL scripts
   [OK]   00_extensions_and_types.sql
   [OK]   01_users.sql
   ...
   [OK]   17_indexes.sql
 
 ═══════════════════════════════════════════════════════
-  Setup complete — 18 scripts executed successfully.
+  Setup complete — scripts executed successfully.
 ═══════════════════════════════════════════════════════
 ```
 
@@ -233,6 +240,13 @@ Scripts must be executed in numeric order because of foreign key dependencies. T
 15  agent_memory_vectors           → procurement_requests (nullable)
 16  model_governance_records       (no FK dependencies)
 17  indexes                        (depends on all tables existing)
+18  bpp_catalog_semantic_cache     (no FK dependencies — standalone vector store)
+19  erp_enum_extensions            (ALTER TYPE only — no new tables)
+19b erp_sync_records_outbox        → erp_sync_records (columns + po_id nullable change)
+20  negotiation_schema             → scored_offers, procurement_requests
+21  order_detail_fidelity          → seller_offerings, purchase_orders (ALTER TABLE ADD COLUMN)
+22a agent_memory_vector_dim        (ALTER COLUMN vector dimension + ALTER TYPE ADD VALUE)
+22b pending_approval_columns       → procurement_requests (ALTER TABLE ADD COLUMN)
 ```
 
 Running the scripts manually in psql:
@@ -263,7 +277,7 @@ done
 | 12 | `purchase_orders` | PostgreSQL | 1:1 with `approval_decisions`; Beckn `/confirm` result |
 | 13 | `erp_sync_records` | PostgreSQL | Many per `purchase_orders`; SAP/Oracle sync operations |
 | 14 | `audit_trail_events` | PostgreSQL + Splunk | Every agent decision; 7-year retention (SOX 404 / GDPR) |
-| 15 | `agent_memory_vectors` | **Qdrant** (mirror here) | `vector(3072)` embeddings via pgvector; feeds RAG |
+| 15 | `agent_memory_vectors` | PostgreSQL (pgvector) | `vector(384)` embeddings (all-MiniLM-L6-v2); semantic similarity search for agent memory |
 | 16 | `model_governance_records` | PostgreSQL | Weekly AI model evaluation registry |
 
 ---
@@ -278,17 +292,18 @@ Two entities have a **primary store outside PostgreSQL**. Their PostgreSQL table
 - The PostgreSQL `catalog_cache` table is written by the Discovery Service alongside Redis to provide an audit record and allow JOIN queries.
 - TTL enforcement is Redis-only; the `expires_at` column is informational.
 
-### `agent_memory_vectors` — primary store: Qdrant
+### `agent_memory_vectors` — primary store: PostgreSQL (pgvector)
 
-- Qdrant stores vectors with an HNSW index; target retrieval latency < 100 ms.
-- The PostgreSQL `agent_memory_vectors` table holds the same records using the `vector(3072)` type from the **pgvector** extension. It is kept in sync by the Qdrant Indexer Kafka consumer.
-- The `embedding_vector` column enables SQL-side vector similarity queries and offline analytics without hitting Qdrant.
+- Uses `vector(384)` — the output dimension of `all-MiniLM-L6-v2`, the model deployed locally.
+- HNSW index on `embedding_vector` with `ef_search=100` for fast ANN retrieval.
+- Written and queried by `data-normalizer` via `/normalize/memory/write` and `/normalize/memory/search`.
+- Migration `22_agent_memory_vector_dim.sql` corrected the dimension from 3072 (text-embedding-3-large spec) to 384.
 
 ---
 
 ## 8. Index rationale
 
-All 22 indexes are defined in `17_indexes.sql`. The table below explains why each index exists and which workload it supports.
+All 22 indexes are defined in `17_indexes.sql` (migrations 18+ add further indexes inline). The table below explains why each index exists and which workload it supports.
 
 ### `procurement_requests`
 
@@ -378,7 +393,7 @@ All 22 indexes are defined in `17_indexes.sql`. The table below explains why eac
 | `TestExtensions` | `uuid-ossp`, `pgcrypto`, `vector` are installed |
 | `TestEnumTypes` | All 20 custom ENUM types exist in `public` schema |
 | `TestTables` | All 16 tables exist in `public` schema |
-| `TestIndexes` | All 21 named indexes exist |
+| `TestIndexes` | All 22 named indexes exist |
 | `TestWorkflowRows` | Each of the 16 entities has the correct field values after insert |
 | `TestEndToEndQuery` | A single 12-table JOIN returns the full procurement chain with correct values |
 | `TestConstraints` | CHECK, UNIQUE, and FK violations are rejected with the correct PostgreSQL error class |

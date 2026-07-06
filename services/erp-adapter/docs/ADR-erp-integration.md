@@ -70,9 +70,10 @@ delivery; ERP slip should not stall persistence.
 
 ## 4. Vendor-neutral Protocol + per-vendor mappers
 
-**Decision.** `ERPAdapter` is a Pydantic-free `typing.Protocol` with five
-methods. Concrete classes (`MockERPAdapter`, `SAPS4HanaAdapter`,
-`OracleERPCloudAdapter`) implement it. A `MultiVendorAdapter` wraps multiple
+**Decision.** `ERPAdapter` is a Pydantic-free `typing.Protocol` with six
+methods: `check_budget`, `evaluate_policy`, `push_po`, `cancel_po`,
+`normalize_inbound_status`, `healthcheck`. Concrete classes
+(`MockERPAdapter`, `SAPS4HanaAdapter`, `OracleERPCloudAdapter`) implement it. A `MultiVendorAdapter` wraps multiple
 when `ERP_VENDORS=sap,oracle`. Each concrete adapter has a pure mapping
 function (`map_to_sap_purchase_order`, etc.) that is contract-tested via
 JSON snapshots.

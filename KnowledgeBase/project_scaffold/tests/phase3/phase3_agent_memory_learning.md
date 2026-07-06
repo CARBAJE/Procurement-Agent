@@ -1,102 +1,102 @@
-# Phase 3 — Agent Memory & Learning: Tests y Guía de Verificación
+# Phase 3 — Agent Memory & Learning: Test & Verification Guide
 
-> Componente: [[agent_memory_learning]]
-> Rama: `feature/agent-memory-learning`
+> Component: [[agent_memory_learning]]
+> Branch: `feature/agent-memory-learning`
 > Spec: `components/agent_memory_learning.md`
 
 ---
 
-## Qué está implementado
+## What is implemented
 
-### Arquitectura desplegada
+### Deployed architecture
 
 ```
-Pedido confirmado (commit)
+Confirmed order (commit)
         ↓
 orchestrator: asyncio.create_task(_persist_memory(...))   ← fire-and-forget
         ↓
 POST /normalize/memory/write   (data-normalizer :8006)
         ↓
-fastembed BAAI/bge-small-en-v1.5 → vector(384) ONNX, sin PyTorch
+fastembed BAAI/bge-small-en-v1.5 → vector(384)  ONNX, no PyTorch required
         ↓
-INSERT INTO agent_memory_vectors (pgvector HNSW cosine)
+INSERT INTO agent_memory_vectors  (pgvector HNSW cosine)
 
 ─────────────────────────────────────────────────────────
 
-Nueva solicitud (compare)
+New request (compare)
         ↓
-orchestrator: _fetch_memory_context(item_text, limit=3)   ← timeout 5s
+orchestrator: _fetch_memory_context(item_text, limit=3)   ← 5 s timeout
         ↓
 POST /normalize/memory/search   (data-normalizer :8006)
         ↓
-ANN cosine search (HNSW, sim ≥ 0.75) → top-3 transacciones similares
+ANN cosine search (HNSW, sim ≥ 0.75) → top-3 similar past transactions
         ↓
 reasoning_steps += { node: "memory_context", role: "observe", ... }
         ↓
-Frontend: nodo visible en el panel de razonamiento del agente
+Frontend: node visible in the agent reasoning panel
 ```
 
-### Archivos clave
+### Key files
 
-| Archivo | Rol |
+| File | Role |
 |---|---|
-| `database/sql/22_agent_memory_vector_dim.sql` | Migración: `vector(384)` + índice HNSW cosine |
-| `DataNormalizer/repositories/memory_repo.py` | Embedding con fastembed + write/search en pgvector |
-| `DataNormalizer/normalizer.py` | Métodos `write_memory()` y `search_memory()` |
-| `services/data-normalizer/src/handler.py` | Endpoints `POST /normalize/memory/write` y `POST /normalize/memory/search` |
+| `database/sql/22_agent_memory_vector_dim.sql` | Migration: `vector(384)` + HNSW cosine index |
+| `DataNormalizer/repositories/memory_repo.py` | fastembed embedding + pgvector write/search |
+| `DataNormalizer/normalizer.py` | `write_memory()` and `search_memory()` methods |
+| `services/data-normalizer/src/handler.py` | `POST /normalize/memory/write` and `POST /normalize/memory/search` |
 | `services/orchestrator/src/workflow.py` | `_persist_memory()` (write) + `_fetch_memory_context()` (read) |
 
-### Limitaciones actuales vs. spec
+### Implementation vs. spec
 
-| Aspecto | Spec | Implementado |
+| Aspect | Spec | Implemented |
 |---|---|---|
-| Vector store | Qdrant (HNSW) + pgvector mirror | Solo pgvector (suficiente para < 100K registros) |
-| Modelo de embedding | text-embedding-3-large (3072 dims) | BAAI/bge-small-en-v1.5 (384 dims, ONNX, local) |
-| ETL nightly | PostgreSQL → Qdrant batch sync | No aplica (pgvector es el store único) |
-| Model governance | Pipeline semanal con LangSmith | Schema creado, pipeline pendiente |
-| Datos de entrenamiento | ERP exports, user logs, supplier data | Solo transacciones confirmadas en el flujo Beckn |
+| Vector store | Qdrant (HNSW) + pgvector mirror | pgvector only (sufficient for < 100K records) |
+| Embedding model | text-embedding-3-large (3072 dims) | BAAI/bge-small-en-v1.5 (384 dims, ONNX, local) |
+| Nightly ETL | PostgreSQL → Qdrant batch sync | Not applicable — pgvector is the sole store |
+| Model governance | Weekly pipeline with LangSmith | Schema created; pipeline deferred to Phase 4 |
+| Training data | ERP exports, user logs, supplier data | Confirmed Beckn transactions only |
 
 ---
 
-## Prerrequisitos para testear
+## Prerequisites
 
 ```bash
-# 1. Asegúrate de que todos los servicios corren
+# 1. Ensure the full stack is running
 docker compose up -d
-docker compose ps   # data-normalizer y orchestrator deben estar Up
+docker compose ps   # data-normalizer and orchestrator must show Up
 
-# 2. Verifica que la migración 22 está aplicada
+# 2. Verify migration 22 is applied
 psql -U postgres -d procurement_agent -c "\d agent_memory_vectors"
-# Debes ver: embedding_vector | vector(384)
-# e índice: idx_agent_memory_hnsw | hnsw (embedding_vector vector_cosine_ops)
+# Expected: embedding_vector | vector(384)
+# Expected index: idx_agent_memory_hnsw | hnsw (embedding_vector vector_cosine_ops)
 
-# 3. Verifica que los endpoints existen
+# 3. Verify the service responds
 curl -s http://localhost:8006/health
 # → {"status": "ok", "service": "data-normalizer"}
 ```
 
 ---
 
-## Test 1 — Write Path: confirmar que la memoria se escribe tras un pedido
+## Test 1 — Write Path: confirm memory is written after an order
 
-### Paso 1 — Verifica el conteo inicial
+### Step 1 — Check initial row count
 
 ```bash
 psql -U postgres -d procurement_agent -c \
   "SELECT COUNT(*) FROM agent_memory_vectors;"
-# → 0  (o el número de pedidos previos confirmados)
+# → 0  (or the count of previously confirmed orders)
 ```
 
-### Paso 2 — Realiza un pedido completo en el frontend
+### Step 2 — Complete a full order in the frontend
 
-1. Abre el frontend: `http://localhost:3000`
-2. Login con tus credenciales Keycloak
-3. Escribe una solicitud en el chat, por ejemplo: **"500 resmas papel A4 Bangalore 3 días"**
-4. Espera a que aparezcan los proveedores en el panel de comparación
-5. Selecciona un proveedor y haz clic en **Commit / Confirm Order**
-6. Espera a que el estado avance a `confirmed`
+1. Open the frontend: `http://localhost:3000`
+2. Log in with Keycloak credentials
+3. Enter a procurement request, e.g.: **"500 reams A4 paper Bangalore 3 days"**
+4. Wait for suppliers to appear in the comparison panel
+5. Select a supplier and click **Commit / Confirm Order**
+6. Wait for the status to advance to `confirmed`
 
-### Paso 3 — Verifica que la memoria se escribió
+### Step 3 — Verify the memory record was written
 
 ```bash
 psql -U postgres -d procurement_agent -c \
@@ -105,33 +105,33 @@ psql -U postgres -d procurement_agent -c \
    ORDER BY indexed_at DESC LIMIT 5;"
 ```
 
-**Resultado esperado:**
+**Expected result:**
 
 | text_summary | provider_name | indexed_at |
 |---|---|---|
-| `papel A4 ordered from OfficeZone India at 480.00 INR delivery in 72h` | `OfficeZone India` | `2026-07-03 ...` |
+| `A4 paper ordered from OfficeZone India at 480.00 INR delivery in 72h` | `OfficeZone India` | `2026-07-03 ...` |
 
-También en los logs del orchestrator:
+Also in the orchestrator logs:
 
 ```bash
 docker compose logs orchestrator | grep memory
-# → INFO:__main__:[memory] stored transaction for papel A4
+# → INFO:__main__:[memory] stored transaction for A4 paper
 ```
 
 ---
 
-## Test 2 — Read Path: verificar el nodo `memory_context` en el frontend
+## Test 2 — Read Path: verify the `memory_context` node in the frontend
 
-> Requiere haber completado Test 1 primero (al menos 1 pedido en memoria).
+> Requires Test 1 to have been completed first (at least 1 order in memory).
 
-### Paso 1 — Realiza una segunda solicitud del mismo tipo de ítem
+### Step 1 — Submit a second request for the same item type
 
-1. En el frontend, inicia una **nueva solicitud** con un ítem similar al del pedido anterior: **"300 resmas papel A4 Mumbai"**
-2. Espera a que el agente procese y aparezcan los proveedores
+1. Start a **new request** in the frontend for an item similar to the previous order: **"300 reams A4 paper Mumbai"**
+2. Wait for the agent to process and display suppliers
 
-### Paso 2 — Busca el nodo `memory_context` en el panel de razonamiento
+### Step 2 — Find the `memory_context` node in the reasoning panel
 
-En la interfaz, el panel de **Agent Reasoning** debe mostrar un nuevo nodo:
+The **Agent Reasoning** panel should show a new node:
 
 ```
 📋 memory_context  [observe]
@@ -139,27 +139,26 @@ Found 1 similar past order(s):
   OfficeZone India ₹480.0 INR (72h)
 ```
 
-### Paso 3 — Verifica también via API directa
+### Step 3 — Verify via direct API call
 
 ```bash
-# Busca manualmente con el texto del ítem:
 curl -s -X POST http://localhost:8006/normalize/memory/search \
   -H "Content-Type: application/json" \
-  -d '{"item_text": "papel A4 resmas", "limit": 3}' | python3 -m json.tool
+  -d '{"item_text": "A4 paper reams", "limit": 3}' | python3 -m json.tool
 ```
 
-**Resultado esperado:**
+**Expected result:**
 
 ```json
 {
   "results": [
     {
-      "item_text": "papel A4",
+      "item_text": "A4 paper",
       "provider_name": "OfficeZone India",
       "price": 480.0,
       "currency": "INR",
       "delivery_hours": 72,
-      "text_summary": "papel A4 ordered from OfficeZone India at 480.00 INR delivery in 72h",
+      "text_summary": "A4 paper ordered from OfficeZone India at 480.00 INR delivery in 72h",
       "similarity": 0.87
     }
   ],
@@ -167,27 +166,26 @@ curl -s -X POST http://localhost:8006/normalize/memory/search \
 }
 ```
 
-Si `similarity < 0.75`, el resultado es filtrado y no aparece en el panel — esto es correcto.
+If `similarity < 0.75`, the result is filtered and will not appear in the reasoning panel — this is correct behavior.
 
 ---
 
-## Test 3 — Aislamiento y umbral de similitud
+## Test 3 — Isolation and similarity threshold
 
-Verifica que la memoria **no** contamina solicitudes de ítems completamente distintos.
+Verify that memory does **not** contaminate requests for completely unrelated items.
 
 ```bash
-# Solicitar algo sin relación al papel:
 curl -s -X POST http://localhost:8006/normalize/memory/search \
   -H "Content-Type: application/json" \
-  -d '{"item_text": "laptops Dell 16GB RAM", "limit": 3}'
+  -d '{"item_text": "Dell laptops 16GB RAM", "limit": 3}'
 # → {"results": [], "count": 0}
 ```
 
 ---
 
-## Test 4 — Verificación de la BD post múltiples pedidos
+## Test 4 — Database verification after multiple orders
 
-Después de 3+ pedidos de distintos ítems:
+After 3+ orders of different items:
 
 ```bash
 psql -U postgres -d procurement_agent -c "
@@ -196,41 +194,42 @@ SELECT
   metadata->>'item_text'     AS item,
   metadata->>'provider_name' AS provider,
   (metadata->>'price')::numeric AS price,
-  indexed_at::date            AS fecha
+  indexed_at::date            AS date
 FROM agent_memory_vectors
 ORDER BY indexed_at DESC;"
 ```
 
-Todos deben ser `entity_type = 'transaction'`.
+All rows must have `entity_type = 'transaction'`.
 
 ---
 
-## Solución de problemas
+## Troubleshooting
 
-### El nodo `memory_context` no aparece en el frontend
+### `memory_context` node does not appear in the frontend
 
-1. Revisa logs del orchestrator:
+1. Check orchestrator logs:
    ```bash
    docker compose logs orchestrator | grep -E "memory|fetch"
    ```
-2. Verifica que `agent_memory_vectors` tiene filas:
+2. Verify `agent_memory_vectors` has rows:
    ```bash
    psql -U postgres -d procurement_agent -c "SELECT COUNT(*) FROM agent_memory_vectors;"
    ```
-3. Prueba la búsqueda directa con el endpoint para ver el score real.
-4. El umbral de similitud es 0.75 — ítems con texto muy diferente al almacenado serán filtrados.
+3. Test the search endpoint directly to see the raw similarity score.
+4. The similarity threshold is 0.75 — items with text very different from stored records will be filtered out.
 
-### El write falla silenciosamente
+### Write fails silently
 
 ```bash
 docker compose logs data-normalizer | grep -E "memory|error|warn"
 ```
 
-El primer uso descarga el modelo ONNX (~65MB) desde HuggingFace — esto puede tardar 10-30s en la primera llamada. Las siguientes son instantáneas (cache en memoria).
+On first use, the ONNX model (~65 MB) is downloaded from HuggingFace — this can take 10–30 s on the first call. Subsequent calls use the in-memory cache and are instant.
 
-### `vector(384)` no existe en la tabla
+### `vector(384)` column does not exist in the table
 
-La migración 22 no se aplicó. Ejecuta:
+Migration 22 was not applied. Run:
+
 ```bash
 psql -U postgres -d procurement_agent \
   -f database/sql/22_agent_memory_vector_dim.sql
@@ -238,12 +237,12 @@ psql -U postgres -d procurement_agent \
 
 ---
 
-## Checklist de aceptación (Phase 3)
+## Phase 3 Acceptance Checklist
 
-- [ ] `agent_memory_vectors` tiene `vector(384)` con índice HNSW cosine
-- [ ] `POST /normalize/memory/write` devuelve `{"stored": true}` en < 2s (tras carga inicial del modelo)
-- [ ] `POST /normalize/memory/search` devuelve resultados con `similarity` para ítems similares
-- [ ] Al confirmar un pedido en el frontend, aparece `[memory] stored transaction` en logs del orchestrator
-- [ ] En la siguiente solicitud de ítem similar, el panel de razonamiento muestra nodo `memory_context`
-- [ ] Solicitudes de ítems distintos **no** muestran nodo `memory_context` (umbral 0.75 filtra correctamente)
-- [ ] Latencia del enriquecimiento < 5s (timeout configurado en orchestrator)
+- [ ] `agent_memory_vectors` has `vector(384)` with HNSW cosine index
+- [ ] `POST /normalize/memory/write` returns `{"stored": true}` in < 2 s (after initial model download)
+- [ ] `POST /normalize/memory/search` returns results with `similarity` scores for similar items
+- [ ] After confirming an order in the frontend, `[memory] stored transaction` appears in orchestrator logs
+- [ ] On the next request for a similar item, the reasoning panel shows the `memory_context` node
+- [ ] Requests for unrelated items do **not** show `memory_context` (0.75 threshold filters correctly)
+- [ ] Memory enrichment latency < 5 s (timeout configured in orchestrator)

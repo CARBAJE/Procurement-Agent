@@ -12,7 +12,7 @@ The IntentParser pipeline is three stages: LLM intent classification (qwen3:8b) 
 
 - **Python 3.11+** — FastAPI (IntentParser API), aiohttp (Bap-1 + dockerised services), Pydantic v2, asyncpg, instructor + Ollama (qwen3:8b, qwen3:1.7b), sentence-transformers (`all-MiniLM-L6-v2`), MCP SSE.
 - **Go** — `onix-bap`, `onix-bpp` (`fidedocker/onix-adapter` image).
-- **Node** — `sandbox-bpp` (`fidedocker/sandbox-2.0`); Next.js 13 + Radix UI + Tailwind for the frontend.
+- **Node** — `sim-bpp` (local BPP simulator, replaced `fidedocker/sandbox-2.0`); Next.js 13 + Radix UI + Tailwind for the frontend.
 - **Datastores** — PostgreSQL 16 + pgvector (semantic cache, audit DB), Redis 7 (Pub/Sub broker + ONIX cache).
 - **LLMs** — qwen3:8b/1.7b via local Ollama for dev; Claude Sonnet 4.6 as last-resort broadening fallback (`ANTHROPIC_API_KEY` opt-in).
 
@@ -21,10 +21,25 @@ The IntentParser pipeline is three stages: LLM intent classification (qwen3:8b) 
 ```
 IntentParser/         Stage 1+2+3 NL → BecknIntent pipeline (FastAPI :8001 — runs locally)
 Bap-1/                Standalone BAP module + tests (LangGraph orchestration, aiohttp :8000)
-services/             Dockerised microservices (intention-parser, beckn-bap-client, comparative-scoring,
-                      catalog-normalizer, orchestrator, mcp-sidecar)
+services/             Dockerised microservices:
+                        beckn-bap-client :8002  — Beckn protocol client (discover/select/init/confirm/status)
+                        orchestrator :8004      — Pipeline state machine (4-step + compare/commit + approvals)
+                        comparative-scoring :8003 — ML scoring adapter (prediction-api primary, heuristic fallback)
+                        catalog-normalizer :8005 — on_discover payload → DiscoverOffering normalizer
+                        data-normalizer :8006   — Central persistence layer (all DB writes)
+                        analytics :8009         — Dashboard reporting queries
+                        erp-adapter :8007       — SAP/Oracle ERP integration (budget gate + PO push)
+                        erp-mock :8008          — Local ERP stub (SAP/Oracle/mock surfaces)
+                        negotiation_engine :8004 — LangGraph automated price negotiation
+                        notification-dispatcher :8010 — Kafka consumer → Slack/Teams/Email fan-out
+                        sim-bpp :3002           — Local BPP simulator (replaced sandbox-2.0)
+                        intention-parser :8001  — Docker wrapper for IntentParser package (Stage 1+2 only)
+                        mcp-sidecar :3000       — MCP SSE bridge (runs locally, not in Docker)
+                        discovery_engine :8006  — Multi-network Beckn discovery fan-out
+                        frontend_demo_gateway :8005 — Demo BFF for scoring/negotiation demo flows
+                        ComparativeAndScoreing/ — MLOps stack (prediction-api + training + validation)
 shared/               Cross-service Pydantic models (BecknIntent, BudgetConstraints, DiscoverOffering)
-database/             PostgreSQL schema (18 numbered SQL scripts), setup script, integration tests
+database/             PostgreSQL schema (24 numbered SQL scripts), setup script, integration tests
 config/               ONIX routing YAMLs (BAPCaller, BAPReceiver, BPPCaller, BPPReceiver)
 docs/architecture/    Decision records (ADR-0001 = Redis Pub/Sub)
 frontend/             Next.js 13 + Radix UI + Tailwind buyer-facing app

@@ -1,122 +1,122 @@
-# Phase 3 — Audit Trail System: Tests y Guía de Verificación
+# Phase 3 — Audit Trail System: Test & Verification Guide
 
-> Componente: [[audit_trail_system]]
-> Rama: `feature/agent-memory-learning`
+> Component: [[audit_trail_system]]
+> Branch: `feature/agent-memory-learning`
 > Spec: `components/audit_trail_system.md`
 
 ---
 
-## Qué está implementado
+## What is implemented
 
-### Arquitectura desplegada
+### Deployed architecture
 
 ```
-Acción del agente (cualquier paso del pipeline)
+Agent action (any pipeline step)
         ↓
 orchestrator: await _persist_audit(session, event_type, agent_action,
                                    reasoning_payload, request_id, po_id)
-  └─ fire-and-forget — nunca interrumpe el flujo principal
+  └─ fire-and-forget — never interrupts the main flow
         ↓
 POST /normalize/audit   (data-normalizer :8006)
         ↓
 INSERT INTO audit_trail_events (PostgreSQL 16)
-  - event_type:        audit_event_type ENUM (9 valores)
-  - agent_action:      TEXT (descripción de la acción)
-  - reasoning_payload: JSONB (inputs, outputs, scores, trazas LLM)
-  - kafka_offset:      BIGINT (placeholder para integración futura)
-  - retention_until:   NOW() + 7 años (SOX 404 / GDPR / IT Act 2000)
+  - event_type:        audit_event_type ENUM (9 values)
+  - agent_action:      TEXT (action description)
+  - reasoning_payload: JSONB (inputs, outputs, scores, LLM traces)
+  - kafka_offset:      BIGINT (placeholder for future Kafka integration)
+  - retention_until:   NOW() + 7 years  (SOX 404 / GDPR / IT Act 2000)
 
 ─────────────────────────────────────────────────────────────────────
 
-Consulta de auditoría (compliance officer / frontend)
+Audit query (compliance officer / frontend)
         ↓
-GET /normalize/audit?request_id=X         ← cadena completa de un pedido
-GET /normalize/audit?po_id=X              ← eventos de una PO confirmada
-GET /normalize/audit/{event_id}           ← evento individual con payload
+GET /normalize/audit?request_id=X         ← full decision chain for a request
+GET /normalize/audit?po_id=X              ← events for a confirmed PO
+GET /normalize/audit/{event_id}           ← individual event with full payload
         ↓
 Frontend: /request/{id}/audit
-  └─ AuditTrailPanel (timeline vertical, payload colapsable)
+  └─ AuditTrailPanel (vertical timeline, collapsible payload)
 ```
 
-### Puntos de escritura en el pipeline (20+ eventos)
+### Write points in the pipeline (20+ events)
 
-| Etapa | event_type | agent_action |
+| Stage | event_type | agent_action |
 |---|---|---|
-| Creación de solicitud | `normalize` | `request_created` |
-| Persistencia de intent | `normalize` | `intent_persisted` |
-| Ejecución de discovery | `discover` | `discovery_executed` |
-| Scoring de ofertas | `score` | `offerings_scored` |
-| Negociación | `negotiate` | `negotiation_step` / `counter_sent` |
-| Confirmación de pedido | `confirm` | `order_confirmed` |
-| Cambio de estado PO | `normalize` | `po_status_updated` |
-| Override del usuario | `override` | `user_overrode_recommendation` |
-| Notificación | `notification` | `notification_sent` |
-| Sync ERP | `erp_sync` | `erp_budget_checked` / `erp_po_created` |
+| Request creation | `normalize` | `request_created` |
+| Intent persistence | `normalize` | `intent_persisted` |
+| Discovery execution | `discover` | `discovery_executed` |
+| Offer scoring | `score` | `offerings_scored` |
+| Negotiation | `negotiate` | `negotiation_step` / `counter_sent` |
+| Order confirmation | `confirm` | `order_confirmed` |
+| PO status change | `normalize` | `po_status_updated` |
+| User override | `override` | `user_overrode_recommendation` |
+| Notification sent | `notification` | `notification_sent` |
+| ERP sync | `erp_sync` | `erp_budget_checked` / `erp_po_created` |
 
-### Archivos clave
+### Key files
 
-| Archivo | Rol |
+| File | Role |
 |---|---|
-| `database/sql/14_audit_trail_events.sql` | Schema: tabla + enum `audit_event_type` |
-| `database/sql/17_indexes.sql` | 4 índices optimizados (request, type, po, splunk_pending) |
+| `database/sql/14_audit_trail_events.sql` | Schema: table + `audit_event_type` enum |
+| `database/sql/17_indexes.sql` | 4 optimized indexes (request, type, po, splunk_pending) |
 | `DataNormalizer/repositories/audit_repo.py` | Write: `create_audit_event()` · Read: `get_events_by_request()`, `get_events_by_po()`, `get_event_by_id()` |
-| `DataNormalizer/normalizer.py` | Facade con métodos `normalize_audit()` y los 3 getters |
-| `services/data-normalizer/src/handler.py` | POST + GET `/normalize/audit` + GET `/normalize/audit/{event_id}` |
-| `services/orchestrator/src/workflow.py` | `_persist_audit()` + 20+ puntos de llamada |
-| `frontend/src/app/api/audit/route.ts` | Proxy Next.js → data-normalizer |
-| `frontend/src/components/procurement/AuditTrailPanel.tsx` | Timeline con iconos por tipo y payload colapsable |
-| `frontend/src/components/procurement/AuditTrailView.tsx` | Componente cliente con carga async + error state |
-| `frontend/src/app/request/[id]/audit/page.tsx` | Página SSR autenticada |
+| `DataNormalizer/normalizer.py` | Facade: `normalize_audit()` + 3 getters |
+| `services/data-normalizer/src/handler.py` | `POST /normalize/audit` + `GET /normalize/audit` + `GET /normalize/audit/{event_id}` |
+| `services/orchestrator/src/workflow.py` | `_persist_audit()` + 20+ call sites |
+| `frontend/src/app/api/audit/route.ts` | Next.js proxy → data-normalizer |
+| `frontend/src/components/procurement/AuditTrailPanel.tsx` | Timeline with per-type icons and collapsible payload |
+| `frontend/src/components/procurement/AuditTrailView.tsx` | Client component with async load + error state |
+| `frontend/src/app/request/[id]/audit/page.tsx` | SSR authenticated page |
 
-### Limitaciones actuales vs. spec
+### Implementation vs. spec
 
-| Aspecto | Spec | Implementado |
+| Aspect | Spec | Implemented |
 |---|---|---|
-| Event bus | Kafka (7 años, replication ≥ 3) | `kafka_offset` columna existe como placeholder; envío real diferido a Phase 4 |
-| SIEM sink | Splunk + ServiceNow batch consumer | `splunk_indexed` columna existe; exportador diferido a Phase 4 |
-| LLM traces | LangSmith integration | `reasoning_payload` captura los datos; integración LangSmith pendiente |
-| Retention enforcement | Nightly DELETE/archival job | `retention_until` columna existe; job de limpieza diferido a Phase 4 |
+| Event bus | Kafka (7-year retention, replication ≥ 3) | `kafka_offset` column exists as placeholder; real publishing deferred to Phase 4 |
+| SIEM sink | Splunk + ServiceNow batch consumer | `splunk_indexed` column exists; exporter deferred to Phase 4 |
+| LLM traces | LangSmith integration | `reasoning_payload` captures all data; LangSmith wiring deferred to Phase 4 |
+| Retention enforcement | Nightly DELETE/archival job | `retention_until` column exists; cleanup job deferred to Phase 4 |
 
 ---
 
-## Prerrequisitos para testear
+## Prerequisites
 
 ```bash
-# 1. Stack completo corriendo
+# 1. Full stack must be running
 docker compose up -d
-docker compose ps   # data-normalizer y orchestrator deben estar Up
+docker compose ps   # data-normalizer and orchestrator must show Up
 
-# 2. Verifica que la tabla existe con las columnas correctas
+# 2. Verify the table schema
 psql -U postgres -d procurement_agent -c "\d audit_trail_events"
-# Debe mostrar: event_id, request_id, po_id, actor_id, event_type,
-#               agent_action, reasoning_payload, kafka_offset,
-#               splunk_indexed, event_timestamp, retention_until
+# Must show: event_id, request_id, po_id, actor_id, event_type,
+#            agent_action, reasoning_payload, kafka_offset,
+#            splunk_indexed, event_timestamp, retention_until
 
-# 3. Verifica que el endpoint de escritura responde
+# 3. Verify the write endpoint responds
 curl -s http://localhost:8006/health
 # → {"status": "ok", "service": "data-normalizer"}
 ```
 
 ---
 
-## Test 1 — Write path: verificar que los eventos se escriben durante el flujo
+## Test 1 — Write Path: verify events are written during a procurement flow
 
-### Paso 1 — Observa el conteo inicial
+### Step 1 — Check initial event count
 
 ```bash
 psql -U postgres -d procurement_agent -c \
   "SELECT COUNT(*) FROM audit_trail_events;"
 ```
 
-### Paso 2 — Realiza un pedido completo en el frontend
+### Step 2 — Complete a full order in the frontend
 
-1. Abre `http://localhost:3000` y haz login
-2. Escribe: **"200 resmas papel A4 Chennai 2 días"**
-3. Espera que aparezcan los proveedores y el scoring
-4. Selecciona un proveedor → haz clic en **Commit / Confirm Order**
-5. Espera a que el estado avance a `confirmed`
+1. Open `http://localhost:3000` and log in
+2. Enter: **"200 reams A4 paper Chennai 2 days"**
+3. Wait for suppliers to appear with scoring
+4. Select a supplier → click **Commit / Confirm Order**
+5. Wait for the status to advance to `confirmed`
 
-### Paso 3 — Verifica los eventos en la BD
+### Step 3 — Verify events in the database
 
 ```bash
 psql -U postgres -d procurement_agent -c "
@@ -126,7 +126,7 @@ ORDER BY event_timestamp DESC
 LIMIT 10;"
 ```
 
-**Resultado esperado** — al menos estos 3 eventos en orden cronológico:
+**Expected result** — at least these events in chronological order:
 
 | event_type | agent_action |
 |---|---|
@@ -136,7 +136,7 @@ LIMIT 10;"
 | `score` | `offerings_scored` |
 | `confirm` | `order_confirmed` |
 
-También en los logs:
+Also in orchestrator logs:
 
 ```bash
 docker compose logs orchestrator | grep "audit"
@@ -144,7 +144,7 @@ docker compose logs orchestrator | grep "audit"
 # → INFO:__main__:[audit] confirm (order_confirmed) → <event_id>
 ```
 
-### Paso 4 — Escribe un evento manualmente vía API
+### Step 4 — Write a manual event via API
 
 ```bash
 curl -s -X POST http://localhost:8006/normalize/audit \
@@ -159,11 +159,11 @@ curl -s -X POST http://localhost:8006/normalize/audit \
 
 ---
 
-## Test 2 — Read path: consultar la cadena de decisiones de un request
+## Test 2 — Read Path: query the decision chain for a request
 
-> Requiere haber completado Test 1 (al menos 1 pedido con `request_id`).
+> Requires Test 1 to have been completed (at least 1 confirmed order with a `request_id`).
 
-### Paso 1 — Obtén el request_id del pedido
+### Step 1 — Get the request_id
 
 ```bash
 psql -U postgres -d procurement_agent -c "
@@ -172,16 +172,16 @@ FROM procurement_requests
 ORDER BY created_at DESC LIMIT 3;"
 ```
 
-### Paso 2 — Consulta todos los eventos del request via API
+### Step 2 — Query all events for that request
 
 ```bash
-export REQUEST_ID="<uuid-del-paso-1>"
+export REQUEST_ID="<uuid-from-step-1>"
 
 curl -s "http://localhost:8006/normalize/audit?request_id=$REQUEST_ID" \
   | python3 -m json.tool
 ```
 
-**Resultado esperado:**
+**Expected result:**
 
 ```json
 {
@@ -191,7 +191,7 @@ curl -s "http://localhost:8006/normalize/audit?request_id=$REQUEST_ID" \
       "event_id": "...",
       "event_type": "normalize",
       "agent_action": "request_created",
-      "reasoning_payload": {"raw_query": "200 resmas papel A4..."},
+      "reasoning_payload": {"raw_query": "200 reams A4 paper..."},
       "event_timestamp": "2026-07-06T10:23:01.123456",
       "retention_until": "2033-07-06T10:23:01.123456",
       "splunk_indexed": false
@@ -201,19 +201,19 @@ curl -s "http://localhost:8006/normalize/audit?request_id=$REQUEST_ID" \
 }
 ```
 
-La cadena completa de decisiones debe ser **reconstruíble únicamente desde estos eventos** — sin estado de la aplicación.
+The full decision chain must be **reconstructible solely from these events** — no application state required (SOX 404 compliance).
 
-### Paso 3 — Consulta un evento individual
+### Step 3 — Query an individual event
 
 ```bash
 export EVENT_ID=$(curl -s "http://localhost:8006/normalize/audit?request_id=$REQUEST_ID" \
   | python3 -c "import sys,json; print(json.load(sys.stdin)['events'][0]['event_id'])")
 
 curl -s "http://localhost:8006/normalize/audit/$EVENT_ID" | python3 -m json.tool
-# → evento completo con reasoning_payload expandido
+# → full event with expanded reasoning_payload
 ```
 
-### Paso 4 — Consulta por PO (post-confirmación)
+### Step 4 — Query by PO (post-confirmation)
 
 ```bash
 export PO_ID=$(psql -U postgres -d procurement_agent -At -c \
@@ -221,62 +221,63 @@ export PO_ID=$(psql -U postgres -d procurement_agent -At -c \
 
 curl -s "http://localhost:8006/normalize/audit?po_id=$PO_ID" \
   | python3 -m json.tool
-# → eventos confirm, erp_sync, notification relacionados con la PO
+# → confirm, erp_sync, notification events linked to that PO
 ```
 
 ---
 
-## Test 3 — Frontend: visualización del Audit Trail en el browser
+## Test 3 — Frontend: audit trail visualization in the browser
 
-> Requiere un pedido confirmado con `request_id` conocido.
+> Requires a confirmed order with a known `request_id`.
 
-### Paso 1 — Navega a la página de audit trail
+### Step 1 — Navigate to the audit trail page
 
 ```
 http://localhost:3000/request/<request_id>/audit
 ```
 
-### Paso 2 — Verifica el timeline
+### Step 2 — Verify the timeline
 
-La página debe mostrar el componente **AuditTrailPanel** con:
-- Un nodo por cada evento, ordenados cronológicamente (ASC)
-- Ícono y color diferente por tipo (`normalize`=gris, `score`=purple, `confirm`=verde, `override`=naranja...)
-- Badge con el tipo de evento
-- Timestamp formateado (`Jul 6, 2026, 10:23 AM`)
-- Botón **"Show reasoning payload"** que expande el JSON completo
+The page must show the **AuditTrailPanel** component with:
 
-### Paso 3 — Verifica el empty state
+- One node per event, in chronological order (ASC)
+- Distinct icon and color per type (`normalize`=grey, `score`=purple, `confirm`=green, `override`=orange …)
+- Badge showing the event type
+- Formatted timestamp (`Jul 6, 2026, 10:23 AM`)
+- **"Show reasoning payload"** button that expands the full JSON
 
-Navega con un `request_id` sin eventos:
+### Step 3 — Verify the empty state
+
+Navigate with a `request_id` that has no events:
 
 ```
 http://localhost:3000/request/00000000-0000-0000-0000-000000000000/audit
 ```
 
-Debe mostrar el empty state con ícono y mensaje "No audit events recorded yet."
+Must show the empty state with an icon and the message "No audit events recorded yet."
 
 ---
 
-## Test 4 — Validaciones del endpoint
+## Test 4 — Endpoint validations
 
 ```bash
-# event_type inválido → 400
+# Invalid event_type → 400
 curl -s -X POST http://localhost:8006/normalize/audit \
   -H "Content-Type: application/json" \
   -d '{"event_type": "invalid_type", "agent_action": "test"}' -w "\n%{http_code}"
 # → 400
 
-# Sin agent_action → 400
+# Missing agent_action → 400
 curl -s -X POST http://localhost:8006/normalize/audit \
   -H "Content-Type: application/json" \
   -d '{"event_type": "score"}' -w "\n%{http_code}"
 # → 400
 
-# GET sin parámetros → 400
+# GET without required params → 400
 curl -s "http://localhost:8006/normalize/audit" -w "\n%{http_code}"
 # → 400  (request_id or po_id query parameter is required)
 
-# GET event_id inexistente → 404
+# GET non-existent event_id → 404
 curl -s "http://localhost:8006/normalize/audit/00000000-0000-0000-0000-000000000000" \
   -w "\n%{http_code}"
 # → 404
@@ -284,14 +285,13 @@ curl -s "http://localhost:8006/normalize/audit/00000000-0000-0000-0000-000000000
 
 ---
 
-## Tests automatizados
+## Automated tests
 
 ```bash
-# Desde services/data-normalizer/
 cd services/data-normalizer
 PYTHONPATH=<repo_root> .venv-test/bin/python -m pytest tests/test_endpoints.py -k "audit" -v
 
-# Resultado esperado (10 tests):
+# Expected output (10 tests):
 # PASSED test_post_audit_appends_event
 # PASSED test_validation_errors_return_400[/normalize/audit-body7]
 # PASSED test_validation_errors_return_400[/normalize/audit-body8]
@@ -306,49 +306,49 @@ PYTHONPATH=<repo_root> .venv-test/bin/python -m pytest tests/test_endpoints.py -
 
 ---
 
-## Solución de problemas
+## Troubleshooting
 
-### Los eventos no aparecen en la BD tras un pedido
+### No events appear in the database after an order
 
 ```bash
 docker compose logs orchestrator | grep -E "audit|persist"
-# Si no hay líneas: _persist_audit() no se está llamando
-# Si hay "WARNING [persist_audit] failed": el data-normalizer no está disponible
+# No lines → _persist_audit() is not being called
+# "WARNING [persist_audit] failed" → data-normalizer is unavailable
 ```
 
-Verifica que `DATA_NORMALIZER_URL` está configurado en el orchestrator:
+Verify `DATA_NORMALIZER_URL` is configured in the orchestrator:
 
 ```bash
 docker compose exec orchestrator env | grep DATA_NORMALIZER
 # → DATA_NORMALIZER_URL=http://data-normalizer:8006
 ```
 
-### `GET /normalize/audit` devuelve 500
+### `GET /normalize/audit` returns 500
 
-Verifica que la tabla `audit_trail_events` tiene todas las columnas esperadas:
+Verify that `audit_trail_events` has all expected columns:
 
 ```bash
 psql -U postgres -d procurement_agent -c "\d audit_trail_events"
 ```
 
-Si falta `retention_until`, la migración `14_audit_trail_events.sql` no se aplicó correctamente. Vuelve a ejecutar:
+If `retention_until` is missing, the migration `14_audit_trail_events.sql` did not apply cleanly. Re-run:
 
 ```bash
 python database/setup_database.py
 ```
 
-### El frontend muestra "data-normalizer unavailable" (502)
+### Frontend shows "data-normalizer unavailable" (502)
 
-El proxy Next.js en `/api/audit/route.ts` usa `DATA_NORMALIZER_URL` del entorno del servidor Next.js (no del contenedor). En desarrollo local:
+The Next.js proxy at `/api/audit/route.ts` reads `DATA_NORMALIZER_URL` from the server-side Next.js environment, not from the Docker container. For local development:
 
 ```bash
-# .env.local del frontend
+# frontend/.env.local
 DATA_NORMALIZER_URL=http://localhost:8006
 ```
 
-### Los eventos tienen `reasoning_payload: {}` vacío
+### Events have empty `reasoning_payload: {}`
 
-Esto es válido — el orchestrator omite el payload en eventos de bajo nivel. Para los eventos de scoring y confirm, el payload debe tener contenido:
+This is valid — the orchestrator omits the payload on low-level events. For scoring and confirm events the payload must contain content:
 
 ```bash
 psql -U postgres -d procurement_agent -c "
@@ -360,15 +360,15 @@ ORDER BY event_timestamp DESC LIMIT 1;"
 
 ---
 
-## Checklist de aceptación (Phase 3)
+## Phase 3 Acceptance Checklist
 
-- [ ] `audit_trail_events` existe con enum `audit_event_type` y 9 valores válidos
-- [ ] `POST /normalize/audit` devuelve `{"event_id": "<uuid>"}` con status 201
-- [ ] `GET /normalize/audit?request_id=X` devuelve la cadena completa de eventos en orden cronológico
-- [ ] `GET /normalize/audit/{event_id}` devuelve el evento individual con `reasoning_payload`
-- [ ] Al confirmar un pedido en el frontend, al menos 4 eventos se persisten automáticamente
-- [ ] `retention_until` es `event_timestamp + 7 años` en todos los eventos
-- [ ] El frontend `/request/{id}/audit` muestra el timeline con iconos y payloads colapsables
-- [ ] Validaciones retornan 400 para `event_type` inválido y `agent_action` vacío
-- [ ] Un event_id inexistente retorna 404
-- [ ] La cadena de decisiones es **reconstruíble exclusivamente desde los eventos** — sin estado de la aplicación (cumple SOX 404)
+- [ ] `audit_trail_events` exists with `audit_event_type` enum and 9 valid values
+- [ ] `POST /normalize/audit` returns `{"event_id": "<uuid>"}` with status 201
+- [ ] `GET /normalize/audit?request_id=X` returns the full event chain in chronological order
+- [ ] `GET /normalize/audit/{event_id}` returns the individual event with `reasoning_payload`
+- [ ] After confirming an order in the frontend, at least 4 events are automatically persisted
+- [ ] `retention_until` is `event_timestamp + 7 years` on all events
+- [ ] Frontend `/request/{id}/audit` shows the timeline with per-type icons and collapsible payloads
+- [ ] Validations return 400 for invalid `event_type` and missing `agent_action`
+- [ ] A non-existent `event_id` returns 404
+- [ ] The decision chain is **reconstructible solely from the events** — no application state required (SOX 404)

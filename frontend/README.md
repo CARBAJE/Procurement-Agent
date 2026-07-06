@@ -1,78 +1,77 @@
 # Procurement Agent — Frontend
 
-Next.js 13 App Router + NextAuth + Tailwind + shadcn-style components. The user-facing layer of the Beckn Procurement Agent.
+Next.js 13 App Router + NextAuth + Tailwind + shadcn-style components. The buyer-facing interface of the Beckn Procurement Agent — covers the full procurement lifecycle from NL query to order tracking, plus analytics, approvals, admin, and AI negotiation.
 
 ## What you can do here
 
-1. **Log in** (`/login`) — stub SSO with 3 demo users (requester / approver / admin). Swap-ready for Keycloak OIDC.
-2. **Create a request** (`/request/new`) — enter a natural-language procurement query. The Intent Parser (Ollama) converts it to a structured `BecknIntent`.
-3. **Compare offers** (`/request/[txn_id]/compare`) — side-by-side table of the offerings returned by the Beckn network, sortable by price / rating / delivery time / stock. Agent scoring + reasoning trace visible. Keyboard navigation (↑↓ Enter). Pick a non-recommended option → confirmation dialog with a diff against the agent's pick.
-4. **Track an order** (`/request/[txn_id]/order`) — order summary, lifecycle timeline (CREATED → ACCEPTED → PACKED → SHIPPED → OUT_FOR_DELIVERY → DELIVERED), HTTP status polling every 30 s. Swap-ready for a WebSocket backend.
+1. **Log in** (`/login`) — Keycloak OIDC with 3 demo users (requester / approver / admin).
+2. **Create a request** (`/request/new`) — Enter a natural-language procurement query. The Intent Parser converts it to a structured `BecknIntent`.
+3. **Compare offers** (`/request/[txn_id]/compare`) — Side-by-side comparison of offerings returned by the Beckn network, sortable by price / rating / delivery time. Agent scoring + reasoning trace. Keyboard navigation.
+4. **Track an order** (`/request/[txn_id]/order`) — Order summary, lifecycle timeline (CREATED → ACCEPTED → PACKED → SHIPPED → DELIVERED), status polling.
+5. **AI-driven run** (`/request/[txn_id]/run`) — Agentic execution mode (advisory / HITL / autonomous). Execution mode selector, human-in-the-loop decision UI.
+6. **Negotiate** (`/request/[txn_id]/negotiate`) — Interactive negotiation stepper backed by the LangGraph negotiation engine.
+7. **View audit trail** (`/request/[txn_id]/audit`) — Full audit trail for a procurement request, event by event.
+8. **Analytics dashboard** (`/dashboard`) — Live KPIs, spend charts, cycle time, supplier metrics — pulled from the analytics microservice.
+9. **Approvals** (`/approvals`) — Approver inbox; approve or reject pending procurement requests.
+10. **Admin** (`/admin`) — User management, approval threshold and department configuration.
+11. **Negotiation demo** (`/negotiation`) — Standalone demo of the AI negotiation flow.
 
-## Architecture at a glance
+## Architecture
 
-```
-                      ┌──────────────────────┐
-                      │  Browser (React)      │
-                      └──────────┬────────────┘
-                                 │
-                ┌────────────────▼─────────────────┐
-                │  Next.js App Router (:3000)       │
-                │  Server Components + API proxies  │
-                └────────────────┬──────────────────┘
-                                 │ (session-guarded)
-                                 ▼
-                      ┌──────────────────────┐
-                      │  BAP Server (:8000)   │
-                      │  Python aiohttp       │
-                      └──────────┬────────────┘
-                                 │
-                                 ▼
-                      Beckn network (ONIX + BPPs)
+```mermaid
+flowchart TD
+    BR["Browser\nReact"] --> NX["Next.js :3000\nApp Router"]
+    NX -->|"/api/procurement/*"| ORC["orchestrator :8004"]
+    NX -->|"/api/analytics/*"| ANA["analytics :8009"]
+    NX -->|"/api/approvals/*\n/api/admin/*\n/api/audit/*"| DN["data-normalizer :8006"]
+    NX -->|"/api/demo/*"| DGW["frontend_demo_gateway :8005"]
+    NX -->|"/api/auth/*"| KC["Keycloak OIDC"]
 ```
 
-## Directory layout
+## Pages
 
-```
-src/
-├── app/
-│   ├── login/page.tsx                       NextAuth credentials login (stub users)
-│   ├── dashboard/page.tsx                   Home / request list (placeholder metrics today)
-│   ├── request/
-│   │   ├── new/page.tsx                     Natural-language query form
-│   │   └── [txn_id]/
-│   │       ├── compare/page.tsx             Side-by-side comparison view
-│   │       └── order/page.tsx               Order summary + timeline + polling
-│   └── api/procurement/
-│       ├── parse/route.ts                   Proxy → Python /parse (no mock fallback)
-│       ├── compare/route.ts                 Proxy → Python /compare
-│       ├── commit/route.ts                  Proxy → Python /commit
-│       └── status/[txn_id]/[order_id]/route.ts   Proxy → Python /status
-├── components/
-│   ├── layout/Navbar.tsx
-│   ├── auth/LoginForm.tsx · AuthGuard.tsx
-│   ├── procurement/
-│   │   ├── ProcurementForm.tsx              NL input + IntentPreview step
-│   │   ├── IntentPreview.tsx                Shows parsed BecknIntent + confidence
-│   │   ├── CompareView.tsx                  Client component for /compare route
-│   │   ├── ComparisonTable.tsx              Sortable + keyboard-navigable table
-│   │   ├── OfferCard.tsx · CriterionBar.tsx
-│   │   ├── ScoringPanel.tsx                 "Why this is recommended" panel
-│   │   ├── ReasoningPanel.tsx               Agent trace (purple/orange/green ReAct roles)
-│   │   ├── ConfirmCommitDialog.tsx          Diff vs recommended (Radix Dialog)
-│   │   ├── OrderView.tsx                    Client component for /order route
-│   │   ├── OrderSummaryCard.tsx
-│   │   ├── OrderLifecycleTimeline.tsx
-│   │   └── StatusPoller.tsx                 30 s polling, swap-ready for WebSocket
-│   └── ui/                                  shadcn primitives (local copies)
-├── lib/
-│   ├── types.ts                             BecknIntent, Offering, ComparisonResult, …
-│   ├── api.ts                               axios helpers for /parse /compare /commit /status
-│   ├── session-store.ts                     sessionStorage wrapper for the wizard state
-│   ├── auth.ts                              NextAuth config + stub users
-│   └── utils.ts                             cn() classname merger
-└── app/globals.css                          HSL theme tokens, dark-mode-aware
-```
+| Route | Description |
+|-------|-------------|
+| `/` | Root (redirects to dashboard or login) |
+| `/login` | Keycloak OIDC login |
+| `/dashboard` | Analytics dashboard — live KPIs and charts |
+| `/request/new` | New procurement request form |
+| `/request/[txn_id]/compare` | Offer comparison table |
+| `/request/[txn_id]/order` | Order summary and lifecycle timeline |
+| `/request/[txn_id]/run` | Agentic execution mode |
+| `/request/[txn_id]/negotiate` | AI negotiation stepper |
+| `/request/[txn_id]/audit` | Audit trail viewer |
+| `/approvals` | Approver inbox |
+| `/admin` | User management |
+| `/negotiation` | Standalone negotiation demo |
+
+## API Routes (24 total)
+
+| Path | Backend |
+|------|---------|
+| `/api/procurement/parse` | orchestrator /parse |
+| `/api/procurement/compare` | orchestrator /compare |
+| `/api/procurement/commit` | orchestrator /commit |
+| `/api/procurement/cancel` | orchestrator /cancel |
+| `/api/procurement/status/[txn_id]/[order_id]` | orchestrator /status |
+| `/api/procurement/order/[id]` | data-normalizer /order |
+| `/api/procurement/run` | orchestrator /run |
+| `/api/procurement/run/[run_id]` | orchestrator /run/{id} |
+| `/api/procurement/run/[run_id]/decide` | orchestrator /run/{id}/decide |
+| `/api/analytics` | analytics /analytics |
+| `/api/analytics/benchmark` | analytics /benchmark |
+| `/api/analytics/business-impact` | analytics /business-impact |
+| `/api/approvals` | data-normalizer /approvals |
+| `/api/approvals/[id]/decide` | data-normalizer /approvals/{id}/decide |
+| `/api/admin/users` | data-normalizer /admin/users |
+| `/api/admin/users/[id]` | data-normalizer /admin/users/{id} |
+| `/api/audit` | data-normalizer /normalize/audit |
+| `/api/demo/score` | frontend_demo_gateway /api/demo/score |
+| `/api/demo/negotiate` | frontend_demo_gateway /api/demo/negotiate |
+| `/api/demo/negotiate/[thread_id]` | frontend_demo_gateway /api/demo/negotiate/{id} |
+| `/api/demo/negotiate/[thread_id]/supplier-respond` | frontend_demo_gateway /api/demo/negotiate/{id}/supplier-respond |
+| `/api/auth/[...nextauth]` | NextAuth 4 |
+| `/api/auth/federated-logout` | Keycloak federated logout |
 
 ## Wizard session state
 
@@ -80,61 +79,62 @@ Between routes (`/request/new` → `/compare` → `/order`), state lives in a si
 
 ```ts
 interface WizardSession {
-  intent: BecknIntent            // from /parse
-  comparison: ComparisonResult   // from /compare
-  chosenItemId: string | null    // user's pick (may differ from recommended)
-  commit: CommitResult | null    // populated after /commit
+  intent: BecknIntent
+  comparison: ComparisonResult
+  chosenItemId: string | null
+  commit: CommitResult | null
 }
 ```
 
-Use `loadSession(txnId)`, `saveSession(txnId, s)`, `patchSession(txnId, patch)` from `src/lib/session-store.ts`. Clears on tab close by design — no PII persists.
+Use `loadSession(txnId)`, `saveSession(txnId, s)`, `patchSession(txnId, patch)` from `src/lib/session-store.ts`. Clears on tab close — no PII persists.
 
 ## Stack
 
 | Layer | Choice |
-|---|---|
+|-------|--------|
 | Framework | Next.js 13.5 (App Router) |
 | Language | TypeScript strict |
-| Auth | NextAuth 4 (JWT + CredentialsProvider, stub — swap to Keycloak later) |
-| HTTP | axios |
-| Styling | Tailwind CSS 3 + `tailwindcss-animate` |
+| Auth | NextAuth 4 (Keycloak OIDC + stub credentials for dev) |
+| HTTP | axios — wrappers in `src/lib/api.ts` |
+| Styling | Tailwind CSS 3.4 + `tailwindcss-animate` |
 | Components | shadcn-style (Radix primitives + CVA + Lucide icons) |
-| State | React `useState` (no Redux / Zustand / SWR — YAGNI) |
-| Polling | `setInterval` in `StatusPoller` (swap-ready for WebSocket) |
+| Charts | recharts (dynamically imported, `ssr: false`) |
 
 ## Run
 
 ```bash
 npm install
-npm run dev        # :3000 — requires BAP backend on :8000
-npm run build      # production build — 11 routes compiled
+npm run dev    # :3000
+npm run build
 npm run lint
 ```
 
-The Python BAP server on `:8000` handles `/parse`, `/compare`, `/commit`, `/status`. When the BAP is offline, Next.js proxies return `502` and the UI shows the error verbatim — **there is no silent mock fallback**. To verify the backend is up: `curl http://localhost:8000/health`.
-
 ## Environment
 
-```
+```dotenv
 # .env.local
-BAP_URL=http://localhost:8000                  # where all proxy routes call
-INTENT_PARSER_URL=http://localhost:8000        # same process today
+ORCHESTRATOR_URL=http://localhost:8004
+ANALYTICS_URL=http://localhost:8009
+DATA_NORMALIZER_URL=http://localhost:8006
+DEMO_GATEWAY_URL=http://localhost:8005
 NEXTAUTH_URL=http://localhost:3000
-NEXTAUTH_SECRET=procurement-agent-secret-phase1
+NEXTAUTH_SECRET=procurement-agent-secret-dev
+KEYCLOAK_URL=http://localhost:8080
+KEYCLOAK_REALM=procurement
+KEYCLOAK_CLIENT_ID=procurement-frontend
+KEYCLOAK_CLIENT_SECRET=<from Keycloak>
 ```
 
-## What's stubbed / deliberately incomplete
+## Known issues
 
-See `Bap-1/docs/ARCHITECTURE.md §7` for the full catalog. Frontend-specific items:
-
-- **Auth**: 3 hardcoded users in `src/lib/auth.ts` — swap to Keycloak before production.
-- **Status polling**: `setInterval(30s)`. Interface on `StatusPoller` is designed for swap to WebSocket (`onUpdate(StatusSnapshot)`).
-- **No frontend tests yet** — per milestone decision. Manual validation in browser covers the wizard. Vitest + RTL is the next step when the UI scope grows.
-- **`Dashboard` metrics cards** are static placeholders. Real data needs a backend list endpoint (out of scope for Milestone 2).
+- `AuthGuard.tsx` is dead code — not imported anywhere.
+- Geist fonts exist in `src/app/fonts/` but are not registered — body uses Arial.
+- recharts charts have no ARIA support — zero `role="img"` wrapping.
+- No `loading.tsx`, `error.tsx`, or `not-found.tsx` App Router boundaries.
+- No `.env.example` file.
+- No frontend tests (zero Jest/Vitest/Playwright coverage).
 
 ## Related docs
 
-- `Bap-1/README.md` — backend overview and quickstart.
-- `Bap-1/docs/ARCHITECTURE.md` — full system architecture, diagrams, and production blockers (§7).
-- `Bap-1/CLAUDE.md` — protocol gotchas + code guidance (also read by Claude Code).
-- `docs/sequence-diagrams.md` (this folder) — end-to-end sequence diagrams per flow.
+- `frontend/CLAUDE.md` — stack conventions, accessibility rules, design patterns (read before any UI change).
+- `frontend/docs/sequence-diagrams.md` — end-to-end sequence diagrams per flow.

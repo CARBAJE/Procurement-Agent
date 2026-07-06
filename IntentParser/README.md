@@ -39,7 +39,7 @@ Buyer Query (NL text)
 │                 │ CACHE_MISS            │
 │                 ▼                       │
 │  3. MCP sidecar probe (SSE :3000)       │  P2 path (MCP fallback)
-│     search_bpp_catalog → ONIX → BPPs   │  probe_ttl = 3 s
+│     search_bpp_catalog → ONIX → BPPs   │  probe_ttl = 8 s
 │                 │                       │
 │  ┌──────────────▼───────────────────┐  │
 │  │ found=True  → MCP_VALIDATED      │  │  + Path B cache write (async)
@@ -77,7 +77,7 @@ IntentParser/
 ├── models.py         Pydantic / dataclass DTOs: ParsedIntent, ValidationResult, ParseResponse
 ├── db.py             asyncpg connection pool — init, acquire, close; ef_search=100 via init callback
 ├── embeddings.py     all-MiniLM-L6-v2 singleton; async embed() runs in ThreadPoolExecutor
-├── llm_clients.py    instructor-patched AsyncOpenAI clients (mode=JSON and mode=TOOLS)
+├── llm_clients.py    instructor-patched AsyncOpenAI clients (mode=JSON for Stage 1+2; mode=TOOLS defined but unused)
 ├── mcp_client.py     Lightweight MCP SSE transport client for the search_bpp_catalog tool
 ├── validation.py     Stage 3: ANN cache query, three-zone threshold, MCPResultAdapter (Path B)
 ├── recovery.py       broaden_procurement_query, log/notify/RFQ stubs, Claude broadening fallback
@@ -157,14 +157,14 @@ them from a secrets manager or `.env` file that is excluded from version control
 | `COMPLEX_MODEL` | `qwen3:8b` | Model for complex / multi-spec queries |
 | `SIMPLE_MODEL` | `qwen3:1.7b` | Model for short, single-field queries |
 | `EMBEDDING_MODEL` | `all-MiniLM-L6-v2` | sentence-transformers model name |
-| `VALIDATED_THRESHOLD` | `0.85` | Minimum cosine similarity for VALIDATED |
-| `AMBIGUOUS_THRESHOLD` | `0.45` | Minimum cosine similarity for AMBIGUOUS |
+| `VALIDATED_THRESHOLD` | `0.85` | Minimum cosine similarity for VALIDATED — **hardcoded, not env-configurable** |
+| `AMBIGUOUS_THRESHOLD` | `0.45` | Minimum cosine similarity for AMBIGUOUS — **hardcoded, not env-configurable** |
 | `MCP_SSE_URL` | `http://localhost:3000/sse` | MCP sidecar SSE endpoint |
 | `MCP_PROBE_TIMEOUT` | `8` | Seconds to wait for MCP probe response |
 | `DB_HOST` | `localhost` | PostgreSQL host |
 | `DB_PORT` | `5432` | PostgreSQL port |
 | `DB_NAME` | `procurement_agent` | Database name |
-| `DB_USER` | `carbaje` | Database user |
+| `DB_USER` | `postgres` | Database user |
 | `DB_PASSWORD` | *(empty)* | Database password — load from secrets manager |
 | `DB_MIN_POOL` | `5` | asyncpg pool minimum size |
 | `DB_MAX_POOL` | `20` | asyncpg pool maximum size |

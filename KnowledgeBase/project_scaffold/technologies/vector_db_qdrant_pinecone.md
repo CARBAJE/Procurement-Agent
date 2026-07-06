@@ -1,7 +1,7 @@
 ---
-tags: [technology, database, vector-db, qdrant, pinecone, rag, embeddings, memory]
+tags: [technology, database, vector-db, qdrant, pinecone, pgvector, rag, embeddings, memory]
 cssclasses: [procurement-doc, tech-doc]
-status: "#processed"
+status: "#implemented"
 related: ["[[embedding_models]]", "[[agent_memory_learning]]", "[[databases_postgresql_redis]]", "[[phase3_advanced_intelligence_enterprise_features]]", "[[security_compliance]]", "[[memory_retrieval_model]]"]
 ---
 
@@ -51,3 +51,28 @@ When a new request arrives, the [[agent_framework_langchain_langgraph|agent]] qu
 
 > [!guardrail] Data Sovereignty
 > Self-hosted Qdrant is a **hard requirement** when the enterprise's data residency policy prohibits third-party SaaS processing. No vector embeddings of procurement records are sent to Pinecone or any external service unless explicitly permitted by enterprise data processing agreements. The [[security_compliance|security compliance framework]] governs this.
+
+---
+
+## Implementation Decision: pgvector (Phases 1–3)
+
+> [!implementation] Qdrant replaced by pgvector for the pilot deployment
+>
+> **Decision:** For Phases 1–3 (pilot, corpus < 100K records), **pgvector** running inside the existing PostgreSQL 16 container replaces the standalone Qdrant instance.
+>
+> **Rationale:**
+> 1. Zero additional infrastructure — pgvector is a PostgreSQL extension, no new container or service required.
+> 2. The pilot procurement corpus is well below 100K records, where Qdrant's HNSW performance advantage over pgvector becomes significant.
+> 3. `asyncpg` connection pool already exists — no new client library or connection management needed.
+> 4. Single database means simpler backup, restore, and schema migration story.
+>
+> **Technical specs as implemented:**
+>
+> | Table | Dim | Index | Migration |
+> |---|---|---|---|
+> | `bpp_catalog_semantic_cache` | 384 | HNSW cosine | `18_bpp_catalog_semantic_cache.sql` |
+> | `agent_memory_vectors` | 384 | HNSW cosine | `22_agent_memory_vector_dim.sql` |
+>
+> Both tables use `vector(384)` (not 3072). See [[embedding_models]] for the actual models used.
+>
+> **When to reconsider Qdrant:** if the corpus grows beyond 100K records, if multi-tenancy or horizontal scaling of vector search is required, or if Phase 4 moves to a managed cloud deployment where a dedicated vector DB is operationally easier to manage than a PostgreSQL extension.

@@ -1,48 +1,72 @@
 ---
-tags: [technology, ai, llm, gpt4o, claude, openai, multi-provider, model-routing]
+tags: [technology, ai, llm, ollama, qwen3, claude, local-inference, model-routing]
 cssclasses: [procurement-doc, tech-doc]
-status: "#processed"
-related: ["[[nl_intent_parser]]", "[[comparison_scoring_engine]]", "[[negotiation_engine]]", "[[embedding_models]]", "[[model_governance_monitoring]]", "[[observability_stack]]", "[[agent_framework_langchain_langgraph]]"]
+status: "#implemented"
+related: ["[[nl_intent_parser]]", "[[comparison_scoring_engine]]", "[[negotiation_engine]]", "[[embedding_models]]", "[[model_governance_monitoring]]", "[[agent_framework_langchain_langgraph]]"]
 ---
 
 # LLM Providers
 
-> [!architecture] Multi-Provider Strategy
-> The system uses a **multi-provider LLM architecture** for resilience and cost optimization. Model routing is based on task complexity and latency requirements. No single provider is a single point of failure. All calls are traced by [[observability_stack|LangSmith]] and governed by the [[model_governance_monitoring|Model Registry]].
+> [!implementation] Implementation Note (updated Phase 3)
+> The original spec described a cloud-first multi-provider strategy (GPT-4o primary, Claude fallback). The implemented system uses **local Ollama inference** for all main pipeline steps, with Claude as a last-resort fallback only. No GPT-4o calls exist anywhere in the current codebase. This decision was driven by data sovereignty, zero API cost during development, and the ability to run fully offline.
 
-## Provider Matrix
+## Implemented Provider Matrix
 
-| Model | Provider | Role | Trigger |
+| Model | Runtime | Role | Opt-in? |
 |---|---|---|---|
-| `gpt-4o` | OpenAI | Primary — [[nl_intent_parser\|intent parsing]], [[comparison_scoring_engine\|comparison reasoning]], [[negotiation_engine\|negotiation strategy]] | All complex multi-step reasoning |
-| `claude-sonnet-4-6` | Anthropic | Fallback for intent parsing | When GPT-4o unavailable or latency spike detected |
-| `gpt-4o-mini` | OpenAI | Lightweight tasks — simple, well-structured requests | High-volume routine calls; reduces cost by ~70% |
+| `qwen3:8b` | Local Ollama | Stage 1 intent classification + Stage 2 BecknIntent extraction (complex queries) | No — default |
+| `qwen3:1.7b` | Local Ollama | Stage 2 BecknIntent extraction (simple/short queries, routed by complexity) | No — default |
+| `claude-sonnet-4-6` | Anthropic API | Last-resort broadening fallback in Stage 3 recovery (query broadening + RFQ trigger) | Yes — requires `ANTHROPIC_API_KEY` |
+| Claude (via proxy :8012) | OpenAI-compat proxy | `SupplierAgent` in `frontend_demo_gateway` — simulates supplier responses in negotiation demo | Yes — demo only |
 
 ## Per-Component Assignment
 
-| Component | Primary Model | Fallback |
+| Component | Model | Notes |
 |---|---|---|
-| [[nl_intent_parser\|NL Intent Parser]] | `gpt-4o` (JSON mode / structured output) | `claude-sonnet-4-6` |
-| [[comparison_scoring_engine\|Comparison & Scoring Engine]] | `gpt-4o` (ReAct reasoning loop) | — |
-| [[negotiation_engine\|Negotiation Strategy]] | Rule-based engine + `gpt-4o` for ambiguous cases | — |
-| [[embedding_models\|Memory & Retrieval]] | `text-embedding-3-large` (embeddings, not generation) | `e5-large-v2` (open-source) |
+| [[nl_intent_parser\|NL Intent Parser — Stage 1]] | `qwen3:8b` | Instructor JSON mode via Ollama |
+| [[nl_intent_parser\|NL Intent Parser — Stage 2]] | `qwen3:8b` (complex) / `qwen3:1.7b` (simple) | Routed by query complexity; both via Ollama |
+| [[nl_intent_parser\|Stage 3 broadening fallback]] | `claude-sonnet-4-6` | Only when pgvector + MCP sidecar return `not_found`; ANTHROPIC_API_KEY must be set |
+| [[negotiation_engine\|Negotiation Engine — advisory mode]] | `qwen3:8b` | Advisory analysis of ambiguous terms |
+| `SupplierAgent` (demo) | Claude via :8012 | Simulates supplier counter-offers in the frontend demo gateway |
+| [[embedding_models\|Memory & Retrieval]] | `BAAI/bge-small-en-v1.5` | Embedding model — see [[embedding_models]] |
 
-> [!tech-stack] Why Multi-Provider
-> Relying on a single LLM provider creates a single point of failure for all agent intelligence. The `gpt-4o` → `claude-sonnet-4-6` fallback for [[nl_intent_parser|intent parsing]] ensures the most critical pipeline step (converting natural language to Beckn JSON) stays operational even during OpenAI outages. `gpt-4o-mini` handles high-frequency simple requests, keeping per-request LLM cost sustainable at 10,000+ monthly requests ([[user_adoption_metrics|12-month target]]).
+## Complexity Routing (Stage 2)
 
-> [!milestone] Evaluation Cadence
-> Weekly automated evaluation against 100-scenario test suite, governed by [[model_governance_monitoring]]:
-> - Intent parsing accuracy target: **≥ 95%**
-> - Comparison quality vs. human expert: **≥ 85% agreement**
-> Run via [[cicd_pipeline|GitHub Actions]] as part of the CI/CD pipeline.
+Stage 2 routes between `qwen3:8b` and `qwen3:1.7b` based on query complexity score:
 
-## Configuration Management
+- **High complexity** (multi-item, many constraints, ambiguous specs): `qwen3:8b`
+- **Low complexity** (single well-structured item): `qwen3:1.7b` — faster and cheaper
 
-- All model versions, prompt templates, and temperature settings are tracked in the [[model_governance_monitoring|Model Registry]] (version-controlled).
-- Every agent response is traceable to a specific **model version + prompt version**.
-- [[observability_stack|LangSmith]] traces every LLM call: input, output, latency, token usage, cost.
+The routing threshold is set in `IntentParser/config.py`.
 
-> [!guardrail] Drift Detection
-> If intent parsing accuracy drops below **85%** on the weekly evaluation suite → automatic alert triggers prompt review.
-> If user override rate exceeds **30%** → scoring calibration review is triggered.
-> No model or prompt change is deployed without passing the 100-scenario evaluation suite. Governed by [[model_governance_monitoring]].
+## Configuration
+
+```bash
+# Required for any LLM calls
+OLLAMA_BASE_URL=http://localhost:11434  # default
+
+# Optional — enables Claude broadening fallback in Stage 3
+ANTHROPIC_API_KEY=sk-ant-...
+
+# Required for SupplierAgent in demo flows
+# Points to a Claude-compatible OpenAI proxy
+OLLAMA_BASE_URL=http://localhost:8012/v1   # frontend_demo_gateway config
+OLLAMA_API_KEY=...
+SUPPLIER_MODEL=claude-3-5-sonnet
+```
+
+> [!tech-stack] Why Local Ollama
+> Running qwen3 locally means zero per-request API cost, zero data egress, and fully offline operation during development. The model quality for structured procurement intent extraction is sufficient — the Instructor + Pydantic v2 pipeline enforces schema correctness regardless of model tier. The Claude fallback provides a quality escape hatch for edge-case broadening without committing to a cloud-primary strategy.
+
+## Original Design vs. Implementation
+
+| Original spec | Implemented |
+|---|---|
+| `gpt-4o` as primary for all reasoning | `qwen3:8b` via local Ollama |
+| `gpt-4o-mini` for lightweight tasks | `qwen3:1.7b` for simple Stage 2 queries |
+| `claude-sonnet-4-6` as intent-parse fallback | `claude-sonnet-4-6` as Stage 3 broadening fallback only (opt-in) |
+| LangSmith traces for all LLM calls | `reasoning_payload` in audit trail captures data; LangSmith deferred to Phase 4 |
+| Weekly evaluation suite (100 scenarios) | Manual evaluation; automated eval deferred to Phase 4 |
+
+> [!milestone] Phase 4 Path
+> When the system moves to production: evaluate whether qwen3:8b accuracy on the real procurement catalog justifies staying local, or whether switching Stage 1/2 to Claude/GPT-4o provides meaningful gains. LangSmith integration (see [[model_governance_monitoring]]) should be wired first so the decision is data-driven.

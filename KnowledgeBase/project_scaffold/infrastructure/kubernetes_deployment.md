@@ -41,10 +41,45 @@ Full cloud details: [[cloud_providers]].
 | [[event_streaming_kafka\|Kafka]] | StatefulSet | KRaft mode |
 | [[observability_stack\|Prometheus + Grafana]] | Deployment | Monitoring namespace |
 
-## Local Development
+## Current Deployment: Docker Compose (Phases 1–3)
 
-- `docker-compose` — full stack runs locally, mirroring the Kubernetes topology.
-- No Kubernetes cluster required for developer iteration.
+> [!implementation] Kubernetes is the Phase 4 target. Phases 1–3 run entirely on Docker Compose.
+
+The full stack (16+ containers) is orchestrated via `docker-compose.yml` at the repo root. No Kubernetes cluster is required until Phase 4.
+
+| Container | Port | Notes |
+|---|---|---|
+| `beckn-bap-client` | 8002 | Beckn protocol client |
+| `orchestrator` | 8004 | Pipeline state machine |
+| `catalog-normalizer` | 8005 | on_discover normalizer |
+| `data-normalizer` | 8006 | Central persistence layer |
+| `erp-adapter` | 8007 | SAP/Oracle ERP integration |
+| `erp-mock` | 8008 | Local ERP stub |
+| `analytics` | 8009 | Dashboard reporting |
+| `notification-dispatcher` | 8010 | Kafka → Slack/Teams/Email |
+| `comparative-scoring` | 8003 | ML scoring adapter |
+| `discovery_engine` | 8006 | Multi-network Beckn fan-out |
+| `frontend_demo_gateway` | 8005 | Demo BFF |
+| `sim-bpp` | 3002 | Local BPP simulator |
+| `onix-bap` | 8081 | ONIX BAP adapter (Go) |
+| `onix-bpp` | 8082 | ONIX BPP adapter (Go) |
+| `redis` | 6379 | Pub/Sub broker + ONIX cache |
+| `procurement-postgres` | 5432 | PostgreSQL 16 + pgvector |
+
+```bash
+# Start the full stack
+docker compose up -d
+
+# Start only the Beckn core (discovery infra)
+docker compose up -d redis onix-bap onix-bpp sim-bpp
+
+# Tail a single service
+docker compose logs -f orchestrator
+```
+
+All containers share the `beckn_network` bridge. Service discovery uses Docker DNS (`http://orchestrator:8004`, `http://data-normalizer:8006`, etc.).
+
+The MLOps stack (prediction-api, MLflow, training-pipeline, validation-service) is a separate `docker-compose.mlops.yaml` in `services/ComparativeAndScoreing/`.
 
 > [!milestone] Phase 4 Acceptance (Weeks 13–16)
 > From [[phase4_hardening_testing_production|Phase 4 Containerization milestone]]:

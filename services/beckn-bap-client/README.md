@@ -12,7 +12,7 @@ For a full architectural walkthrough including the Beckn v2.1 wire format, callb
 
 | Method | Path | Description |
 |---|---|---|
-| `GET` | `/health` | Liveness probe. Returns `{status: "ok", bap_id}`. |
+| `GET` | `/health` | Liveness probe. Returns `{"status": "ok", "service": "beckn-bap-client", "bap_id": "<bap_id>"}`. |
 | `POST` | `/discover` | Accepts a `BecknIntent` JSON body. Drives `discover_async()` through ONIX and returns `{transaction_id, offerings[]}`. Accepts an optional `transaction_id` field from the MCP Sidecar (see [Async Discovery](#async-discovery--on_discover-webhook) below). |
 | `POST` | `/select` | Sends a `/select` action to ONIX for a chosen offering. |
 | `POST` | `/init` | Sends `/init` with buyer billing and fulfillment details. Awaits `on_init` callback. |
@@ -26,12 +26,6 @@ For a full architectural walkthrough including the Beckn v2.1 wire format, callb
 | `POST` | `/on_discover` | **Primary async webhook for discovery results.** See [Async Discovery](#async-discovery--on_discover-webhook). |
 | `POST` | `/bap/receiver/{action}` | Generic callback receiver for `on_select`, `on_init`, `on_confirm`, `on_status`, etc. Routes through `CallbackCollector`. |
 | `POST` | `/{action}` | Wildcard — real Beckn network callbacks that arrive directly (bypassing the receiver path). |
-
-### Local BPP catalog (development only)
-
-| Method | Path | Description |
-|---|---|---|
-| `POST` | `/bpp/discover` | Acts as a local BPP for the `generic-routing-BAPCaller.yaml` discover route. Returns an ACK immediately and fires an async self-callback to `/on_discover`. In production this is replaced by a real Discovery Service. |
 
 ---
 

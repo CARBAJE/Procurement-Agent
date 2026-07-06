@@ -38,7 +38,6 @@
 │  POST /confirm   → BecknClient.confirm()        → ONIX              │
 │  POST /status    → BecknClient.status()         → ONIX              │
 │  POST /bap/receiver/{action}  ← callbacks ONIX                      │
-│  POST /bpp/discover           ← catálogo local (ONIX routing)       │
 └──────┬───────────────────────────────────────────────┬──────────────┘
        │ HTTP :8081                                    │ HTTP :8005
        ▼                                               ▼
@@ -325,8 +324,13 @@ Heredados de Bap-1 salvo donde se indica lo contrario.
 | `BAP_URI` | `http://localhost:8002` | URI pública de este servicio (para callbacks) |
 | `BAP_ID` | `bap.example.com` | Identificador BAP en la red Beckn |
 | `DOMAIN` | `nic2004:52110` | Network domain (Beckn context) |
+| `COUNTRY` | `IND` | País (Beckn context) |
+| `CITY` | `std:080` | Ciudad (Beckn context) |
+| `CORE_VERSION` | `2.0.0` | Versión del protocolo Beckn |
+| `REQUEST_TIMEOUT` | `30` | Timeout HTTP general para llamadas outbound |
 | `CALLBACK_TIMEOUT` | `10.0` | Segundos a esperar por callbacks `on_*` |
 | `CATALOG_NORMALIZER_URL` | `http://localhost:8005` | URL del microservicio catalog-normalizer |
+| `REDIS_URL` | `redis://localhost:6379` | Redis para publisher de `/on_discover` |
 
 ---
 

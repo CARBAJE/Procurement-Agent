@@ -22,9 +22,11 @@ webhook ingress that mirrors vendor-side state changes back into the agent.
                                                           │ webhook
                                                           ▼
                               ┌────────────────  POST /api/v1/webhooks/{vendor}/po-status
-                              │ HMAC verify, normalize, persist, Redis publish
+                              │ HMAC verify, normalize, persist
+                              │ Kafka publish (primary) → po.status.changed
+                              │ Redis publish (fallback) → po.status_changed:{txn_id}
                               ▼
-                       po.status_changed:{txn_id}  (orchestrator subscribes)
+                       orchestrator / notification-dispatcher subscribe
 ```
 
 ## Endpoints
@@ -40,7 +42,8 @@ webhook ingress that mirrors vendor-side state changes back into the agent.
 | POST   | `/api/v1/admin/outbox/{sync_id}/replay`  | bearer        | Reset a DLQ row to `pending` |
 | POST   | `/api/v1/webhooks/sap/po-status`         | HMAC          | Inbound from SAP S/4HANA |
 | POST   | `/api/v1/webhooks/oracle/po-status`      | HMAC          | Inbound from Oracle ERP Cloud |
-| POST   | `/api/v1/webhooks/mock/po-status`        | HMAC          | Inbound from `services/erp-mock` (dev only) |
+| POST   | `/api/v1/webhooks/mock/po-status`        | HMAC          | Inbound from `services/erp-mock` (dev only). Uses `SAP_WEBHOOK_HMAC_SECRET` — mock reuses SAP secret by convention. |
+| POST   | `/api/v1/policy/evaluate`                | bearer        | ERP policy gate (orchestrator's PolicyEngine). Returns preferred_supplier_ids, approval_required, auto_commit_allowed, constraints. Fail-open on transient error. |
 
 `bearer` = `Authorization: Bearer ${ERP_INTERNAL_TOKEN}`. Webhooks verify
 `X-{Vendor}-Signature: sha256=...` against `{VENDOR}_WEBHOOK_HMAC_SECRET`
@@ -72,6 +75,7 @@ webhook ingress that mirrors vendor-side state changes back into the agent.
 
 | Var | Default | |
 |---|---|---|
+| `ERP_BUDGET_CHECK_REQUIRED` | `true` | Fail-closed in prod: budget denial blocks commit. Set to `false` in dev to fail-open. |
 | `BUDGET_CHECK_TOTAL_TIMEOUT_MS` | 800 | Hard wall budget on `/commit`'s critical path |
 | `BREAKER_FAIL_MAX` | 5 | Failures inside reset_timeout that open the circuit |
 | `BREAKER_RESET_TIMEOUT_SECS` | 60 | Half-open delay |
@@ -205,7 +209,7 @@ PYTHONIOENCODING=utf-8 python services/erp-adapter/tests/smoke_m35.py   # readyz
 - `erp.audit` logger emits one JSON line per business event: `BUDGET_CHECK`,
   `PO_SYNC_ENQUEUED`, `PO_SYNC_ATTEMPT`, `PO_SYNC_SENT`, `PO_SYNC_RETRY`,
   `PO_DLQ`, `PO_REPLAY`, `WEBHOOK_RECEIVED`, `WEBHOOK_REJECTED`,
-  `STATE_DISCREPANCY` (orchestrator-side).
+  `STATE_DISCREPANCY` (orchestrator-side), `POLICY_EVAL`.
 - `deploy/alerts.yaml` ships 6 Prometheus alerting rules tuned to the SLO
   budgets in this README.
 

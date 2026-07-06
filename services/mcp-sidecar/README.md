@@ -72,8 +72,8 @@ All configuration is read from environment variables at startup. The sidecar als
 | `BAP_API_KEY` | *(none)* | **Mandatory** | API key or JWT for authenticating requests to the BAP Client. Passed as `Authorization: Bearer <value>` on every `POST /discover` call. **The service will raise a `ValidationError` and refuse to start if this variable is absent from the environment.** |
 | `BAP_CLIENT_URL` | `http://localhost:8002` | Optional | Base URL of the BAP Client service. Port `8002` is exposed by Docker Compose. |
 | `PORT` | `3000` | Optional | Port the SSE server listens on. Must match `MCP_SSE_URL` configured in the IntentParser. |
-| `REDIS_URL` | `redis://localhost:6379` | Optional | Redis connection string. Port `6379` is exposed by Docker Compose. Change to `redis://redis:6379` if running this service inside Docker. |
-| `REDIS_RESULT_TIMEOUT` | `15` | Optional | **Seconds to await a `beckn_results:{txn_id}` message on the Redis Pub/Sub channel before giving up.** This is the primary latency ceiling for the live Beckn probe — set it to accommodate your network's worst-case `on_discover` callback delay. On expiry the sidecar returns `{"found": false, "items": [], "probe_latency_ms": <elapsed>}`. |
+| `REDIS_URL` | `redis://localhost:6379` | Optional | Redis connection string. Port `6379` is exposed by Docker Compose. Change to `redis://redis:6379` if running this service inside Docker. **Must be set as a real environment variable — not just in `.env`.** See note below. |
+| `REDIS_RESULT_TIMEOUT` | `15` | Optional | **Seconds to await a `beckn_results:{txn_id}` message on the Redis Pub/Sub channel before giving up.** This is the primary latency ceiling for the live Beckn probe. On expiry the sidecar returns `{"found": false, "items": [], "probe_latency_ms": <elapsed>}`. **Must be set as a real environment variable — not just in `.env`.** See note below. |
 | `MCP_BAP_TIMEOUT` | `3.0` | Optional | Timeout (seconds) for the `POST /discover` HTTP task. This is a **fire-and-forget** call: the sidecar does not wait for the HTTP response to contain catalog data — results arrive via Redis. The HTTP task is cancelled (gracefully) once the Redis message is received or `REDIS_RESULT_TIMEOUT` elapses. Set this high enough to give the BAP Client time to accept the request; it does not need to cover the full Beckn round-trip. |
 | `RANKING_MIN_SIMILARITY` | `0.30` | Optional | Cosine similarity threshold (0–1) below which ONIX results are discarded before being returned to the IntentParser. Scores are computed with `all-MiniLM-L6-v2`; higher values produce more precise but potentially empty result sets. |
 
@@ -94,6 +94,8 @@ t=REDIS_RESULT_TIMEOUT (15 s default)
 ```
 
 `MCP_BAP_TIMEOUT` acts as a safety valve for the HTTP layer only. The meaningful latency ceiling is `REDIS_RESULT_TIMEOUT`.
+
+> **`REDIS_URL` and `REDIS_RESULT_TIMEOUT` are read via `os.getenv()` in `bap_client.py`, not as pydantic-settings fields.** This means a `.env` file alone will NOT set them — you must export them as real environment variables (`export REDIS_URL=...`) or set them in Docker Compose's `environment:` block. The four pydantic-settings fields (`BAP_CLIENT_URL`, `PORT`, `MCP_BAP_TIMEOUT`, `RANKING_MIN_SIMILARITY`) do load from `.env`.
 
 ### Example `.env` file (local development only)
 
@@ -181,7 +183,7 @@ The only tool this sidecar exposes. Called by the IntentParser's Stage 3 hybrid 
 
 | Argument | Type | Required | Description |
 |---|---|---|---|
-| `item_name` | `string` | Yes | Canonical item name extracted by the IntentParser (e.g. `"Stainless Steel Flanged Ball Valve"`). A blank or whitespace-only value returns `found: false` immediately without calling the BAP Client. |
+| `item_name` | `string` | Yes | Canonical item name extracted by the IntentParser (e.g. `"Stainless Steel Flanged Ball Valve"`). A blank or whitespace-only value returns `found: false` immediately without calling the BAP Client. Same fast-fail applies to blank `domain` or `version`. |
 | `descriptions` | `array[string]` | Yes | Specification tokens from the BecknIntent (e.g. `["PN16", "2 inch", "SS316"]`). An empty array `[]` is valid — it means no specification tokens were extracted. |
 | `domain` | `string` | Yes | Beckn domain identifier (e.g. `"procurement"`). Mapped directly into the Beckn `context.domain` field. The sidecar imposes no allowlist; multi-domain support is achieved by updating this argument. |
 | `version` | `string` | Yes | Beckn protocol version (e.g. `"1.1.0"`). Mapped into `context.version`. |
@@ -215,7 +217,7 @@ The only tool this sidecar exposes. Called by the IntentParser's Stage 3 hybrid 
 }
 ```
 
-This shape is returned for: BAP Client timeout, BAP Client unreachable, zero ONIX matches, malformed ONIX response, blank required argument, or any unhandled internal exception. `probe_latency_ms` is the actual elapsed time; on a timeout it approximates `MCP_BAP_TIMEOUT × 1000`.
+This shape is returned for: BAP Client timeout, BAP Client unreachable, zero ONIX matches, malformed ONIX response, blank required argument, or any unhandled internal exception. `probe_latency_ms` is the actual elapsed time; on a timeout it approximates `REDIS_RESULT_TIMEOUT × 1000` (15,000 ms by default) — the Redis await is the primary ceiling, not `MCP_BAP_TIMEOUT`.
 
 #### Field reference
 

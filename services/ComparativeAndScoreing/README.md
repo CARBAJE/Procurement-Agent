@@ -18,28 +18,16 @@ The service is **strictly decomposed into independently deployable microservices
 that communicate only through MLflow (model artifacts + metrics) and the catalog
 payload schema (`shared/models.DiscoverOffering`).
 
-```
-              ┌─────────────────────────────────────────┐
-              │            MLflow Tracking              │
-              │  (Postgres backend + artifact volume)   │
-              │            :5000                        │
-              └────────┬────────────────────────┬───────┘
-                       │ register / promote      │ load Production
-                       │                         │
-        ┌──────────────▼─────────┐   ┌──────────▼──────────────┐
-        │   training-pipeline    │   │     prediction-api      │
-        │  (batch — SGD/AdamW)   │   │   FastAPI :8004         │
-        │  Auto-promote -> Staging│   │   POST /score           │
-        └──────────────▲─────────┘   │   POST /reload          │
-                       │             │   GET  /health          │
-                       │             └─────────────────────────┘
-        ┌──────────────┴─────────┐
-        │   validation-service   │
-        │ (weekly cron — NDCG@5  │
-        │  drift check)          │
-        │  Writes flag + exit≠0  │
-        │  on degradation        │
-        └────────────────────────┘
+```mermaid
+flowchart TD
+    TP["training-pipeline\nbatch SGD/AdamW\nauto-promotes → Staging"]
+    VS["validation-service\nweekly NDCG@5 drift check"]
+    MLF["MLflow Tracking :5000\nPostgres + artifact store"]
+    PA["prediction-api :8004\nFastAPI\nPOST /score · /reload · GET /health"]
+
+    TP -->|"register / promote"| MLF
+    VS -->|"loads Production model"| MLF
+    MLF -->|"load Production"| PA
 ```
 
 ### Component Layout
@@ -250,9 +238,13 @@ dataclasses in the batch scripts). Never `os.getenv()` inline elsewhere.
 ## Relationship to the Existing `comparative-scoring` Service
 
 The repo already contains [`services/comparative-scoring/`](../comparative-scoring/),
-a thin aiohttp wrapper around the legacy Phase 1 hand-coded scorer. This new
-`ComparativeAndScoreing/` service is the **Phase 2 successor** and is intended to
-**replace** that service in production once:
+a thin aiohttp adapter that calls **this service's `prediction-api`** as its primary path
+and falls back to the Phase 1 heuristic only when `prediction-api` is unreachable.
+`comparative-scoring` is already wired to Phase 2 — the transition described below
+has effectively happened at the adapter level. `ComparativeAndScoreing/` provides
+the MLOps training and inference stack that `comparative-scoring` depends on.
+
+The production handover (replacing the Phase 1 fallback entirely) completes once:
 
 1. ≥ 5 000 override events have accumulated in the audit trail,
 2. The training pipeline has produced a model with NDCG@5 ≥ 0.85,
