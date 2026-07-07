@@ -10,12 +10,17 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import {
+  Dialog, DialogContent, DialogDescription,
+  DialogFooter, DialogHeader, DialogTitle,
+} from "@/components/ui/dialog"
 import { Skeleton } from "@/components/ui/skeleton"
 import ComparisonTable from "@/components/procurement/ComparisonTable"
 import ScoringPanel    from "@/components/procurement/ScoringPanel"
 import ReasoningPanel  from "@/components/procurement/ReasoningPanel"
-import { decideRun, getRun } from "@/lib/api"
+import { cancelRequest, decideRun, getRun } from "@/lib/api"
 import { loadRunSession, loadSession, saveRunSession, saveSession } from "@/lib/session-store"
+import { useNavigationGuard } from "@/hooks/useNavigationGuard"
 import type { BecknIntent, ComparisonResult, PolicyDecision, RunResult } from "@/lib/types"
 import axios from "axios"
 
@@ -158,6 +163,22 @@ export default function RunView({ runId }: RunViewProps) {
   const [loading,    setLoading]    = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [error,      setError]      = useState("")
+
+  // Guard is active only while the user is in an interactive stage and has a
+  // request that can still be cancelled. Terminal stages disable it.
+  const TERMINAL_STAGES = new Set(["confirmed", "rejected", "no_offerings", "awaiting_rbac_approval"])
+  const guardEnabled = !loading && run !== null && !TERMINAL_STAGES.has(run.stage)
+
+  const { showModal: showLeaveModal, confirming: cancellingRequest,
+          dismiss: dismissLeave, confirmLeave } = useNavigationGuard(
+    guardEnabled,
+    async (target) => {
+      if (run?.request_id) {
+        try { await cancelRequest(run.request_id) } catch { /* handled by TTL cleanup */ }
+      }
+      router.push(target)
+    },
+  )
 
   // Redirect to the full order page whenever the run reaches the confirmed stage.
   // persistConfirmedSession writes the WizardSession for all modes (autonomous,
@@ -537,6 +558,34 @@ export default function RunView({ runId }: RunViewProps) {
           messages={run.messages ?? []}
         />
       )}
+
+      {/* ── Leave / cancel confirmation ────────────────────────────────────── */}
+      <Dialog open={showLeaveModal} onOpenChange={(o) => { if (!o) dismissLeave() }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Cancel this request?</DialogTitle>
+            <DialogDescription>
+              If you leave now, this procurement request will be automatically
+              cancelled. You will not be able to resume it later.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="flex flex-col-reverse sm:flex-row gap-2">
+            <Button variant="outline" onClick={dismissLeave} disabled={cancellingRequest}>
+              Stay on page
+            </Button>
+            <Button variant="destructive" onClick={confirmLeave} disabled={cancellingRequest}>
+              {cancellingRequest ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
+                  Cancelling…
+                </>
+              ) : (
+                "Yes, cancel request"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

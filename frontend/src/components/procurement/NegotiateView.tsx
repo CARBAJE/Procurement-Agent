@@ -6,9 +6,14 @@ import { AlertCircle, ArrowLeft, Hash, Loader2 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import {
+  Dialog, DialogContent, DialogDescription,
+  DialogFooter, DialogHeader, DialogTitle,
+} from "@/components/ui/dialog"
 import NegotiationStepper from "@/components/procurement/NegotiationStepper"
-import { commitOrder } from "@/lib/api"
-import { patchSession, saveSession } from "@/lib/session-store"
+import { cancelRequest, commitOrder } from "@/lib/api"
+import { loadSession, patchSession, saveSession } from "@/lib/session-store"
+import { useNavigationGuard } from "@/hooks/useNavigationGuard"
 
 export interface NegotiateViewProps {
   txnId: string
@@ -47,6 +52,24 @@ export default function NegotiateView({
   const [error, setError] = useState("")
 
   const hasTerms = Boolean(supplierId && item && listPrice && listPrice > 0)
+
+  // The DB request_id lives in the session comparison block; txnId alone is
+  // the Beckn transaction_id and what the /cancel endpoint needs.
+  const requestIdForCancel =
+    loadSession(txnId)?.comparison?.request_id ?? txnId
+
+  // Guard is active whenever negotiation terms are in play (hasTerms).
+  // Deactivate only after the user proceeds through to the order page.
+  const [guardActive, setGuardActive] = useState(true)
+
+  const { showModal: showLeaveModal, confirming: cancellingRequest,
+          dismiss: dismissLeave, confirmLeave } = useNavigationGuard(
+    hasTerms && guardActive,
+    async (target) => {
+      try { await cancelRequest(requestIdForCancel) } catch { /* handled by TTL cleanup */ }
+      router.push(target)
+    },
+  )
   // Buyer aims for ~18% below the supplier's list price — inside the engine's
   // hard 20% discount guardrail, leaving real room to converge.
   const targetPrice = hasTerms ? Math.max(1, Math.round((listPrice as number) * 0.82)) : 0
@@ -55,6 +78,8 @@ export default function NegotiateView({
     price: number | null
     deliveryDate: string | null
   }) {
+    // Disable guard before navigating intentionally through the flow.
+    setGuardActive(false)
     patchSession(txnId, {
       chosenItemId: itemId ?? null,
       negotiation: {
@@ -99,6 +124,7 @@ export default function NegotiateView({
   }
 
   function backToCompare() {
+    setGuardActive(false)
     router.push(returnTo ?? `/request/${encodeURIComponent(txnId)}/compare`)
   }
 
@@ -171,6 +197,34 @@ export default function NegotiateView({
           )}
         </>
       )}
+
+      {/* ── Leave / cancel confirmation ─────────────────────────────────────── */}
+      <Dialog open={showLeaveModal} onOpenChange={(o) => { if (!o) dismissLeave() }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Cancel this request?</DialogTitle>
+            <DialogDescription>
+              If you leave now, this procurement request will be automatically
+              cancelled. You will not be able to resume the negotiation later.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="flex flex-col-reverse sm:flex-row gap-2">
+            <Button variant="outline" onClick={dismissLeave} disabled={cancellingRequest}>
+              Stay on page
+            </Button>
+            <Button variant="destructive" onClick={confirmLeave} disabled={cancellingRequest}>
+              {cancellingRequest ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
+                  Cancelling…
+                </>
+              ) : (
+                "Yes, cancel request"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
