@@ -2849,6 +2849,51 @@ def _erp_state_for(txn_id: str) -> dict | None:
     return payload
 
 
+async def _cleanup_stale_requests_loop() -> None:
+    """Cancel stale non-terminal requests every 5 minutes via data-normalizer.
+
+    Non-approval statuses (draft/parsing/discovering/scoring/negotiating) are
+    cancelled after 30 min — matching the in-memory session TTL.
+    pending_approval requests are cancelled after 24 hours.
+    """
+    await asyncio.sleep(60)  # initial delay so the app is fully up first
+    while True:
+        if DATA_NORMALIZER_URL:
+            try:
+                async with aiohttp.ClientSession() as s:
+                    async with s.post(
+                        f"{DATA_NORMALIZER_URL}/normalize/cancel_stale",
+                        timeout=aiohttp.ClientTimeout(total=10),
+                    ) as resp:
+                        if resp.status == 200:
+                            data = await resp.json()
+                            if data.get("count", 0) > 0:
+                                logger.info(
+                                    "[cleanup] auto-cancelled %d stale request(s): %s",
+                                    data["count"],
+                                    data.get("cancelled", []),
+                                )
+            except Exception as exc:
+                logger.warning("[cleanup] stale-request cleanup error: %s", exc)
+        await asyncio.sleep(300)  # run every 5 minutes
+
+
+async def _on_startup_cleanup(app: web.Application) -> None:
+    app["cleanup_task"] = asyncio.create_task(
+        _cleanup_stale_requests_loop(), name="stale-request-cleanup",
+    )
+
+
+async def _on_cleanup_cleanup(app: web.Application) -> None:
+    task = app.get("cleanup_task")
+    if task is not None:
+        task.cancel()
+        try:
+            await task
+        except (asyncio.CancelledError, Exception):
+            pass
+
+
 async def _on_startup_kafka(app: web.Application) -> None:
     """Start the Kafka producer + consumer. Degrades silently if unavailable —
     the polling fallback in the frontend will continue to work."""
@@ -3905,6 +3950,8 @@ async def decide_run(request: web.Request) -> web.Response:
 
 def create_app() -> web.Application:
     app = web.Application()
+    app.on_startup.append(_on_startup_cleanup)
+    app.on_cleanup.append(_on_cleanup_cleanup)
     app.on_startup.append(_on_startup_kafka)
     app.on_cleanup.append(_on_cleanup_kafka)
     app.router.add_get("/health",                          health)

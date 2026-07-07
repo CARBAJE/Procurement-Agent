@@ -435,7 +435,9 @@ export default function HomePage() {
           </CardHeader>
           <CardContent>
             <RecentRequestsTable
-              requests={analytics?.recent_requests ?? []}
+              requests={(analytics?.recent_requests ?? []).filter(
+                (r) => r.status === "confirmed" || r.status === "cancelled",
+              )}
               onRowClick={(req) =>
                 router.push(`/request/${encodeURIComponent(req.request_id)}/order`)
               }

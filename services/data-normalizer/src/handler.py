@@ -507,6 +507,33 @@ async def normalize_memory_search(request: web.Request) -> web.Response:
 
 # ── App factory ───────────────────────────────────────────────────────────────
 
+async def normalize_cancel_stale(request: web.Request) -> web.Response:
+    """POST /normalize/cancel_stale
+    Bulk-cancels procurement requests stuck in a non-terminal state:
+    - Non-approval statuses (draft/parsing/discovering/scoring/negotiating) after 30 min.
+    - pending_approval after 24 hours.
+    Returns: {cancelled: [request_ids], count: int}
+    """
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            """
+            UPDATE procurement_requests
+            SET status = 'cancelled'
+            WHERE (
+                status NOT IN ('confirmed', 'cancelled', 'pending_approval')
+                AND created_at < NOW() - INTERVAL '30 minutes'
+            ) OR (
+                status = 'pending_approval'
+                AND created_at < NOW() - INTERVAL '24 hours'
+            )
+            RETURNING request_id::text
+            """,
+        )
+    cancelled = [r["request_id"] for r in rows]
+    return web.json_response({"cancelled": cancelled, "count": len(cancelled)})
+
+
 async def _on_shutdown(app: web.Application) -> None:
     await close_pool()
 
@@ -531,6 +558,7 @@ def create_app() -> web.Application:
     app.router.add_post("/approvals/{request_id}/decide",    decide_approval)
     app.router.add_post("/normalize/memory/write",           normalize_memory_write)
     app.router.add_post("/normalize/memory/search",          normalize_memory_search)
+    app.router.add_post("/normalize/cancel_stale",           normalize_cancel_stale)
     app.on_shutdown.append(_on_shutdown)
     return app
 

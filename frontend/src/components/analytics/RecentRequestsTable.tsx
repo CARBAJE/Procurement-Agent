@@ -119,7 +119,7 @@ export default function RecentRequestsTable({ requests, onRowClick }: RecentRequ
               <tr>
                 <th scope="col" className="text-left py-2 px-3 font-medium text-muted-foreground">Request</th>
                 <th scope="col" className="text-left py-2 px-3 font-medium text-muted-foreground">Status</th>
-                <th scope="col" className="text-right py-2 px-3 font-medium text-muted-foreground">Total Price</th>
+                <th scope="col" className="text-right py-2 px-3 font-medium text-muted-foreground">Total spent</th>
                 <th scope="col" className="text-right py-2 px-3 font-medium text-muted-foreground whitespace-nowrap">Date</th>
               </tr>
             </thead>
@@ -248,14 +248,6 @@ export default function RecentRequestsTable({ requests, onRowClick }: RecentRequ
                   <p className="text-muted-foreground">
                     {STATUS_MESSAGE[infoReq.status] ?? "This request has no confirmed order yet."}
                   </p>
-                  {!isCancelled && (
-                    <p className="text-xs text-muted-foreground border-t pt-2 mt-2">
-                      <span className="font-medium text-foreground">Can I resume this request?</span>{" "}
-                      No — the agent session is held in-memory with a 30-minute window. Once that
-                      window closes the session cannot be recovered. To proceed with a similar purchase,
-                      start a new request.
-                    </p>
-                  )}
                 </div>
               </div>
             )
