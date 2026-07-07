@@ -377,7 +377,8 @@ export default function HomePage() {
             title="Total Spend"
             value={kpis ? formatINR(kpis.total_spend) : "—"}
             subtitle={`Period: ${period}`}
-            icon={<DollarSign className="h-4 w-4" />}
+            icon={<DollarSign className="h-6 w-6" />}
+            iconContainerClassName="rounded-lg p-2 bg-blue-50 text-blue-600"
             onClick={openSpendDrillDown}
           />
           <KpiCard
@@ -385,21 +386,24 @@ export default function HomePage() {
             value={hasSpend ? formatINR(kpis!.total_savings) : "—"}
             subtitle={hasSpend ? `${kpis!.savings_percent}% vs market price` : undefined}
             trend={hasSpend ? { label: `${kpis!.savings_percent}% saved`, positive: true } : undefined}
-            icon={<TrendingUp className="h-4 w-4" />}
+            icon={<TrendingUp className="h-6 w-6" />}
+            iconContainerClassName="rounded-lg p-2 bg-green-50 text-green-600"
             onClick={openSavingsDrillDown}
           />
           <KpiCard
             title="Active Requests"
             value={kpis ? String(kpis.active_requests) : "—"}
             subtitle="Awaiting response"
-            icon={<Clock className="h-4 w-4" />}
+            icon={<Clock className="h-6 w-6" />}
+            iconContainerClassName="rounded-lg p-2 bg-amber-50 text-amber-600"
             onClick={openActiveDrillDown}
           />
           <KpiCard
             title="Completed"
             value={kpis ? String(kpis.completed_this_month) : "—"}
             subtitle="This month"
-            icon={<CheckCircle className="h-4 w-4" />}
+            icon={<CheckCircle className="h-6 w-6" />}
+            iconContainerClassName="rounded-lg p-2 bg-emerald-50 text-emerald-600"
             onClick={openCompletedDrillDown}
           />
           <KpiCard
@@ -407,14 +411,16 @@ export default function HomePage() {
             value={hasCycle ? `${kpis!.avg_cycle_time_hours}h` : "—"}
             subtitle={hasCycle ? `vs ${kpis!.baseline_cycle_time_hours}h traditional` : "No completed requests yet"}
             trend={hasCycle ? { label: `${cycleReduction}% faster`, positive: true } : undefined}
-            icon={<BarChart2 className="h-4 w-4" />}
+            icon={<BarChart2 className="h-6 w-6" />}
+            iconContainerClassName="rounded-lg p-2 bg-violet-50 text-violet-600"
             onClick={openCycleDrillDown}
           />
           <KpiCard
             title="Pend. Approval"
             value={kpis ? String(kpis.pending_approval) : "—"}
             subtitle="Require review"
-            icon={<AlertCircle className="h-4 w-4" />}
+            icon={<AlertCircle className="h-6 w-6" />}
+            iconContainerClassName="rounded-lg p-2 bg-rose-50 text-rose-600"
             onClick={openPendingDrillDown}
           />
         </div>

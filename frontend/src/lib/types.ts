@@ -265,6 +265,7 @@ export interface AnalyticsRequest {
   status: string
   category: string | null
   agreed_price: number | null
+  quantity?: number | null
   currency: string
   created_at: string
   user_overridden: boolean | null

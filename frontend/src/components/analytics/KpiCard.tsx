@@ -8,10 +8,11 @@ interface KpiCardProps {
   subtitle?: string
   trend?: { label: string; positive: boolean }
   icon: React.ReactNode
+  iconContainerClassName?: string
   onClick?: () => void
 }
 
-export default function KpiCard({ title, value, subtitle, trend, icon, onClick }: KpiCardProps) {
+export default function KpiCard({ title, value, subtitle, trend, icon, iconContainerClassName, onClick }: KpiCardProps) {
   const interactive = Boolean(onClick)
 
   return (
@@ -37,7 +38,9 @@ export default function KpiCard({ title, value, subtitle, trend, icon, onClick }
     >
       <CardHeader className="flex flex-row items-center justify-between pb-2">
         <CardTitle className="text-sm font-medium text-muted-foreground">{title}</CardTitle>
-        <div className="text-muted-foreground">{icon}</div>
+        <div className={cn("rounded-lg p-2 shrink-0", iconContainerClassName ?? "bg-muted text-muted-foreground")}>
+          {icon}
+        </div>
       </CardHeader>
       <CardContent>
         <div className="text-2xl font-bold">{value}</div>

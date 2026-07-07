@@ -349,6 +349,7 @@ async def fetch_analytics(pool: Any, period: str) -> dict:
                 pr.category,
                 pr.created_at,
                 pod.agreed_price,
+                pod.quantity,
                 pod.currency,
                 pod.user_overridden
             FROM procurement_requests pr
@@ -356,6 +357,7 @@ async def fetch_analytics(pool: Any, period: str) -> dict:
                 SELECT
                     pi2.request_id,
                     po2.agreed_price::float AS agreed_price,
+                    po2.quantity::int       AS quantity,
                     po2.currency,
                     sc2.user_overridden
                 FROM purchase_orders  po2
@@ -376,11 +378,12 @@ async def fetch_analytics(pool: Any, period: str) -> dict:
         )
         recent_requests = [
             {
-                "request_id":    r["request_id"],
+                "request_id":     r["request_id"],
                 "raw_input_text": r["raw_input_text"],
-                "status":        r["status"],
-                "category":      r["category"],
+                "status":         r["status"],
+                "category":       r["category"],
                 "agreed_price":   float(r["agreed_price"]) if r["agreed_price"] is not None else None,
+                "quantity":       int(r["quantity"]) if r["quantity"] is not None else None,
                 "currency":       r["currency"] if r["currency"] else "INR",
                 "created_at":     r["created_at"].isoformat() + "Z",
                 "user_overridden": bool(r["user_overridden"]) if r["user_overridden"] is not None else None,
