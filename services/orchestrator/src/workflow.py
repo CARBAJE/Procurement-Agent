@@ -2146,6 +2146,18 @@ async def commit(request: web.Request) -> web.Response:
     if not txn_id or not chosen_item_id:
         raise web.HTTPBadRequest(reason="transaction_id and chosen_item_id are required")
 
+    # Optional negotiated price: when present, overrides catalog price for the
+    # Beckn messages AND for the agreed_price written to purchase_orders.
+    negotiated_price_raw = body.get("negotiated_price")
+    negotiated_price: float | None = None
+    if negotiated_price_raw is not None:
+        try:
+            p = float(negotiated_price_raw)
+            if p > 0:
+                negotiated_price = p
+        except (TypeError, ValueError):
+            pass
+
     state = _session_get(txn_id)
     if state is None:
         raise web.HTTPNotFound(reason=f"Unknown transaction_id: {txn_id}")
@@ -2156,6 +2168,10 @@ async def commit(request: web.Request) -> web.Response:
         raise web.HTTPUnprocessableEntity(
             reason=f"chosen_item_id {chosen_item_id!r} is not in the compared offerings"
         )
+
+    # Use negotiated price for all downstream calculations if provided.
+    if negotiated_price is not None:
+        chosen = {**chosen, "price_value": str(negotiated_price)}
 
     bpp_id = chosen["bpp_id"]
     bpp_uri = chosen["bpp_uri"]

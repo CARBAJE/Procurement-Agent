@@ -39,10 +39,14 @@ export async function compareOfferings(
 export async function commitOrder(
   transactionId: string,
   chosenItemId: string,
+  negotiatedPrice?: number | null,
 ): Promise<CommitResult> {
   const { data } = await axios.post<CommitResult>("/api/procurement/commit", {
-    transaction_id: transactionId,
-    chosen_item_id: chosenItemId,
+    transaction_id:  transactionId,
+    chosen_item_id:  chosenItemId,
+    ...(negotiatedPrice != null && negotiatedPrice > 0
+      ? { negotiated_price: negotiatedPrice }
+      : {}),
   })
   return data
 }

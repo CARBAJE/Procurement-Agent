@@ -103,7 +103,7 @@ export default function NegotiateView({
     setCommitting(true)
     setError("")
     try {
-      const result = await commitOrder(txnId, itemId)
+      const result = await commitOrder(txnId, itemId, settled.price)
       const patched = patchSession(txnId, { commit: result })
       // Use request_id (DB UUID) for the order URL so the Audit Trail link
       // also resolves correctly (audit events are keyed by request_id, not
