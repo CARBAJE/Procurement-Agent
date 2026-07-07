@@ -12,7 +12,6 @@ const NAV_LINKS = [
   { href: "/",            label: "Home" },
   { href: "/dashboard",   label: "Dashboard" },
   { href: "/request/new", label: "New Request" },
-  { href: "/negotiation", label: "Negotiation" },
 ]
 
 const ROLE_COLORS: Record<string, "default" | "secondary" | "outline"> = {

@@ -1,10 +1,10 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import {
   AlertCircle, ArrowLeft, Clock, Handshake, Hash,
-  Loader2, Send, ShieldAlert, ThumbsDown, ThumbsUp,
+  Loader2, Send, ShieldAlert, Sparkles, ThumbsDown, ThumbsUp,
   XCircle, Info,
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
@@ -18,7 +18,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import ComparisonTable from "@/components/procurement/ComparisonTable"
 import ScoringPanel    from "@/components/procurement/ScoringPanel"
 import ReasoningPanel  from "@/components/procurement/ReasoningPanel"
-import { cancelRequest, decideRun, getRun } from "@/lib/api"
+import { cancelRequest, decideRun, explainSelection, getRun } from "@/lib/api"
 import { loadRunSession, loadSession, saveRunSession, saveSession } from "@/lib/session-store"
 import { useNavigationGuard } from "@/hooks/useNavigationGuard"
 import type { BecknIntent, ComparisonResult, PolicyDecision, RunResult } from "@/lib/types"
@@ -34,6 +34,122 @@ function extractError(err: unknown, fallback: string): string {
     return d.error ?? d.detail ?? fallback
   }
   return fallback
+}
+
+// ── Agent selection explanation ───────────────────────────────────────────────
+
+function SelectionExplanationCard({
+  run,
+  recommendedItemId,
+}: {
+  run: RunResult
+  recommendedItemId: string | null
+}) {
+  const [llmText,    setLlmText]    = useState<string | null>(null)
+  const [llmLoading, setLlmLoading] = useState(false)
+  const [llmError,   setLlmError]   = useState(false)
+  const called = useRef(false)
+
+  const rankingEntry = run.scoring?.ranking?.find((r) => r.item_id === recommendedItemId)
+
+  const providerName =
+    run.decision?.final_provider_name ??
+    run.offerings?.find((o) => o.item_id === recommendedItemId)?.provider_name ??
+    null
+
+  const rankAndSelectStep = run.reasoning_steps?.find((s) => s.node === "rank_and_select")
+
+  useEffect(() => {
+    if (!recommendedItemId || called.current) return
+    called.current = true
+
+    // Build one entry per offering with ALL its criterion scores — gives the LLM
+    // full cross-offering comparison data instead of just the winner's aggregate.
+    const offerings = (run.offerings ?? []).map((o) => {
+      const rankEntry = run.scoring?.ranking?.find((r) => r.item_id === o.item_id)
+      const scoreDetails = (run.scoring?.criteria ?? []).flatMap((criterion) => {
+        const row = criterion.scores.find((s) => s.item_id === o.item_id)
+        if (!row) return []
+        return [{
+          criterion:   criterion.label,
+          raw:         row.raw,
+          normalized:  row.normalized,
+          explanation: row.explanation,
+        }]
+      })
+      return {
+        provider:        o.provider_name,
+        item:            o.item_name,
+        price:           parseFloat(o.price_value) || 0,
+        currency:        o.price_currency ?? "INR",
+        delivery_hours:  o.fulfillment_hours ?? null,
+        composite_score: rankEntry?.composite_score ?? null,
+        rank:            rankEntry?.rank ?? null,
+        is_recommended:  o.item_id === recommendedItemId,
+        score_details:   scoreDetails,
+      }
+    })
+
+    setLlmLoading(true)
+    setLlmError(false)
+    explainSelection({
+      offerings,
+      recommended_provider:      providerName ?? "",
+      rank_and_select_summary:   rankAndSelectStep?.summary ?? null,
+    })
+      .then((res) => {
+        if (res.explanation) setLlmText(res.explanation)
+        else setLlmError(true)
+      })
+      .catch(() => setLlmError(true))
+      .finally(() => setLlmLoading(false))
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [recommendedItemId])
+
+  if (!recommendedItemId) return null
+
+  return (
+    <Card className="border-emerald-200 bg-emerald-50/30">
+      <CardContent className="pt-4 pb-4">
+        <div className="flex items-start gap-2.5">
+          <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-emerald-100 text-emerald-700">
+            <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
+          </span>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-emerald-700">
+                Why the agent chose{providerName ? ` ${providerName}` : " this supplier"}
+              </p>
+              {rankingEntry && (
+                <span className="inline-flex items-center rounded-full border border-emerald-300 px-2 py-0.5 text-[10px] font-medium text-emerald-700">
+                  Score {(rankingEntry.composite_score * 100).toFixed(0)}% · Rank #{rankingEntry.rank}
+                </span>
+              )}
+            </div>
+
+            {llmLoading && (
+              <div className="space-y-1.5" role="status" aria-label="Generating explanation">
+                <Skeleton className="h-3.5 w-full" />
+                <Skeleton className="h-3.5 w-4/5" />
+                <Skeleton className="h-3.5 w-3/5" />
+              </div>
+            )}
+
+            {!llmLoading && llmText && (
+              <p className="text-sm text-foreground leading-relaxed">{llmText}</p>
+            )}
+
+            {!llmLoading && llmError && (
+              <p className="text-xs text-muted-foreground italic">
+                Could not generate explanation — ensure the IntentParser is running
+                (<span className="font-mono">uvicorn api:app --port 8001</span>).
+              </p>
+            )}
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  )
 }
 
 // ── Policy explanation strip ─────────────────────────────────────────────────
@@ -170,7 +286,7 @@ export default function RunView({ runId }: RunViewProps) {
   const guardEnabled = !loading && run !== null && !TERMINAL_STAGES.has(run.stage)
 
   const { showModal: showLeaveModal, confirming: cancellingRequest,
-          dismiss: dismissLeave, confirmLeave } = useNavigationGuard(
+          dismiss: dismissLeave, confirmLeave, trigger: triggerLeave } = useNavigationGuard(
     guardEnabled,
     async (target) => {
       if (run?.request_id) {
@@ -449,6 +565,7 @@ export default function RunView({ runId }: RunViewProps) {
             selectedItemId={isApproval ? recommendedItemId : selectedId}
             onSelect={isApproval ? () => {} : setSelectedId}
           />
+          <SelectionExplanationCard run={run} recommendedItemId={recommendedItemId} />
         </div>
         {scoring && (
           <div>
@@ -465,7 +582,7 @@ export default function RunView({ runId }: RunViewProps) {
       <div className="flex items-center justify-between pt-2 border-t flex-wrap gap-3">
         <Button
           variant="outline"
-          onClick={() => router.push("/request/new")}
+          onClick={() => guardEnabled ? triggerLeave("/request/new") : router.push("/request/new")}
           disabled={submitting}
         >
           <ArrowLeft className="mr-2 h-4 w-4" aria-hidden="true" />

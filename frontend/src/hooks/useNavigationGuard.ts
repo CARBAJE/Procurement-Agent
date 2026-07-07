@@ -106,5 +106,11 @@ export function useNavigationGuard(
     }
   }
 
-  return { showModal, confirming, dismiss, confirmLeave }
+  /** Programmatically trigger the leave modal (e.g. from a Cancel button). */
+  function trigger(href: string) {
+    intendedHref.current = href
+    setShowModal(true)
+  }
+
+  return { showModal, confirming, dismiss, confirmLeave, trigger }
 }

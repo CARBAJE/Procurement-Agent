@@ -340,6 +340,8 @@ async def fetch_analytics(pool: Any, period: str) -> dict:
         ]
 
         # ── Recent requests with PO price when available ──────────────────────
+        # Prefer the direct request_id FK (populated for all new orders).
+        # Fall back to the deep JOIN chain for older orders that lack it.
         req_rows = await conn.fetch(
             """
             SELECT
@@ -353,23 +355,34 @@ async def fetch_analytics(pool: Any, period: str) -> dict:
                 pod.currency,
                 pod.user_overridden
             FROM procurement_requests pr
-            LEFT JOIN (
-                SELECT
-                    pi2.request_id,
+            LEFT JOIN LATERAL (
+                SELECT DISTINCT ON (po2.request_id)
                     po2.agreed_price::float AS agreed_price,
                     po2.quantity::int       AS quantity,
                     po2.currency,
                     sc2.user_overridden
-                FROM purchase_orders  po2
-                JOIN approval_decisions   ad2  ON po2.approval_id     = ad2.approval_id
-                JOIN negotiation_outcomes no2  ON ad2.negotiation_id  = no2.negotiation_id
-                JOIN scored_offers        sc2  ON no2.score_id        = sc2.score_id
-                JOIN seller_offerings     sof2 ON sc2.offering_id     = sof2.offering_id
-                JOIN discovery_queries    dq2  ON sof2.query_id       = dq2.query_id
-                JOIN beckn_intents        bi2  ON dq2.beckn_intent_id = bi2.beckn_intent_id
-                JOIN parsed_intents       pi2  ON bi2.intent_id       = pi2.intent_id
+                FROM purchase_orders po2
+                LEFT JOIN approval_decisions   ad2  ON po2.approval_id     = ad2.approval_id
+                LEFT JOIN negotiation_outcomes no2  ON ad2.negotiation_id  = no2.negotiation_id
+                LEFT JOIN scored_offers        sc2  ON no2.score_id        = sc2.score_id
                 WHERE po2.status != 'cancelled'
-            ) pod ON pod.request_id = pr.request_id
+                  AND (
+                      po2.request_id = pr.request_id
+                      OR po2.approval_id IN (
+                          SELECT ad3.approval_id
+                          FROM parsed_intents   pi3
+                          JOIN beckn_intents    bi3 ON bi3.intent_id       = pi3.intent_id
+                          JOIN discovery_queries dq3 ON dq3.beckn_intent_id = bi3.beckn_intent_id
+                          JOIN seller_offerings sof3 ON sof3.query_id      = dq3.query_id
+                          JOIN scored_offers    sc3  ON sc3.offering_id    = sof3.offering_id
+                          JOIN negotiation_outcomes no3 ON no3.score_id    = sc3.score_id
+                          JOIN approval_decisions  ad3 ON ad3.negotiation_id = no3.negotiation_id
+                          WHERE pi3.request_id = pr.request_id
+                      )
+                  )
+                ORDER BY po2.request_id, po2.created_at DESC
+                LIMIT 1
+            ) pod ON TRUE
             WHERE pr.created_at >= NOW() - ($1 * INTERVAL '1 day')
             ORDER BY pr.created_at DESC
             LIMIT 10

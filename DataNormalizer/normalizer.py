@@ -149,6 +149,8 @@ class DataNormalizer:
         network_id: str = "beckn-default",
         requester_id: str | None = None,
         fulfillment_eta: str | None = None,
+        request_id: str | None = None,
+        original_price: float | None = None,
     ) -> dict:
         """Create negotiation_outcome + approval_decision + purchase_order.
 
@@ -171,6 +173,8 @@ class DataNormalizer:
             unit=unit,
             requester_id=requester_id,
             fulfillment_eta=fulfillment_eta,
+            request_id=request_id,
+            original_price=original_price,
         )
         logger.info("[normalizer] created purchase_order %s", po_id)
         return {"po_id": po_id}

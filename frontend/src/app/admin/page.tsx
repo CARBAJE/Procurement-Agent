@@ -122,7 +122,7 @@ export default function AdminPage() {
   return (
     <>
       <Navbar />
-      <main id="main-content" className="container py-8 max-w-5xl">
+      <main id="main-content" className="container py-8 max-w-6xl">
         <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
           <div>
             <div className="flex items-center gap-2 mb-1">
@@ -164,7 +164,7 @@ export default function AdminPage() {
                 <Badge variant="secondary" className="ml-2 text-xs">{users.length}</Badge>
               </CardTitle>
               <CardDescription>
-                Changes take effect immediately. Threshold is the max auto-approval amount in ₹.
+                Changes take effect immediately. Threshold is the max auto-approval amount in ₹. Budget Remaining decrements on each confirmed order.
               </CardDescription>
             </CardHeader>
             <CardContent className="overflow-x-auto">
@@ -176,6 +176,7 @@ export default function AdminPage() {
                     <TableHead>Department</TableHead>
                     <TableHead>Role</TableHead>
                     <TableHead>Threshold (₹)</TableHead>
+                    <TableHead>Budget Remaining (₹)</TableHead>
                     <TableHead className="text-right">Save</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -223,6 +224,17 @@ export default function AdminPage() {
                               ₹{user.approval_threshold.toLocaleString("en-IN")}
                             </span>
                           )}
+                        </TableCell>
+                        <TableCell>
+                          <span
+                            className={`tabular-nums text-sm font-medium ${
+                              user.budget_remaining < 0
+                                ? "text-destructive"
+                                : "text-foreground"
+                            }`}
+                          >
+                            ₹{user.budget_remaining.toLocaleString("en-IN", { maximumFractionDigits: 2 })}
+                          </span>
                         </TableCell>
                         <TableCell className="text-right">
                           <Button

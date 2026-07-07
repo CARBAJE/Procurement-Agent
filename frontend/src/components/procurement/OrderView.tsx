@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
-import { ArrowLeft, Hash, AlertCircle, ShieldCheck, Plus } from "lucide-react"
+import { ArrowLeft, Hash, AlertCircle, ShieldCheck, Plus, MessageSquare } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -26,6 +26,7 @@ interface ResolvedSession {
   offering: Offering
   intent: BecknIntent
   negotiated: NegotiatedTerms | null
+  rawQuery: string | null
 }
 
 export default function OrderView({ txnId }: OrderViewProps) {
@@ -47,12 +48,24 @@ export default function OrderView({ txnId }: OrderViewProps) {
           (o) => o.item_id === session.chosenItemId,
         )
         if (offering) {
+          // Reconcile quantity and raw query from DB: purchase_order.quantity is
+          // authoritative over the session's parsed intent, and raw_input_text
+          // is only stored in procurement_requests (not in session).
+          let confirmedQuantity = session.intent.quantity
+          let rawQuery: string | null = null
+          try {
+            const d = await getOrderDetail(txnId)
+            if (d?.order?.quantity) confirmedQuantity = d.order.quantity
+            if (d?.raw_input_text)  rawQuery = d.raw_input_text
+          } catch { /* DB unavailable — fall back to session intent */ }
+
           if (!cancelled) {
             setResolved({
               commit: session.commit,
               offering,
-              intent: session.intent,
+              intent: { ...session.intent, quantity: confirmedQuantity },
               negotiated: session.negotiation ?? null,
+              rawQuery,
             })
             setState(session.commit.order_state ?? null)
             setHydrated(true)
@@ -82,7 +95,7 @@ export default function OrderView({ txnId }: OrderViewProps) {
             messages:        o.messages        ?? [],
             status:          o.status,
           }
-          setResolved({ commit, offering: o.offering, intent: d.intent, negotiated: null })
+          setResolved({ commit, offering: o.offering, intent: d.intent, negotiated: null, rawQuery: d.raw_input_text ?? null })
           setState(o.order_state)
           setHistorical(true)
         }
@@ -140,7 +153,7 @@ export default function OrderView({ txnId }: OrderViewProps) {
     )
   }
 
-  const { commit, offering, intent } = resolved
+  const { commit, offering, intent, rawQuery } = resolved
 
   return (
     <div className="space-y-6">
@@ -158,6 +171,19 @@ export default function OrderView({ txnId }: OrderViewProps) {
             <Hash className="h-3 w-3 text-muted-foreground" />
             <span className="text-xs text-muted-foreground font-mono">{commit.transaction_id}</span>
           </div>
+          {rawQuery && (
+            <div className="mt-3 flex items-start gap-2.5 rounded-lg border border-primary/20 bg-primary/5 px-3.5 py-2.5 max-w-2xl">
+              <MessageSquare className="h-4 w-4 text-primary shrink-0 mt-0.5" aria-hidden="true" />
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-primary/70 mb-0.5">
+                  Your request
+                </p>
+                <p className="text-sm text-foreground leading-snug">
+                  {rawQuery}
+                </p>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 

@@ -27,17 +27,26 @@ async def create_order(
     unit: str = "units",
     requester_id: str | None = None,
     fulfillment_eta: str | None = None,
+    request_id: str | None = None,
+    original_price: float | None = None,
 ) -> str:
     """Create negotiation_outcome + approval_decision + purchase_order in one tx.
 
-    negotiation uses strategy='skipped' / acceptance='skipped' (Beckn /confirm
-    was already sent by beckn-bap-client; no negotiation step ran).
-    approval uses level='auto' / status='auto_approved'.
+    When original_price differs from agreed_price (negotiation happened),
+    negotiation_outcomes records initial=original_price, final=agreed_price so
+    the analytics savings query computes the correct discount.
 
     Returns po_id (str UUID).
     """
     pool = await get_pool()
     rid = _uuid.UUID(requester_id) if requester_id else _uuid.UUID(SYSTEM_USER_ID)
+    req_uuid = _uuid.UUID(request_id) if request_id else None
+
+    initial_price = original_price if original_price and original_price > 0 else agreed_price
+    negotiated = initial_price > agreed_price
+    strategy   = "accept_margin" if negotiated else "skipped"
+    acceptance = "accepted"      if negotiated else "skipped"
+    discount_pct = round((initial_price - agreed_price) / initial_price * 100, 2) if negotiated and initial_price > 0 else 0.0
 
     # asyncpg binds timestamptz params as datetime objects, not ISO strings.
     eta_dt = None
@@ -52,18 +61,22 @@ async def create_order(
 
     async with pool.acquire() as conn:
         async with conn.transaction():
-            # 1. negotiation_outcomes — skipped (direct confirm)
+            # 1. negotiation_outcomes — records actual negotiation savings
             neg = await conn.fetchrow(
                 """
                 INSERT INTO negotiation_outcomes (
                     score_id, strategy_applied, initial_price,
                     final_price, discount_percent, acceptance_status
                 )
-                VALUES ($1, 'skipped', $2, $2, 0.0, 'skipped')
+                VALUES ($1, $2, $3, $4, $5, $6)
                 RETURNING negotiation_id
                 """,
                 _uuid.UUID(score_id),
+                strategy,
+                initial_price,
                 agreed_price,
+                discount_pct,
+                acceptance,
             )
             negotiation_id = neg["negotiation_id"]
 
@@ -83,15 +96,15 @@ async def create_order(
             )
             approval_id = appr["approval_id"]
 
-            # 3. purchase_orders
+            # 3. purchase_orders — direct request_id FK for simpler analytics JOIN
             po = await conn.fetchrow(
                 """
                 INSERT INTO purchase_orders (
                     approval_id, bpp_id, item_id, quantity, unit,
                     agreed_price, currency, delivery_terms,
-                    beckn_confirm_ref, status, fulfillment_eta
+                    beckn_confirm_ref, status, fulfillment_eta, request_id
                 )
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'pending', $10)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'pending', $10, $11)
                 RETURNING po_id
                 """,
                 approval_id,
@@ -104,6 +117,7 @@ async def create_order(
                 delivery_terms,
                 beckn_confirm_ref,
                 eta_dt,
+                req_uuid,
             )
             return str(po["po_id"])
 

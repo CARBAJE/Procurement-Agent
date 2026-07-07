@@ -151,6 +151,7 @@ export interface AdminUser {
   role: UserRole
   department: string
   approval_threshold: number
+  budget_remaining: number
   keycloak_id: string
   idp_provider: string
   created_at: string

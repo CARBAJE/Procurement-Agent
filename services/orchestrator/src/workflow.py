@@ -562,6 +562,8 @@ async def _persist_order_record(
     bpp_uri: str,
     beckn_confirm_ref: str,
     requester_id: str | None,
+    request_id: str | None = None,
+    original_price: float | None = None,
 ) -> None:
     """POST /normalize/order — write confirmed order to the data normalizer.
 
@@ -591,11 +593,27 @@ async def _persist_order_record(
         "item_id":           chosen["item_id"],
         "quantity":          int(quantity),
         "agreed_price":      float(chosen.get("price_value", "0")),
+        "original_price":    original_price,
         "beckn_confirm_ref": beckn_confirm_ref,
         "delivery_terms":    "Standard delivery",
         "currency":          chosen.get("price_currency", "INR"),
         "fulfillment_eta":   fulfillment_eta,
         "requester_id":      requester_id,
+        "request_id":        request_id,
+    })
+
+
+async def _deduct_budget(
+    session: aiohttp.ClientSession,
+    requester_id: str | None,
+    amount: float,
+) -> None:
+    """Deduct confirmed spend from the requester's budget_remaining. Never raises."""
+    if not requester_id or amount <= 0:
+        return
+    await _persist(session, "/normalize/deduct_budget", {
+        "user_id": requester_id,
+        "amount":  amount,
     })
 
 
@@ -2169,6 +2187,8 @@ async def commit(request: web.Request) -> web.Response:
             reason=f"chosen_item_id {chosen_item_id!r} is not in the compared offerings"
         )
 
+    # Capture the catalog price before any negotiation override for savings tracking.
+    original_catalog_price = float(chosen.get("price_value", "0") or "0")
     # Use negotiated price for all downstream calculations if provided.
     if negotiated_price is not None:
         chosen = {**chosen, "price_value": str(negotiated_price)}
@@ -2345,11 +2365,13 @@ async def commit(request: web.Request) -> web.Response:
                     "item_id":           chosen["item_id"],
                     "quantity":          quantity,
                     "agreed_price":      float(chosen.get("price_value", "0")),
+                    "original_price":    original_catalog_price,
                     "beckn_confirm_ref": order_id,
                     "delivery_terms":    "Standard delivery",
                     "currency":          chosen.get("price_currency", "INR"),
                     "fulfillment_eta":   order_fulfillment_eta,
                     "requester_id":      state.get("requester_id"),
+                    "request_id":        committed_request_id or None,
                 })
                 await _persist_audit(
                     session, "confirm", f"order_confirmed: {order_id}",
@@ -2372,6 +2394,11 @@ async def commit(request: web.Request) -> web.Response:
                 await _persist_status(
                     session, committed_request_id, "confirmed"
                 )
+            await _deduct_budget(
+                session,
+                state.get("requester_id"),
+                float(chosen.get("price_value", "0")) * int(quantity),
+            )
             # Agent memory — embed the confirmed transaction in the background
             # so future compare() calls can surface "last time you ordered X…" context.
             asyncio.create_task(_persist_memory(
@@ -3242,6 +3269,12 @@ async def decide_approval(request: web.Request) -> web.Response:
                 bpp_uri=cr["bpp_uri"],
                 beckn_confirm_ref=order_id,
                 requester_id=state.get("requester_id"),
+                request_id=request_id,
+            )
+            await _deduct_budget(
+                sess,
+                state.get("requester_id"),
+                float(chosen.get("price_value", "0")) * float(state.get("intent", {}).get("quantity", 1)),
             )
 
         _pending_approvals.pop(request_id, None)
@@ -3586,6 +3619,13 @@ async def run_procurement(request: web.Request) -> web.Response:
                     bpp_uri=cr["bpp_uri"],
                     beckn_confirm_ref=cr["order_id"],
                     requester_id=result.get("requester_id"),
+                    request_id=result.get("request_id"),
+                    original_price=float(original_price_str) if negotiation_settled_price is not None else None,
+                )
+                await _deduct_budget(
+                    session,
+                    result.get("requester_id"),
+                    float(chosen_for_commit.get("price_value", "0")) * float(body.get("quantity", 1)),
                 )
             except Exception as exc:
                 logger.warning("[run/auto_commit] Beckn commit failed (%s) — mock", exc)
@@ -3885,6 +3925,13 @@ async def decide_run(request: web.Request) -> web.Response:
                 bpp_uri=cr["bpp_uri"],
                 beckn_confirm_ref=cr["order_id"],
                 requester_id=state.get("requester_id"),
+                request_id=request_id,
+                original_price=float(chosen.get("price_value", "0")) if negotiated_price_raw is not None else None,
+            )
+            await _deduct_budget(
+                sess,
+                state.get("requester_id"),
+                float(chosen_for_commit.get("price_value", "0")) * float(quantity_val),
             )
     except Exception as exc:
         logger.warning("[decide_run] Beckn commit failed (%s) — mock fallback", exc)

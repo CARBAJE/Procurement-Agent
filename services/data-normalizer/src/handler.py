@@ -159,6 +159,9 @@ async def normalize_order(request: web.Request) -> web.Response:
         if not body.get(field):
             raise web.HTTPBadRequest(reason=f"{field} is required")
 
+    original_price_raw = body.get("original_price")
+    original_price = float(original_price_raw) if original_price_raw is not None else None
+
     result = await _normalizer.normalize_order(
         score_id=body["score_id"],
         bpp_uri=body["bpp_uri"],
@@ -172,6 +175,8 @@ async def normalize_order(request: web.Request) -> web.Response:
         network_id=body.get("network_id", "beckn-default"),
         requester_id=body.get("requester_id"),
         fulfillment_eta=body.get("fulfillment_eta"),
+        request_id=body.get("request_id"),
+        original_price=original_price,
     )
     return web.json_response(result, status=201)
 
@@ -337,7 +342,7 @@ async def list_users(request: web.Request) -> web.Response:
         rows = await conn.fetch(
             """
             SELECT user_id::text, email, name, role::text, department,
-                   approval_threshold::float, keycloak_id,
+                   approval_threshold::float, budget_remaining::float, keycloak_id,
                    idp_provider::text, created_at::text
             FROM users
             ORDER BY name
@@ -373,8 +378,10 @@ async def update_user(request: web.Request) -> web.Response:
     async with pool.acquire() as conn:
         user_uuid = _uuid.UUID(user_id_str)
         if new_threshold is not None:
+            # Resetting the threshold also resets the budget_remaining so the
+            # admin effectively grants the user a fresh budget allocation.
             await conn.execute(
-                "UPDATE users SET approval_threshold = $1 WHERE user_id = $2",
+                "UPDATE users SET approval_threshold = $1, budget_remaining = $1 WHERE user_id = $2",
                 new_threshold, user_uuid,
             )
         if new_department is not None:
@@ -385,7 +392,7 @@ async def update_user(request: web.Request) -> web.Response:
         row = await conn.fetchrow(
             """
             SELECT user_id::text, email, name, role::text, department,
-                   approval_threshold::float, keycloak_id,
+                   approval_threshold::float, budget_remaining::float, keycloak_id,
                    idp_provider::text, created_at::text
             FROM users WHERE user_id = $1
             """,
@@ -534,6 +541,36 @@ async def normalize_cancel_stale(request: web.Request) -> web.Response:
     return web.json_response({"cancelled": cancelled, "count": len(cancelled)})
 
 
+async def deduct_budget(request: web.Request) -> web.Response:
+    """POST /normalize/deduct_budget
+    Body: {user_id, amount}
+    Deducts amount from users.budget_remaining. Allows negative (overspend visible).
+    """
+    try:
+        body = await request.json()
+    except json.JSONDecodeError:
+        raise web.HTTPBadRequest(reason="Invalid JSON")
+
+    user_id_str = (body.get("user_id") or "").strip()
+    if not user_id_str:
+        raise web.HTTPBadRequest(reason="user_id is required")
+    try:
+        amount = float(body.get("amount", 0))
+    except (TypeError, ValueError):
+        raise web.HTTPBadRequest(reason="amount must be a number")
+
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            "UPDATE users SET budget_remaining = budget_remaining - $1 "
+            "WHERE user_id = $2 RETURNING user_id::text, budget_remaining::float",
+            amount, _uuid.UUID(user_id_str),
+        )
+    if not row:
+        return web.json_response({"error": "user not found"}, status=404)
+    return web.json_response(dict(row))
+
+
 async def _on_shutdown(app: web.Application) -> None:
     await close_pool()
 
@@ -559,6 +596,7 @@ def create_app() -> web.Application:
     app.router.add_post("/normalize/memory/write",           normalize_memory_write)
     app.router.add_post("/normalize/memory/search",          normalize_memory_search)
     app.router.add_post("/normalize/cancel_stale",           normalize_cancel_stale)
+    app.router.add_post("/normalize/deduct_budget",          deduct_budget)
     app.on_shutdown.append(_on_shutdown)
     return app
 

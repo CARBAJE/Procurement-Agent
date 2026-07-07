@@ -124,6 +124,43 @@ export async function fetchBusinessImpact(period: AnalyticsPeriod = "90d"): Prom
   return data
 }
 
+// ── /explain-selection — LLM explanation for agent's provider choice ─────────
+
+export interface OfferingScoreDetail {
+  criterion: string
+  raw: string
+  normalized: number
+  explanation: string
+}
+
+export interface OfferingBrief {
+  provider: string
+  item: string
+  price: number
+  currency: string
+  delivery_hours: number | null
+  composite_score: number | null
+  rank: number | null
+  is_recommended: boolean
+  score_details: OfferingScoreDetail[]
+}
+
+export interface ExplainSelectionRequest {
+  offerings: OfferingBrief[]
+  recommended_provider: string
+  rank_and_select_summary: string | null
+}
+
+export async function explainSelection(
+  payload: ExplainSelectionRequest,
+): Promise<{ explanation: string }> {
+  const { data } = await axios.post<{ explanation: string }>(
+    "/api/procurement/explain-selection",
+    payload,
+  )
+  return data
+}
+
 // ── /cancel — mark procurement request as cancelled ─────────────────────────
 
 export async function cancelRequest(requestId: string): Promise<void> {
