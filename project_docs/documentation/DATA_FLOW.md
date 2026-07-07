@@ -164,7 +164,7 @@ The frontend separates discovery and scoring (Phase 1 — advisory) from the bin
 5. The orchestrator calls `beckn-bap-client :8002 POST /select` → ONIX → `sim-bpp` (returns `ACCEPTED`).
 6. The orchestrator calls `beckn-bap-client :8002 POST /init` with buyer billing and fulfillment details → ONIX → `sim-bpp` (returns `ACTIVE`).
 7. The orchestrator calls `beckn-bap-client :8002 POST /confirm` with payment terms → ONIX → `sim-bpp` (returns `ACTIVE`, `order_id`).
-8. The orchestrator calls `data-normalizer :8006 POST /normalize/order` to persist the full FK chain: `negotiation_outcomes (strategy=skipped)` → `approval_decisions (auto_approved)` → `purchase_orders`.
+8. The orchestrator calls `data-normalizer :8006 POST /normalize/order` to persist the full FK chain: `negotiation_outcomes (strategy=skipped)` → `approval_decisions (auto_approved)` → `purchase_orders`. The call includes `original_price` (the catalog list price stored in the session offering before any negotiation). When `original_price` is set and exceeds the agreed `price`, `order_repo.create_order()` records `initial_price=original_price`, `final_price=agreed_price`, and `discount_pct=round((initial_price−final_price)/initial_price×100, 2)` in `negotiation_outcomes`. This drives the analytics savings query: `SELECT SUM(initial_price − final_price) FROM negotiation_outcomes` now returns non-zero totals when negotiation occurred. When no negotiation ran, `original_price` is `null` and `negotiation_outcomes` records `strategy="skipped"` with no discount computed.
 9. Fire-and-forget: `asyncio.create_task(_persist_memory(...))` — writes the confirmed transaction to `agent_memory_vectors`. See [Section 6](#6-agent-memory-learning-flywheel).
 10. Fire-and-forget: multiple `_persist_audit(...)` calls write events to `audit_trail_events`. The `confirm` and `order_confirmed` event types are written here.
 11. Returns `{ transaction_id, order_id, order_state: "ACTIVE", status: "live" }`.
@@ -327,7 +327,7 @@ The ERP integration has two sub-flows that run at different points in the commit
 7. Vendor webhook arrives at `erp-adapter POST /api/v1/webhooks/{vendor}/po-status`.
 8. HMAC-SHA256 dual-secret verification: tries `{VENDOR}_WEBHOOK_HMAC_SECRET` first, then `{VENDOR}_WEBHOOK_HMAC_SECRET_NEXT` for zero-downtime rotation.
 9. On a valid webhook: updates `purchase_orders.status`, publishes to Kafka topic `po.status.changed` (primary) or Redis key `po.status_changed:{txn_id}` (fallback when Kafka is unavailable).
-10. `notification-dispatcher :8010` consumes the Kafka event — see [Section 7](#7-notification-dispatch-flow).
+10. `notification-dispatcher :8010` consumes the Kafka event — see [Section 8](#8-notification-dispatch-flow).
 
 ```mermaid
 flowchart TD
@@ -405,7 +405,53 @@ sequenceDiagram
 
 ---
 
-## 7. Notification Dispatch Flow
+## 7. Supplier Selection Explanation Flow (LLM)
+
+The `SelectionExplanationCard` component generates a natural-language paragraph explaining why the top-ranked supplier was selected. The flow runs once per run, client-side, as a non-blocking side effect; it does not affect the procurement decision.
+
+### Trigger
+
+`RunView` mounts with a `recommended_item_id` set. The `SelectionExplanationCard` fires a `useEffect` (guarded by a `useRef` flag so it executes only once per mount) whenever the run stage is `awaiting_selection` or `awaiting_approval`.
+
+### Steps
+
+1. `SelectionExplanationCard` calls `explainSelection(offerings, recommendedProvider, summary)` in `api.ts`.
+2. `api.ts` posts to `POST /api/procurement/explain-selection` (Next.js authenticated proxy route).
+3. Next.js verifies the `next-auth` session, then forwards the request to `INTENT_PARSER_URL/explain-selection` with a 30 000 ms timeout.
+4. The `intention-parser` Docker service (`handler.py`) builds a ranked comparison block: for each offering sorted by `rank` ascending, it includes provider name, price, delivery hours, composite score, and all criterion explanations from `score_details[]`.
+5. `handler.py` calls Ollama `qwen3:1.7b` via `AsyncOpenAI(base_url=OLLAMA_URL)` with `temperature=0.3`, `max_tokens=350`. The prompt asks for a one-paragraph rationale comparing all suppliers.
+6. Raw LLM output is stripped of `<think>…</think>` reasoning blocks.
+7. The cleaned explanation string is returned as `{ "explanation": "..." }`.
+8. Next.js forwards the response to the browser; `SelectionExplanationCard` renders the explanation paragraph below the ranked offerings table.
+
+### Error path
+
+If Ollama is unreachable, the model returns empty content, or any exception is raised in `handler.py`, the handler returns `{ "explanation": "" }` with HTTP 200. The Next.js proxy treats a non-200 upstream response as a `502` and returns `{ "error": "Unable to generate explanation." }`. In both cases, the frontend `catch` block sets `llmError=true` and displays: "Could not generate explanation — ensure the IntentParser is running." The procurement flow is not interrupted.
+
+```mermaid
+sequenceDiagram
+    participant FE as SelectionExplanationCard (browser)
+    participant NX as Next.js /api/procurement/explain-selection
+    participant IP as intention-parser :8001 /explain-selection
+    participant OL as Ollama qwen3:1.7b
+
+    FE->>NX: POST /api/procurement/explain-selection { offerings, recommended_provider, summary }
+    Note over NX: Verify next-auth session
+    NX->>IP: POST /explain-selection (timeout 30 s)
+    IP->>IP: Build ranked comparison block from offerings[].score_details
+    IP->>OL: AsyncOpenAI chat.completions (temp=0.3, max_tokens=350)
+    OL-->>IP: Raw LLM output (may contain <think> blocks)
+    IP->>IP: Strip <think>...</think> blocks
+    IP-->>NX: { "explanation": "..." }
+    NX-->>FE: { "explanation": "..." }
+    FE->>FE: Render explanation paragraph
+```
+
+> **Dependency note:** This flow requires the `intention-parser` service to be running locally (or in Docker) with Ollama accessible at `OLLAMA_URL`. In CI/CD environments without Ollama, the explanation degrades gracefully to an empty string — no tests should assert on explanation content.
+
+---
+
+## 8. Notification Dispatch Flow
 
 After a purchase order is confirmed, status changes flow through sim-bpp auto-advance simulation (or a real seller webhook), Kafka, and the notification dispatcher. Each channel operates independently; one channel's failure never blocks the others.
 

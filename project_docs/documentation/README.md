@@ -54,3 +54,18 @@ The Procurement Agent is an event-driven agentic AI system built for corporate b
 | [TROUBLESHOOTING.md](TROUBLESHOOTING.md) | Diagnostic runbooks: NL parsing, Beckn discovery, database, ERP integration, frontend, negotiation engine |
 | [API_REFERENCE.md](API_REFERENCE.md) | HTTP API surface: all endpoints, request/response schemas, and error codes for every service |
 | [GLOSSARY.md](GLOSSARY.md) | Alphabetical definitions of all domain terms, architectural concepts, and database identifiers |
+| [COMPONENTS.md](COMPONENTS.md) | Service-by-service component reference including the supplier selection explanation feature (POST /explain-selection) |
+
+---
+
+## Phase 4 Highlights
+
+The following capabilities were completed or fixed in Phase 4 (weeks 13–16):
+
+- **LLM-powered supplier selection explanation.** After comparative scoring, the intention-parser Docker service exposes `POST /explain-selection`. It calls `qwen3:1.7b` via Ollama to generate a 2–3 sentence human-readable rationale for why the top-ranked supplier scored highest. The `SelectionExplanationCard` in the RunView renders the result with a loading skeleton and an error fallback; it fires non-blocking after the page renders so the buyer can review the comparison table while the explanation is still generating.
+
+- **Navigation guard Cancel button fix.** The `useNavigationGuard` hook gained a `trigger(href)` method that allows non-anchor interactive elements (e.g. buttons) to participate in the in-app navigation interception modal. Previously the Cancel button bypassed the guard and navigated without confirmation.
+
+- **Original request display on Order Confirmed page.** The OrderView now fetches and displays the buyer's original natural-language request (`raw_input_text`) from the database via `getOrderDetail()`, giving approvers and auditors the full procurement context alongside the confirmed PO.
+
+- **Negotiation savings pipeline fix.** Two PostgreSQL enum mismatches (`"negotiated"` → `"accept_margin"/"skipped"` for `negotiation_strategy_type`; `"agreed"` → `"accepted"/"skipped"` for `acceptance_status_type`) caused the analytics savings query to return zero for all negotiated orders. Both enum values are corrected in `order_repo.py`. The `original_price` field is now propagated correctly through both autonomous and HITL orchestrator flows, so `SUM(initial_price - final_price)` returns accurate savings figures.

@@ -381,6 +381,36 @@ flowchart TD
 - **Downstream dependents:** None (entry point for users).
 - **Notable behavior:** No frontend tests (Jest/Vitest/Playwright), no App Router error boundaries, no ARIA support on recharts SVGs, and `AuthGuard.tsx` is dead code. All recharts charts must be wrapped in `dynamic(..., { ssr: false })` — never imported at the top level of a page. Geist fonts are not registered; body falls back to Arial. There is no local stub credentials provider — even local development requires a live OIDC tenant.
 
+#### SelectionExplanationCard (internal component)
+
+- **File:** `src/components/procurement/RunView.tsx` — not exported; defined and consumed within the same module.
+- **Purpose:** Renders a natural-language explanation from `qwen3:1.7b` describing why the ML scoring model recommended a specific supplier over the alternatives.
+- **Renders when:** `recommendedItemId` is non-null and the current stage is `awaiting_selection` or `awaiting_approval`.
+- **Data flow:** On mount, fires `explainSelection()` exactly once (guarded by a `useRef(false)` call flag to survive React Strict Mode double-invocations) → `POST /api/procurement/explain-selection` → returns `{ explanation: string }`.
+- **States:**
+  - Loading: three animated `<Skeleton>` lines with `role="status"`.
+  - Success: single `<p>` containing the LLM-generated 2–3 sentence explanation.
+  - Error: advisory text with instructions to restart IntentParser.
+- **Placement:** Below `<ComparisonTable>` inside the `lg:col-span-2` grid column.
+- **Styling:** Card with `border-emerald-200 bg-emerald-50/30` border/background and a Sparkles icon inside an emerald icon container.
+
+#### OrderView (updated)
+
+- Now fetches `raw_input_text` from `getOrderDetail()` in both the live-session path and the historical (DB-read) path.
+- Displays the original procurement request text below the transaction hash as a `MessageSquare`-icon card with `border-primary/20 bg-primary/5` background and a "Your request" label.
+
+#### useNavigationGuard (hook)
+
+- **File:** `src/hooks/useNavigationGuard.ts`
+- **Purpose:** Intercepts navigation away from an active procurement run and shows a confirmation modal before allowing the transition.
+- **Event coverage:** browser back/forward (`popstate`), tab close (`beforeunload`), in-app `<a>` clicks (DOM capture phase).
+- **`trigger(href)` function (added in Phase 4):** Allows programmatic modal activation from buttons (e.g. the Cancel button in RunView). Sets `intendedHref` and calls `setShowModal(true)` without waiting for a DOM navigation event.
+- **Returns:** `{ showModal, confirming, dismiss, confirmLeave, trigger }`
+- **Usage pattern in RunView:**
+  ```tsx
+  onClick={() => guardEnabled ? triggerLeave("/request/new") : router.push("/request/new")}
+  ```
+
 ---
 
 ### shared/ (cross-service models)

@@ -119,9 +119,9 @@ IntentParser has two execution modes. When run locally (`uvicorn api:app --port 
 
 | Variable | Code Default | Docker Override | Required | Purpose |
 |---|---|---|---|---|
-| `OLLAMA_URL` | `http://localhost:11434/v1` | `http://host.docker.internal:11434/v1` | Yes | Ollama API base URL |
-| `COMPLEX_MODEL` | `qwen3:8b` | `qwen3:1.7b` | No | LLM for Stage 1 classification and complex Stage 2 extraction. **Docker override collapses two-tier routing** — both model paths use qwen3:1.7b in the container. |
-| `SIMPLE_MODEL` | `qwen3:1.7b` | `qwen3:1.7b` | No | LLM for simple/short Stage 2 queries |
+| `OLLAMA_URL` | `http://localhost:11434/v1` | `http://host.docker.internal:11434/v1` | Yes | Ollama OpenAI-compatible API base URL used for all LLM inference in IntentParser |
+| `COMPLEX_MODEL` | `qwen3:8b` | `qwen3:1.7b` | No | LLM for Stage 1 intent classification and complex Stage 2 BecknIntent extraction (routed by `_is_complex()` heuristic in `orchestrator.py`). **Docker override collapses two-tier routing** — both model paths use qwen3:1.7b in the container. |
+| `SIMPLE_MODEL` | `qwen3:1.7b` | `qwen3:1.7b` | No | LLM for simple/short Stage 2 queries and for the `/explain-selection` endpoint. `/explain-selection` always uses `SIMPLE_MODEL` (qwen3:1.7b) regardless of query complexity — LLM inference for supplier explanations typically takes 5–15 seconds. |
 | `EMBEDDING_MODEL` | `all-MiniLM-L6-v2` | (not set) | No | sentence-transformers model for Stage 3 semantic cache |
 | `ANTHROPIC_API_KEY` | `""` (disabled) | (not set) | No | Enables Claude Sonnet 4.6 as last-resort Stage 3 broadening fallback. Empty = Claude fallback disabled. See §4. |
 | `CLAUDE_MODEL` | `claude-sonnet-4-6` | (not set) | No | Claude model name when `ANTHROPIC_API_KEY` is set |
@@ -227,6 +227,7 @@ The all-MiniLM-L6-v2 model (~90 MB) is downloaded from Hugging Face on first sta
 | `KEYCLOAK_CLIENT_ID` | `procurement-frontend` | **Yes** | Client ID in the Keycloak realm |
 | `KEYCLOAK_CLIENT_SECRET` | (none) | **Yes** | Client secret (confidential client) — copy from the Keycloak dashboard |
 | `NEXT_PUBLIC_API_BASE_URL` | `http://localhost:8000` | Yes | Orchestrator base URL; matches the orchestrator's `8000` host port in docker-compose |
+| `INTENT_PARSER_URL` | `http://localhost:8001` | Yes | Used by all Next.js API-route proxy handlers that forward to the intention-parser. The `/explain-selection` proxy enforces a 30 000 ms timeout (longer than the 10 000 ms default for parse routes) because LLM inference with qwen3:1.7b can take 5–15 seconds. |
 
 The frontend has no stub credentials provider. Even local development requires a live Keycloak-compatible instance. The development tenant used by this project is Phase Two at `euc1.auth.ac`, realm `procurement-agent`.
 

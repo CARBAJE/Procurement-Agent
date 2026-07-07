@@ -13,9 +13,10 @@ This guide covers every coding convention, workflow pattern, and pitfall that a 
 5. [Adding a New Service](#5-adding-a-new-service)
 6. [Adding a New Database Table](#6-adding-a-new-database-table)
 7. [Working with the IntentParser Pipeline](#7-working-with-the-intentparser-pipeline)
-8. [Working with LangGraph (Negotiation Engine)](#8-working-with-langgraph-negotiation-engine)
-9. [Error Handling Patterns](#9-error-handling-patterns)
-10. [Known Problems and Workarounds](#10-known-problems-and-workarounds)
+8. [Adding an LLM Explanation Endpoint](#8-adding-an-llm-explanation-endpoint)
+9. [Working with LangGraph (Negotiation Engine)](#9-working-with-langgraph-negotiation-engine)
+10. [Error Handling Patterns](#10-error-handling-patterns)
+11. [Known Problems and Workarounds](#11-known-problems-and-workarounds)
 
 ---
 
@@ -484,7 +485,7 @@ Add a test class to `database/test_database.py` that confirms the table exists, 
 
 If your table needs a new ENUM type, define it in `database/sql/00_extensions_and_types.sql` AND create a migration that adds it via `ALTER TYPE ... ADD VALUE`. Do not just add the value to the migration file; the base definition must also be updated so a fresh install from scratch works correctly.
 
-Existing ENUM types `embedding_model_type` and `ai_provider_type` contain spec-era values that do not match the as-built system. If you write code that stores an embedding model name in a column typed as `embedding_model_type`, verify first that your model name is present in the ENUM. See [Known Problems §10.1](#101-database-enum-types-contain-spec-era-values) for details.
+Existing ENUM types `embedding_model_type` and `ai_provider_type` contain spec-era values that do not match the as-built system. If you write code that stores an embedding model name in a column typed as `embedding_model_type`, verify first that your model name is present in the ENUM. See [Known Problems §11.1](#111-database-enum-types-contain-spec-era-values) for details.
 
 ---
 
@@ -554,9 +555,156 @@ The recovery stubs in `IntentParser/recovery.py` (`log_unmet_demand`, `notify_bu
 
 ---
 
-## 8. Working with LangGraph (Negotiation Engine)
+## 8. Adding an LLM Explanation Endpoint
 
-### 8.1 Graph Overview
+The `/explain-selection` endpoint in IntentParser is the canonical pattern for calling a local Ollama model from a Python service to generate a human-readable summary. Use it as the template for any future LLM-powered endpoint.
+
+### 8.1 Docker Service — handler.py Pattern
+
+```python
+import os, re
+from openai import AsyncOpenAI   # already in requirements.txt
+
+OLLAMA_URL   = os.getenv("OLLAMA_URL",   "http://host.docker.internal:11434/v1")
+SIMPLE_MODEL = os.getenv("SIMPLE_MODEL", "qwen3:1.7b")
+
+async def explain_handler(request):
+    body = await request.json()
+
+    # Create a new client per request — keeps the handler stateless.
+    client = AsyncOpenAI(base_url=OLLAMA_URL, api_key="ollama")
+
+    try:
+        response = await client.chat.completions.create(
+            model=SIMPLE_MODEL,
+            messages=[{"role": "user", "content": build_prompt(body)}],
+        )
+        raw = response.choices[0].message.content or ""
+        # Always strip chain-of-thought blocks before returning to callers.
+        explanation = re.sub(r"<think>.*?</think>", "", raw, flags=re.DOTALL).strip()
+        return web.json_response({"explanation": explanation})
+    except Exception as exc:
+        logger.error("LLM call failed: %s", exc)
+        # Never raise unhandled exceptions; return an empty explanation + 502.
+        return web.json_response({"explanation": ""}, status=502)
+
+# Register the route in the aiohttp app setup:
+app.router.add_post("/explain-selection", explain_handler)
+```
+
+Key rules:
+- Read `OLLAMA_URL` and `SIMPLE_MODEL` (or `COMPLEX_MODEL`) from `os.getenv()`. Never hard-code model names or base URLs.
+- Create `AsyncOpenAI` per request; the client is lightweight and this keeps the handler stateless and trivially testable.
+- Always strip `<think>…</think>` with `re.DOTALL` — qwen3 models emit chain-of-thought blocks that must not reach the frontend.
+- Return `{"explanation": ""}` with HTTP 502 on any LLM failure. The caller (the Next.js proxy route) propagates the 502 verbatim.
+
+### 8.2 Next.js Proxy Route Pattern
+
+Create `src/app/api/procurement/<endpoint-name>/route.ts`:
+
+```typescript
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
+import { NextResponse } from "next/server";
+
+export async function POST(req: Request) {
+  const session = await getServerSession(authOptions);
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const body = await req.json();
+  const upstream = process.env.INTENT_PARSER_URL ?? "http://localhost:8001";
+
+  try {
+    const res = await fetch(`${upstream}/explain-selection`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(30_000),   // generous timeout — LLM calls can be slow
+    });
+    const data = await res.json();
+    return NextResponse.json(data, { status: res.ok ? 200 : 502 });
+  } catch {
+    return NextResponse.json({ explanation: "" }, { status: 502 });
+  }
+}
+```
+
+Key rules:
+- Always check the session first and return 401 if absent — the LLM endpoint must not be publicly accessible.
+- Use `process.env.INTENT_PARSER_URL` (not a hard-coded `localhost`) so the proxy works in containerised Next.js deployments.
+- Use a 30 000 ms timeout for LLM calls; the default `fetch` timeout is too short for cold Ollama inference.
+- Forward upstream errors verbatim (`502`) rather than swallowing them — lets the frontend distinguish LLM failure from network failure.
+
+### 8.3 Frontend Hook Pattern — SelectionExplanationCard
+
+```tsx
+const calledRef = useRef(false);
+const [loading, setLoading] = useState(true);
+const [explanation, setExplanation] = useState<string | null>(null);
+const [error, setError] = useState(false);
+
+useEffect(() => {
+  if (calledRef.current) return;   // guard against React Strict Mode double-mount
+  calledRef.current = true;
+
+  setLoading(true);
+  explainSelection({ /* request body */ })
+    .then((data) => setExplanation(data.explanation))
+    .catch(() => setError(true))
+    .finally(() => setLoading(false));
+}, []);
+```
+
+Key rules:
+- Use `useRef(false)` as a call guard, not a state variable — `useState` re-renders are not safe to use as guards.
+- Start the loading state before the async call; always clear it in `.finally()`, whether the call succeeded or failed.
+- Never throw from the LLM call path — catch all errors and set an error state flag for the UI to display an actionable message.
+- Render a `role="status"` skeleton while loading, the explanation `<p>` when done, and an actionable error message (e.g., "Could not generate explanation — restart IntentParser") on failure.
+
+### 8.4 Testing /explain-selection
+
+**Unit tests** (`IntentParser/tests/test_explain_selection.py`):
+
+```python
+from unittest.mock import AsyncMock, patch
+
+async def test_strips_think_blocks():
+    raw = "<think>reasoning</think>Supplier X was chosen..."
+    with patch("handler.AsyncOpenAI") as MockClient:
+        MockClient.return_value.chat.completions.create = AsyncMock(
+            return_value=mock_completion(raw)
+        )
+        resp = await client.post("/explain-selection", json={...})
+    assert "<think>" not in resp.json()["explanation"]
+    assert resp.json()["explanation"].startswith("Supplier X")
+```
+
+- Mock `AsyncOpenAI.chat.completions.create` to return known text.
+- Assert that `<think>` blocks are stripped from the response.
+- Assert that an LLM exception results in `{"explanation": ""}` and HTTP 502 (not an unhandled 500).
+
+**Integration tests** (requires Ollama running):
+
+```bash
+curl -X POST http://localhost:8001/explain-selection \
+  -H "Content-Type: application/json" \
+  -d '{"recommended_item_id": "item-1", "all_items": [...]}'
+```
+
+Assert that `explanation` is a non-empty string and contains no raw `<think>` tags.
+
+**Frontend tests** (Jest + React Testing Library):
+
+- Mock `explainSelection()` to resolve instantly with `{ explanation: "Test explanation." }`.
+- Assert the `role="status"` skeleton renders on mount.
+- After the mock resolves, assert the skeleton is gone and the explanation text is visible.
+- Mock `explainSelection()` to reject; assert the error message renders.
+
+---
+
+## 9. Working with LangGraph (Negotiation Engine)
+
+### 9.1 Graph Overview
 
 The negotiation engine (`services/negotiation_engine/src/graph.py`) is a `StateGraph` where each node is an async function that reads and writes a shared `NegotiationState` dict.
 
@@ -578,14 +726,14 @@ flowchart TD
     finalize --> END
 ```
 
-### 8.2 Adding a New Node
+### 9.2 Adding a New Node
 
 1. Write an `async def my_node(state: NegotiationState) -> dict` function in `services/negotiation_engine/src/graph.py`. Return only the keys of `NegotiationState` that the node changes.
 2. Add the node to the `StateGraph` with `graph.add_node("my_node", my_node)`.
 3. Add edges with `graph.add_edge(...)` or `graph.add_conditional_edges(...)`.
 4. Add a unit test in `services/negotiation_engine/tests/test_guardrails.py` (no infrastructure) or `test_async_flow.py` (uses `MemorySaver`).
 
-### 8.3 Guardrail Layers
+### 9.3 Guardrail Layers
 
 Every counter-offer passes three independent validation layers before being sent to a BPP:
 
@@ -597,23 +745,23 @@ Every counter-offer passes three independent validation layers before being sent
 
 G2 (category cap) and G3 (supplier cap) violations escalate to human review. The operator can either approve the counter-offer (resuming the graph) or reject the transaction (routing to `finalize` with `status=REJECTED`).
 
-### 8.4 HITL Interrupt and Resume
+### 9.4 HITL Interrupt and Resume
 
 The graph is interrupted at `human_escalation` using LangGraph's `Command(interrupt=...)` pattern. The orchestrator polls for escalated negotiations and surfaces them in the approval queue. An operator response resumes the graph with `Command(resume=operator_decision)`.
 
 The graph checkpoint is stored in `AsyncPostgresSaver` (configured via `NEGOTIATION_POSTGRES_DSN`). A restarted service can resume an interrupted graph from the last checkpoint. Without `NEGOTIATION_POSTGRES_DSN`, the engine falls back to `MemorySaver` (in-memory, state lost on restart).
 
-### 8.5 Orchestrator Routes Negotiation via demo-gateway
+### 9.5 Orchestrator Routes Negotiation via demo-gateway
 
 The orchestrator does not call `negotiation-engine` directly. `workflow.py::_run_autonomous_negotiation` calls `DEMO_GATEWAY_URL` (default: `http://localhost:8015`), which is the `frontend_demo_gateway` service. The demo-gateway then calls `negotiation-engine:8004`. This extra hop exists for demo-flow reasons and is the production routing path in the current codebase. Keep `DEMO_GATEWAY_URL` in the orchestrator environment block when modifying negotiation flows.
 
 ---
 
-## 9. Error Handling Patterns
+## 10. Error Handling Patterns
 
 See [System Design](SYSTEM_DESIGN.md) for architecture rationale. This section is the implementation reference.
 
-### 9.1 Never-Throw Contract — MCP Tool Handlers
+### 10.1 Never-Throw Contract — MCP Tool Handlers
 
 MCP tool handlers in `services/mcp-sidecar/server.py` must never raise a JSON-RPC error. All failure paths return a valid JSON object with `found: false`.
 
@@ -629,7 +777,7 @@ async def search_bpp_catalog(item_name: str, ...) -> dict:
 
 This applies to any new MCP tool you add to the sidecar.
 
-### 9.2 Fire-and-Forget for Non-Critical Writes
+### 10.2 Fire-and-Forget for Non-Critical Writes
 
 Audit trail, agent memory, and ERP sync writes must not block the user-facing pipeline response.
 
@@ -646,7 +794,7 @@ Fire-and-forget helpers must catch all exceptions internally and log them; they 
 
 Note: audit writes are not retried. If data-normalizer is unavailable when a task runs, the audit event is permanently lost. The `kafka_offset` placeholder in every `_persist_audit` call (`kafka_offset=0`) is reserved for Phase 4 Kafka integration, which will provide durable delivery.
 
-### 9.3 asyncio.gather with return_exceptions=True for Fan-Out
+### 10.3 asyncio.gather with return_exceptions=True for Fan-Out
 
 When dispatching to multiple independent targets (notification channels, network probes), use `asyncio.gather` with `return_exceptions=True` so a failure in one target does not cancel the others.
 
@@ -662,7 +810,7 @@ for r in results:
         logger.warning("notification channel failed: %s", r)
 ```
 
-### 9.4 ERP Budget Gate — Fail-Closed vs Fail-Open
+### 10.4 ERP Budget Gate — Fail-Closed vs Fail-Open
 
 The budget gate is configurable per environment:
 
@@ -673,7 +821,7 @@ The budget gate is configurable per environment:
 
 The `docker-compose.yml` default is **fail-open** (`false`) for developer convenience. Production deployments that handle real purchase orders must explicitly set `ERP_BUDGET_CHECK_REQUIRED=true`.
 
-### 9.5 Database Error Middleware
+### 10.5 Database Error Middleware
 
 The data-normalizer maps asyncpg exceptions to structured HTTP responses via `db_error_middleware`. Callers must handle 409 as an idempotency signal (duplicate write is not fatal):
 
@@ -687,11 +835,11 @@ The data-normalizer maps asyncpg exceptions to structured HTTP responses via `db
 
 ---
 
-## 10. Known Problems and Workarounds
+## 11. Known Problems and Workarounds
 
 These are confirmed bugs or gaps. Each entry describes the symptom, the root cause, and the correct workaround until a fix is applied.
 
-### 10.1 Database ENUM Types Contain Spec-Era Values
+### 11.1 Database ENUM Types Contain Spec-Era Values
 
 **Symptom:** Inserting an agent memory record fails with `invalid input value for enum embedding_model_type`.
 
@@ -705,7 +853,7 @@ ALTER TYPE ai_provider_type     ADD VALUE IF NOT EXISTS 'ollama';
 
 **Fix required:** Add the missing values to `00_extensions_and_types.sql` (base definition) and update the `DEFAULT` in `15_agent_memory_vectors.sql` from `text-embedding-3-large` to `all-MiniLM-L6-v2`.
 
-### 10.2 Docker Container Collapses Complexity Routing to qwen3:1.7b
+### 11.2 Docker Container Collapses Complexity Routing to qwen3:1.7b
 
 **Symptom:** Complex procurement queries (multi-constraint, long descriptions) return lower-quality BecknIntent extractions when running via Docker.
 
@@ -713,13 +861,13 @@ ALTER TYPE ai_provider_type     ADD VALUE IF NOT EXISTS 'ollama';
 
 **Workaround:** Run IntentParser locally (not via Docker) for Stage 3 development and for testing complex query extraction quality.
 
-### 10.3 catalog-normalizer LLM Fallback Uses Ollama, Not OpenAI
+### 11.3 catalog-normalizer LLM Fallback Uses Ollama, Not OpenAI
 
 **Symptom:** Setting `OPENAI_API_KEY` has no effect on the catalog normalizer's UNKNOWN-format fallback.
 
 **Root cause:** `CatalogNormalizer/llm_fallback.py` uses `instructor.from_openai(OpenAI(base_url=OLLAMA_URL, api_key="ollama"))` — the OpenAI SDK is used as an Ollama shim. The correct env vars are `OLLAMA_URL` (default `http://localhost:11434/v1`) and `NORMALIZER_MODEL` (default `qwen3:1.7b`).
 
-### 10.4 demo-gateway Port Mismatch
+### 11.4 demo-gateway Port Mismatch
 
 **Symptom:** Running `frontend_demo_gateway` per its README on port 8005 causes connection refused errors from the orchestrator.
 
@@ -727,7 +875,7 @@ ALTER TYPE ai_provider_type     ADD VALUE IF NOT EXISTS 'ollama';
 
 **Workaround:** Always start demo-gateway on port 8015: `uvicorn src.main:app --port 8015`.
 
-### 10.5 Frontend Requires Live Keycloak — No Stub Credentials
+### 11.5 Frontend Requires Live Keycloak — No Stub Credentials
 
 **Symptom:** The Next.js frontend throws at runtime: `KEYCLOAK_CLIENT_ID must not be null`.
 
@@ -735,7 +883,7 @@ ALTER TYPE ai_provider_type     ADD VALUE IF NOT EXISTS 'ollama';
 
 **Workaround:** Obtain the Phase Two tenant credentials from the project lead. Add them to `frontend/.env.local` (git-ignored). Do not commit this file.
 
-### 10.6 negotiate Audit Events Are Never Written
+### 11.6 negotiate Audit Events Are Never Written
 
 **Symptom:** The audit trail for a confirmed negotiated order contains no `negotiate` event type entries.
 
@@ -743,11 +891,11 @@ ALTER TYPE ai_provider_type     ADD VALUE IF NOT EXISTS 'ollama';
 
 **Fix required:** Add `_persist_audit` calls at negotiation start, at each round's counter-offer generation, and at negotiation finalization. This is needed for SOX 404 compliance.
 
-### 10.7 discovery_engine Is Orphaned
+### 11.7 discovery_engine Is Orphaned
 
 The `services/discovery_engine/` directory contains a complete `MultiNetworkCoordinator` implementation with per-network circuit breakers and deduplication. It has no entry in `docker-compose.yml` and is not called by any service. If you need multi-network Beckn discovery, this service must be wired into the stack — it is not currently reachable. Do not start extending the single-gateway path in `beckn-bap-client` for multi-network use without first evaluating whether `discovery_engine` can be plugged in directly.
 
-### 10.8 recovery.py Stubs Never Notify or Write to DB
+### 11.8 recovery.py Stubs Never Notify or Write to DB
 
 The functions `log_unmet_demand`, `notify_buyer_no_stock`, and `trigger_open_rfq_flow` in `IntentParser/recovery.py` are logger-only. When a procurement item cannot be found in the catalog after query broadening, the buyer receives no notification and no RFQ is created. The recovery flow completes silently with a `not_found` result.
 

@@ -319,3 +319,59 @@ The Phase 2 microservices integration test guide in `KnowledgeBase/project_scaff
 | 3 | Incomplete features | 12 | High (6 items) |
 | 4 | Unclear architecture | 6 | Medium |
 | 5 | Missing tests | 6 | High (2 items) |
+| 6 | Resolved (Phase 4) | 4 | Critical (2 items) |
+
+---
+
+## 6. Resolved in Phase 4
+
+Issues identified during earlier analysis that were fixed as part of Phase 4
+delivery. Kept here for traceability; these are no longer open problems.
+
+### 6.1 [FIXED] Invalid enum values in order_repo.py causing silent DB failures
+
+| | Detail |
+|---|---|
+| **Root cause** | `DataNormalizer/repositories/order_repo.py` wrote `negotiation_strategy_type = "negotiated"` and `acceptance_status_type = "agreed"`. Neither is a valid member of the respective PostgreSQL ENUM types. |
+| **Impact** | Every negotiated order produced a silent constraint error. The `negotiation_outcomes` row was never written, so `initial_price` and `final_price` were always equal and all savings metrics showed zero. |
+| **Fix** | `"negotiated"` → `"accept_margin"` (negotiated path) / `"skipped"` (no-negotiation path); `"agreed"` → `"accepted"` (negotiated) / `"skipped"` (no-negotiation). |
+| **File** | `DataNormalizer/repositories/order_repo.py` |
+| **Severity (before fix)** | Critical |
+
+(Source: DataNormalizer/repositories/order_repo.py — Confidence: High)
+
+### 6.2 [FIXED] original_price not forwarded by orchestrator
+
+| | Detail |
+|---|---|
+| **Root cause** | Neither the autonomous run flow nor the HITL `decide_run` flow passed `original_price` (catalog list price before negotiation) to `_persist_order_record()`. The field defaulted to `None`, collapsing into the final negotiated price. |
+| **Impact** | `negotiation_outcomes.initial_price` always equalled `final_price`, making calculated savings always 0 even when negotiation achieved a real discount. |
+| **Fix** | Both call sites in `services/orchestrator/src/workflow.py` now pass `original_price`; `data-normalizer POST /normalize/order` was updated to accept and forward the field to `order_repo.py`. |
+| **File** | `services/orchestrator/src/workflow.py` (two call sites); `services/data-normalizer/src/handler.py` |
+| **Severity (before fix)** | Critical |
+
+(Source: services/orchestrator/src/workflow.py — Confidence: High)
+
+### 6.3 [FIXED] Cancel button bypassing navigation guard
+
+| | Detail |
+|---|---|
+| **Root cause** | The Cancel button in `RunView` called `router.push("/request/new")` directly, bypassing the `useNavigationGuard` hook that is supposed to intercept navigation away from an active procurement session. |
+| **Impact** | Users could abandon active procurement requests without receiving the cancellation confirmation dialog or triggering the `/cancel` API call. Procurement requests would remain in an open state in the database. |
+| **Fix** | `useNavigationGuard` was extended with a `triggerLeave(href)` method. The Cancel button now calls `triggerLeave("/request/new")` when the guard is active, which invokes the confirmation dialog before proceeding. |
+| **File** | `frontend/src/components/procurement/RunView.tsx`; `frontend/src/hooks/useNavigationGuard.ts` |
+| **Severity (before fix)** | High |
+
+(Source: frontend/src/components/procurement/RunView.tsx — Confidence: High)
+
+### 6.4 [FIXED] Missing /explain-selection endpoint in Docker intention-parser
+
+| | Detail |
+|---|---|
+| **Root cause** | `POST /explain-selection` was initially added only to the local FastAPI service (`IntentParser/api.py`). The Docker `intention-parser` container runs a separate entry point (`services/intention-parser/src/handler.py`) that wraps Stages 1+2 only and did not include the new endpoint. |
+| **Impact** | All frontend requests to `/explain-selection` returned HTTP 404 from the Docker service, which the Next.js API route translated to a 502. The `SelectionExplanationCard` always showed the error fallback; no explanations were ever displayed. |
+| **Fix** | `POST /explain-selection` handler was added to `services/intention-parser/src/handler.py` with identical implementation logic (Ollama `qwen3:1.7b`, temperature 0.3, `<think>` stripping, empty-string fallback on error). The container was rebuilt and redeployed. |
+| **File** | `services/intention-parser/src/handler.py` |
+| **Severity (before fix)** | High |
+
+(Source: services/intention-parser/src/handler.py — Confidence: High)

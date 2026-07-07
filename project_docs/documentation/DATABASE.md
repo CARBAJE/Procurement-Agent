@@ -17,7 +17,7 @@ For architectural context on why Redis Pub/Sub is used for async Beckn discovery
 | UUID extensions | uuid-ossp (`uuid_generate_v4()`) and pgcrypto (`gen_random_uuid()`) |
 | Primary database | `procurement_agent` (container `procurement-postgres`, host port 5432) |
 | Secondary database | `negotiation` (same container, host port 55432) — negotiation engine LangGraph checkpoints |
-| Migration files | 24 numbered SQL scripts in `database/sql/` (`NN_` prefix; lexicographic order = FK dependency order) |
+| Migration files | 26 numbered SQL scripts in `database/sql/` (`NN_` prefix; lexicographic order = FK dependency order) |
 | Migration strategy | Idempotent — all DDL uses `IF NOT EXISTS` / `IF EXISTS` / `DO $$ … $$` guards |
 | ENUM types | 20 custom types (defined in `00_extensions_and_types.sql`; 2 receive additive values via migrations 19 and 22a) |
 | Named indexes | 22 B-tree/partial indexes in `17_indexes.sql` + 8 additional indexes defined inline in later migrations |
@@ -325,10 +325,10 @@ PostgreSQL-layer cache of raw `on_discover` catalog payloads. A cache entry is k
 | `negotiation_id` | UUID PK | — |
 | `score_id` | UUID FK → `scored_offers` | UNIQUE, `ON DELETE CASCADE` |
 | `strategy_applied` | `negotiation_strategy_type` ENUM | `aggressive \| accept_margin \| advisory \| escalate \| skipped` |
-| `initial_price` | DECIMAL(15,2) | — |
+| `initial_price` | DECIMAL(15,2) | Catalog list price before negotiation; populated from `original_price` passed by the orchestrator to `_persist_order_record()`. Used as the savings baseline: `SELECT SUM(initial_price - final_price) FROM negotiation_outcomes` |
 | `counter_offer_price` | DECIMAL(15,2) | NULL when strategy is `skipped` or `advisory` |
-| `final_price` | DECIMAL(15,2) | — |
-| `discount_percent` | FLOAT | `[0, 20]` — CHECK constraint enforces hard cap at 20.0; not bypassable |
+| `final_price` | DECIMAL(15,2) | Agreed price after negotiation; equals catalog price when `strategy_applied = 'skipped'` (no negotiation attempted) |
+| `discount_percent` | FLOAT | `[0, 20]` — `round((initial_price - final_price) / initial_price * 100, 2)`; 0.0 when no negotiation. CHECK constraint enforces hard cap at 20.0; not bypassable |
 | `acceptance_status` | `acceptance_status_type` ENUM | `accepted \| rejected \| advisory \| escalated \| skipped` |
 
 A `strategy=skipped` row is auto-created when negotiation is bypassed to maintain referential integrity.
@@ -351,7 +351,7 @@ A `strategy=skipped` row is auto-created when negotiation is bypassed to maintai
 | `notification_channel` | `notification_channel_type` ENUM | `slack \| teams \| email` |
 | `decided_at` | TIMESTAMP | — |
 
-#### `purchase_orders` (migrations `12_purchase_orders.sql` + `21_order_detail_fidelity.sql`)
+#### `purchase_orders` (migrations `12_purchase_orders.sql` + `21_order_detail_fidelity.sql` + `24_po_request_id.sql`)
 
 Created only after `approval_decisions.status IN ('approved', 'auto_approved')` and ERP budget check passes.
 
@@ -360,6 +360,7 @@ Created only after `approval_decisions.status IN ('approved', 'auto_approved')` 
 | `po_id` | UUID PK | — |
 | `approval_id` | UUID FK → `approval_decisions` | UNIQUE, `ON DELETE RESTRICT` |
 | `bpp_id` | UUID FK → `bpp` | `ON DELETE RESTRICT` |
+| `request_id` | UUID FK → `procurement_requests` | Added by migration 24. Direct link to the originating procurement request — eliminates the multi-hop JOIN through approval → negotiation → score → offering → discovery → intent when analytics queries need the request context. |
 | `item_id` | VARCHAR(255) | Beckn catalog item ID |
 | `quantity` | INT CHECK > 0 | — |
 | `unit` | VARCHAR(50) | — |
@@ -529,6 +530,11 @@ All ENUM types are defined in `database/sql/00_extensions_and_types.sql`. Two EN
 | `intent_class_type` | `procurement`, `query`, `support`, `out_of_scope` | `parsed_intents.intent_class` | 00 |
 | `negotiation_strategy_type` | `aggressive`, `accept_margin`, `advisory`, `escalate`, `skipped` | `negotiation_outcomes.strategy_applied` | 00 |
 | `acceptance_status_type` | `accepted`, `rejected`, `advisory`, `escalated`, `skipped` | `negotiation_outcomes.acceptance_status` | 00 |
+
+**Invalid values (Phase 4 fix):**
+
+- `negotiation_strategy_type` — `"negotiated"` is **not** a valid value. It was incorrectly used in `order_repo.py` before Phase 4 and will cause a PostgreSQL ENUM constraint violation.
+- `acceptance_status_type` — `"agreed"` is **not** a valid value. It was incorrectly used before Phase 4 and was corrected to `"accepted"` or `"skipped"` depending on context.
 | `approval_level_type` | `auto`, `manager`, `cfo` | `approval_decisions.approval_level` | 00 |
 | `approval_status_type` | `pending`, `approved`, `rejected`, `escalated`, `auto_approved` | `approval_decisions.status` | 00 |
 | `notification_channel_type` | `slack`, `teams`, `email` | `approval_decisions.notification_channel` | 00 |
@@ -624,6 +630,13 @@ The setup script executes all `.sql` files in `database/sql/` in lexicographic o
 4. Run `python setup_database.py` to apply. The script is safe to re-run against an existing database.
 
 **Never renumber or reorder existing files.** The FK chain depends on execution order. Breaking it causes `relation does not exist` errors during a fresh setup.
+
+### Recent Migrations (23–24)
+
+| Migration | File | Table(s) | Change |
+|---|---|---|---|
+| 23 | `23_budget_remaining.sql` | `procurement_requests` | Adds a `budget_remaining` column to track remaining procurement budget per request after a purchase order is committed. Idempotent (`ADD COLUMN IF NOT EXISTS`). Applied to the host PostgreSQL instance (`host.docker.internal:5432`). |
+| 24 | `24_po_request_id.sql` | `purchase_orders` | Adds a direct `request_id` FK column on `purchase_orders` pointing to `procurement_requests.request_id`. Simplifies analytics JOINs — avoids the multi-hop chain PO → approval → negotiation → score → offering → discovery → intent → request. Idempotent (`ADD COLUMN IF NOT EXISTS`). |
 
 ### Verification
 

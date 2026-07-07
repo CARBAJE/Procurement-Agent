@@ -264,6 +264,33 @@ orchestrator → POST {DEMO_GATEWAY_URL}/api/demo/negotiate → demo-gateway →
 
 The orchestrator then polls `GET {DEMO_GATEWAY_URL}/api/demo/negotiate/{thread_id}` and triggers `POST .../supplier-respond` when `awaiting_supplier=true`. This drives the `SupplierAgent` (Claude via proxy at :8012) to respond, which publishes to Redis and resumes the buyer graph. Maximum 120 polls at 1-second intervals, maximum 3 negotiation rounds, 18% below list-price as target. (Source: services/orchestrator/src/workflow.py code finding -- Confidence: High)
 
+### 4.6 Negotiation Savings Reporting (Phase 4 Fix)
+
+Prior to Phase 4, the `negotiation_outcomes` table always showed
+`initial_price == final_price` (zero savings). Two independent bugs caused
+this:
+
+1. **Invalid enum values in order_repo.py** — `negotiation_strategy_type` was
+   written as `"negotiated"` (not a valid enum member) and
+   `acceptance_status_type` was written as `"agreed"` (not valid). Both caused
+   silent DB constraint errors on every negotiated order, leaving the
+   `negotiation_outcomes` row unwritten.
+   - Fix: `"negotiated"` → `"accept_margin"` (negotiated path),
+     `"skipped"` (no-negotiation path); `"agreed"` → `"accepted"`
+     (negotiated), `"skipped"` (no-negotiation).
+   - File: `DataNormalizer/repositories/order_repo.py`
+
+2. **`original_price` not forwarded by orchestrator** — neither the autonomous
+   run flow nor the HITL `decide_run` flow passed `original_price` (the catalog
+   list price before negotiation) to `_persist_order_record()`. The field
+   defaulted to `None`, so `initial_price` and `final_price` were always equal.
+   - Fix: both call sites in `services/orchestrator/src/workflow.py` now pass
+     `original_price`; `data-normalizer POST /normalize/order` accepts and
+     forwards it.
+
+After the fix, the analytics savings query (`negotiation_savings` field in
+`GET /analytics`) returns correct non-zero values for negotiated orders.
+
 ---
 
 ## 5. ERP Integration
@@ -623,6 +650,77 @@ Key characteristics:
 ### 12.7 Separate MLOps Compose
 
 The Phase 2 scoring MLOps stack runs independently via `docker compose -f services/ComparativeAndScoreing/docker-compose.mlops.yaml`. Services: `mlflow-db` (PostgreSQL backend for MLflow), `mlflow-server` (MLflow tracking UI, port 5000), `prediction-api` (FastAPI inference, port 8004). Training and validation are run as one-shot containers via `--profile training` and `--profile validation` flags. (Source: services/ComparativeAndScoreing/README.md -- Confidence: High)
+
+---
+
+## 13. Supplier Selection Explanation (Phase 4)
+
+After the ML scoring model ranks offerings and selects a recommended supplier,
+the system automatically generates a natural-language explanation for
+procurement officers explaining why that supplier was chosen over the
+alternatives.
+
+(Source: services/intention-parser/src/handler.py, frontend/src/components/SelectionExplanationCard — Confidence: High)
+
+### 13.1 Trigger
+
+The explanation is requested automatically when `RunView` renders with a
+`recommended_item_id` present and the run stage is `awaiting_selection` or
+`awaiting_approval`. The frontend fires the request in a `useEffect` keyed on
+`recommended_item_id`; no user action is required to see the explanation.
+
+### 13.2 Data Assembled
+
+The frontend assembles the request payload from the current run state:
+
+- All offerings with `provider`, `item`, `price`, `currency`,
+  `delivery_hours`, `composite_score`, `rank`, `is_recommended`.
+- Per-criterion `score_details` (criterion name, raw value, normalized
+  0.0–1.0 score, human-readable explanation) for each offering.
+- The `rank_and_select_summary` from the orchestrator's reasoning steps (the
+  content of the `rank_and_select` node, if present).
+- `recommended_provider` — the provider name of the `is_recommended=true`
+  offering.
+
+### 13.3 LLM Call
+
+The assembled payload is sent to `POST /explain-selection` on the Docker
+`intention-parser` service (port 8001). The handler calls Ollama `qwen3:1.7b`
+via `AsyncOpenAI(base_url=OLLAMA_URL)` with `temperature=0.3`,
+`max_tokens=350`. The model returns 2–3 plain sentences aimed at a non-technical
+procurement officer.
+
+### 13.4 Prompt Strategy
+
+The handler builds a ranked comparison table of all suppliers showing:
+price, delivery time, composite score, and criterion explanations. It instructs
+the model to explain in 2–3 plain sentences why the recommended supplier ranked
+highest. The prompt explicitly forbids bullet points or markdown so the output
+renders cleanly as inline prose in the frontend card.
+
+### 13.5 Output Handling
+
+- `<think>…</think>` blocks are stripped from the raw model output before the
+  response is returned (qwen3 models emit chain-of-thought tags at `temperature < 0.5`).
+- On any LLM error (Ollama unavailable, timeout, empty response), the endpoint
+  returns `{"explanation": ""}`.
+- The empty string is a non-fatal signal: the frontend shows an error fallback
+  state without blocking the procurement workflow or any user action.
+
+### 13.6 Frontend: SelectionExplanationCard
+
+The `SelectionExplanationCard` component in `RunView`:
+
+1. **Loading state** — shows a skeleton placeholder while the
+   `/explain-selection` request is in flight.
+2. **Success state** — renders the LLM explanation text as a bordered card
+   below the scored offerings table.
+3. **Error fallback** — if the request fails or returns an empty explanation,
+   shows a muted message ("Explanation unavailable") without disrupting the
+   rest of the view.
+
+The card is rendered regardless of `execution_mode`; it appears in advisory,
+hitl, and autonomous flows whenever a `recommended_item_id` is present.
 
 ---
 

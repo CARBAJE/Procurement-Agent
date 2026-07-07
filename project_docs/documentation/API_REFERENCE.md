@@ -392,6 +392,7 @@ All three parsing stages depend on a local [Ollama](https://ollama.ai/) instance
 | POST | `/parse` | 1+2 | Yes | Synchronous; Stage 3 disabled |
 | POST | `/parse/batch` | 1+2 | Yes | Parallel batch via `ThreadPoolExecutor` |
 | POST | `/parse/full` | 1+2+3+recovery | Yes + pgvector + MCP sidecar | Async; full pipeline |
+| POST | `/explain-selection` | — | Yes (`qwen3:1.7b`) | LLM narrative explanation of ranked supplier selection |
 
 > There is no `GET /health` endpoint in `api.py`. Probe liveness with a minimal `POST /parse` request.
 
@@ -505,6 +506,55 @@ Requires: local Ollama, PostgreSQL 16 with pgvector, and mcp-sidecar on port 300
 
 ---
 
+### POST /explain-selection
+
+Generates a natural-language explanation of why a particular supplier was recommended over the alternatives. Called by the frontend `SelectionExplanationCard` when a run reaches `awaiting_selection` or `awaiting_approval` stage.
+
+- **Auth:** none (internal service — not exposed outside the Docker network)
+- **Ollama model:** `qwen3:1.7b`, `temperature=0.3`, `max_tokens=350`
+- **Timeout:** 30 s (enforced by the Next.js proxy; see [Frontend API Routes](#frontend-api-routes))
+
+**Request body**
+
+```json
+{
+  "offerings": [
+    {
+      "provider": "OfficeWorld Supplies",
+      "item": "A4 Paper 80gsm",
+      "price": 157.26,
+      "currency": "INR",
+      "delivery_hours": 72,
+      "composite_score": 1.0,
+      "rank": 1,
+      "is_recommended": true,
+      "score_details": [
+        {
+          "criterion": "ML Score",
+          "raw": "2.094",
+          "normalized": 1.0,
+          "explanation": "RankNet score 2.094 (rank #1) — recommended"
+        }
+      ]
+    }
+  ],
+  "recommended_provider": "OfficeWorld Supplies",
+  "rank_and_select_summary": "RankNet (v1) ranked 3 offering(s); recommended OfficeWorld Supplies"
+}
+```
+
+`score_details[]` is the per-criterion breakdown produced by the comparative-scoring service. Each entry contains `criterion`, `raw` (model output), `normalized` (0–1 scale), and `explanation` (human-readable label). All offerings sorted by `rank` ascending are included so the LLM can compare alternatives.
+
+**Response 200**
+
+```json
+{ "explanation": "OfficeWorld Supplies was selected because it offered the lowest unit price (INR 157.26 vs INR 180.00 from PaperDirect India), faster delivery (72h vs 120h), and achieved the highest composite score of 100% according to the RankNet model." }
+```
+
+**Error handling:** If Ollama is unreachable or returns empty content, the handler returns `{ "explanation": "" }` with HTTP 200 (non-fatal). `<think>…</think>` reasoning blocks are stripped from the raw LLM output before returning. The frontend treats an empty explanation string as a soft error and shows an advisory message rather than failing the page.
+
+---
+
 ### IntentParser Environment Variables
 
 | Variable | Default | Notes |
@@ -518,6 +568,39 @@ Requires: local Ollama, PostgreSQL 16 with pgvector, and mcp-sidecar on port 300
 | `DB_NAME` | `procurement_agent` | |
 | `DB_USER` | `postgres` | |
 | `DB_PASSWORD` | `""` | |
+
+---
+
+## Frontend API Routes (Next.js proxy layer)
+
+The Next.js frontend exposes `/api/procurement/*` routes that proxy authenticated requests to backend services. These routes require a valid `next-auth` session; unauthenticated requests receive `401`.
+
+### POST /api/procurement/explain-selection
+
+Authenticated proxy to `INTENT_PARSER_URL/explain-selection`.
+
+| Property | Value |
+|---|---|
+| Auth | Valid `next-auth` session required |
+| Upstream | `${INTENT_PARSER_URL}/explain-selection` |
+| Timeout | 30 000 ms |
+| On upstream error | `502` with `{ "error": "Unable to generate explanation." }` |
+
+**Request body** — forwarded verbatim to the intention-parser; see [POST /explain-selection](#post-explain-selection) for the full schema.
+
+**Response 200** — forwarded verbatim from the intention-parser:
+
+```json
+{ "explanation": "OfficeWorld Supplies was selected because ..." }
+```
+
+**Response 502** — when the upstream service is unreachable or returns an error:
+
+```json
+{ "error": "Unable to generate explanation." }
+```
+
+> `INTENT_PARSER_URL` must be set in the Next.js environment (`.env.local` or Docker env). Defaults to `http://localhost:8001` for local development and `http://intention-parser:8001` inside Docker.
 
 ---
 
@@ -874,6 +957,16 @@ GET /health  →  {"status": "ok", "service": "data-normalizer"}
 | `composite_score` | `float [0, 1]` | `FLOAT [0, 100]` | `× 100`, clamped |
 | `channel` | any string | text | Unrecognised channels coerced to `"web"` |
 | `confidence` | float | float | Clamped to `[0.0, 1.0]` |
+
+### POST /normalize/order — original_price field
+
+`POST /normalize/order` accepts an optional `original_price` field in its request body:
+
+| Field | Type | Notes |
+|---|---|---|
+| `original_price` | `float \| null` | Catalog list price before negotiation. When set and greater than the agreed `price`, `order_repo.create_order()` inserts a `negotiation_outcomes` row with `initial_price=original_price`, `final_price=agreed_price`, and `discount_pct=round((initial_price−final_price)/initial_price×100, 2)`. When `null` or equal to the agreed price, the `negotiation_outcomes` row is inserted with `strategy="skipped"` as usual. Drives the analytics savings query `SELECT SUM(initial_price − final_price) FROM negotiation_outcomes`. |
+
+The orchestrator's `_persist_order_record()` function passes `original_price` from the catalog offering stored in the session (the list price before any negotiation round). If no negotiation ran, `original_price` is `null` and the savings query returns zero for that order.
 
 ### FK Chain for purchase_order Creation
 

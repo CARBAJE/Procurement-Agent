@@ -272,6 +272,15 @@ flowchart TD
 
 **Docker override.** `docker-compose.yml` sets both `COMPLEX_MODEL=qwen3:1.7b` and `SIMPLE_MODEL=qwen3:1.7b` for the `intention-parser` container, collapsing the complexity routing. The qwen3:8b model is only used when IntentParser runs locally outside Docker.
 
+**LLM usage by stage.**
+
+| Stage | Model | Client | Notes |
+|---|---|---|---|
+| Stage 1 — intent classification | `qwen3:8b` (local) / `qwen3:1.7b` (Docker) | instructor + Ollama, Mode.JSON | Always uses `COMPLEX_MODEL`; max_retries=3 |
+| Stage 2 — BecknIntent extraction | `qwen3:1.7b` (simple) or `qwen3:8b` (complex) | instructor + Ollama | Routed by `_is_complex()` heuristic (>120 chars, ≥2 numeric tokens, or procurement keywords); both branches collapse to `qwen3:1.7b` in Docker |
+| Stage 3 — MCP validation | `qwen3:8b` | instructor + Ollama, TOOLS mode | Local IntentParser only; not invoked from Docker |
+| Phase 4 — explanation generation | `qwen3:1.7b` | raw `AsyncOpenAI` (no instructor, plain text) | Called by `POST /explain-selection` in the Docker `intention-parser` handler; not part of the parse pipeline; invoked on-demand by the frontend after scoring |
+
 ---
 
 ## 6. LangGraph State Machines
@@ -650,6 +659,9 @@ flowchart TD
 
 - **Role:** Thin Docker container wrapping the IntentParser package; exposes Stages 1 and 2 only (Stage 3 disabled in Docker context).
 - **Run mode:** Docker container; host port 8001 → container port 8001.
+- **Endpoints (Phase 4):**
+  - `POST /parse` — existing Stage 1+2 intent extraction (unchanged).
+  - `POST /explain-selection` — new in Phase 4. Accepts a scored offerings list and the recommended provider name; calls Ollama `qwen3:1.7b` via raw `AsyncOpenAI` (no instructor, plain text output) to generate a 2–3 sentence natural-language explanation of why the ML scoring model recommended that supplier. Implemented in `services/intention-parser/src/handler.py`. Not part of the parse pipeline; invoked on-demand by the frontend after scoring completes.
 - **Notable behavior:** Both models overridden to `qwen3:1.7b` in `docker-compose.yml` — `qwen3:8b` is never invoked from Docker.
 
 ### frontend_demo_gateway (:8015)
@@ -702,6 +714,7 @@ flowchart TD
   - All backend calls proxied through Next.js API routes: `/api/orchestrator/*`, `/api/analytics/*`, `/api/audit/*`, `/api/users/*`, `/api/demo/*`.
   - Authentication via NextAuth 4 + Keycloak only — no stub credentials mode, requires a live OIDC tenant.
 - **Notable behavior:** No frontend tests, no App Router error boundaries. All recharts charts must be wrapped in `dynamic(..., { ssr: false })`.
+- **Phase 4 dependency — SelectionExplanationCard.** `RunView` now calls `POST /api/procurement/explain-selection`, which proxies to `intention-parser:8001/explain-selection`, to populate the `SelectionExplanationCard` component. This call is non-blocking and non-critical: the run page renders fully without it and the explanation card appears asynchronously after scoring. If the `intention-parser` container is unreachable, the card shows an error message and the rest of the page is unaffected.
 
 ### shared/ (cross-service models)
 

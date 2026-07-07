@@ -432,7 +432,87 @@ The working tenant used during development is Phase Two (`phasetwo.io`) at `euc1
 
 ---
 
-### 2.6 Negotiation Engine
+### 2.6 Supplier Selection Explanation (SelectionExplanationCard)
+
+#### Symptom: "Could not generate explanation — ensure the IntentParser is running" message
+
+**Cause 1 — `intention-parser` container is not running.**
+```bash
+docker compose up -d intention-parser
+# Verify:
+curl http://localhost:8001/health
+# Expected: {"status": "ok"}
+```
+
+**Cause 2 — Container is running but `/explain-selection` returns 404.**
+
+The running image predates Phase 4 and does not include the new handler endpoint.
+```bash
+docker compose build intention-parser && docker compose up -d intention-parser
+```
+
+**Cause 3 — Ollama is not running or `qwen3:1.7b` is not pulled.**
+```bash
+# Start Ollama if not already running
+ollama serve
+
+# Pull the required model
+ollama pull qwen3:1.7b
+
+# Verify the model appears in the list
+curl http://localhost:11434/api/tags
+# Check that "qwen3:1.7b" is present in the response
+```
+
+**Cause 4 — `OLLAMA_URL` misconfigured in the container.**
+
+The `intention-parser` container must reach Ollama on the host via the Docker bridge:
+- macOS / Windows: `http://host.docker.internal:11434/v1`
+- Linux Docker bridge: `http://172.17.0.1:11434/v1`
+
+```bash
+# Check the value currently in use
+docker compose exec intention-parser env | grep OLLAMA
+```
+
+---
+
+#### Symptom: Explanation is cut off mid-sentence
+
+Ollama returned the maximum token count (350) before completing the sentence. This is uncommon with `qwen3:1.7b` on a 2–3 sentence prompt. If it recurs, check whether the offerings list contains unusually long provider or item names that inflate the prompt past the effective context.
+
+---
+
+#### Symptom: Explanation contains `<think>…</think>` XML tags in the UI
+
+The `re.sub` strip in `handler.py` did not fire — the regex produced an empty match.
+
+**Immediate fix:**
+```bash
+docker compose restart intention-parser
+```
+
+**Verify** the handler contains the correct regex:
+```python
+re.sub(r"<think>.*?</think>", "", raw, flags=re.DOTALL)
+```
+
+---
+
+#### Symptom: Clicking "Cancel" navigates away without showing the confirmation modal
+
+**Cause.** The browser is running a cached build from before Phase 4 that has the old `onClick={() => router.push("/request/new")}` Cancel button.
+
+**Fix.** Hard-refresh the browser (`Ctrl+Shift+R` / `Cmd+Shift+R`) to clear the Next.js module cache, or restart the dev server:
+```bash
+npm run dev
+```
+
+**Verify.** With the Phase 4 build, clicking Cancel while in `awaiting_selection` or `awaiting_approval` stages should show a modal titled "Cancel this request?" with "Stay on page" and "Yes, cancel request" buttons.
+
+---
+
+### 2.7 Negotiation Engine
 
 #### Negotiation connection refused — `http://localhost:8012`
 

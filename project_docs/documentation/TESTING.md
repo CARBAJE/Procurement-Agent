@@ -408,6 +408,73 @@ PYTHONPATH=$(pwd) .venv-test/bin/python -m pytest \
 
 ---
 
+## 6.3 Phase 4 — `/explain-selection` Endpoint Tests
+
+The `POST /explain-selection` endpoint in the Docker `intention-parser` handler generates natural-language explanations for supplier recommendations. Three test layers cover it.
+
+### Unit tests (no Ollama required — mock the OpenAI client)
+
+File: `services/intention-parser/tests/test_explain_selection.py`
+
+```python
+async def test_explanation_strips_think_tags():
+    with patch("openai.AsyncOpenAI") as mock_client:
+        mock_client.return_value.chat.completions.create = AsyncMock(
+            return_value=MagicMock(choices=[MagicMock(message=MagicMock(
+                content="<think>reasoning</think>OfficeWorld was selected because it offered the lowest price."
+            ))])
+        )
+        resp = await client.post("/explain-selection", json={...})
+        assert resp.status == 200
+        assert "<think>" not in resp.json()["explanation"]
+        assert resp.json()["explanation"].startswith("OfficeWorld")
+
+async def test_explanation_returns_empty_on_llm_error():
+    with patch("openai.AsyncOpenAI") as mock_client:
+        mock_client.return_value.chat.completions.create = AsyncMock(side_effect=Exception("Ollama down"))
+        resp = await client.post("/explain-selection", json={...})
+        assert resp.status == 502
+        assert resp.json()["explanation"] == ""
+```
+
+### Integration test (requires Ollama + `qwen3:1.7b` running)
+
+```bash
+curl -s -X POST http://localhost:8001/explain-selection \
+  -H "Content-Type: application/json" \
+  -d @- << 'EOF'
+{"offerings":[{"provider":"OfficeWorld Supplies","item":"A4 Paper","price":157.26,"currency":"INR","delivery_hours":72,"composite_score":1.0,"rank":1,"is_recommended":true,"score_details":[{"criterion":"ML Score","raw":"2.094","normalized":1.0,"explanation":"RankNet score 2.094 rank 1"}]}],"recommended_provider":"OfficeWorld Supplies","rank_and_select_summary":"RankNet ranked 1 offering"}
+EOF
+# Expected: {"explanation": "<non-empty string>"}
+```
+
+### Frontend tests (Jest/RTL — mock the API call)
+
+```typescript
+it("shows skeleton while loading then renders explanation", async () => {
+  vi.mocked(explainSelection).mockResolvedValue({ explanation: "OfficeWorld was chosen." })
+  render(<SelectionExplanationCard run={mockRun} recommendedItemId="item-a4" />)
+  expect(screen.getByRole("status")).toBeInTheDocument() // skeleton
+  await waitFor(() => expect(screen.getByText("OfficeWorld was chosen.")).toBeInTheDocument())
+})
+
+it("shows error message when LLM call fails", async () => {
+  vi.mocked(explainSelection).mockRejectedValue(new Error("Network error"))
+  render(<SelectionExplanationCard run={mockRun} recommendedItemId="item-a4" />)
+  await waitFor(() => expect(screen.getByText(/Could not generate explanation/)).toBeInTheDocument())
+})
+```
+
+**Infrastructure requirements for `/explain-selection` tests:**
+
+| Test type | Ollama | Docker stack | Notes |
+|---|---|---|---|
+| Unit (mocked OpenAI client) | No | No | `patch("openai.AsyncOpenAI")` replaces the LLM call entirely |
+| Integration (curl) | Yes (`qwen3:1.7b`) | Yes (`intention-parser`) | Requires `docker compose up -d intention-parser` and `ollama pull qwen3:1.7b` |
+| Frontend (Jest/RTL) | No | No | `vi.mocked(explainSelection)` mocks the Next.js API route call |
+
+---
+
 ## 7. Coverage Assessment
 
 ### Well-tested areas

@@ -64,7 +64,31 @@ The following items were noted but are **intentional external references** (not 
 
 ---
 
-## 4. Overall Assessment
+## 4. Phase 4 Validation — Implemented Features
+
+| Feature | Status | Notes |
+|---|---|---|
+| POST /explain-selection (intention-parser Docker) | Implemented | qwen3:1.7b via Ollama; strips think tags; 502 on LLM error |
+| SelectionExplanationCard (RunView) | Implemented | Loading skeleton, LLM text, error fallback; fires once via useRef guard |
+| Cancel button navigation guard | Fixed | useNavigationGuard.trigger(href) added; modal now fires correctly |
+| OrderView raw_input_text display | Implemented | Fetched from DB via getOrderDetail(); styled MessageSquare card |
+| negotiation_strategy_type enum fix | Fixed | "negotiated"→"accept_margin"/"skipped" in order_repo.py |
+| acceptance_status_type enum fix | Fixed | "agreed"→"accepted"/"skipped" in order_repo.py |
+| original_price propagation (orchestrator) | Fixed | Both autonomous and HITL flows now pass original_price to _persist_order_record |
+| Analytics savings calculation | Fixed | SUM(initial_price - final_price) now returns non-zero for negotiated orders |
+| Migration 23 (budget_remaining) | Added | database/sql/23_budget_remaining.sql |
+| Migration 24 (po_request_id FK) | Added | database/sql/24_po_request_id.sql |
+| Merged documentation branch | Merged | 42 documentation files merged into phase4-main without conflicts |
+
+**Known open items (not blocking Phase 4):**
+- mTLS to SAP/Oracle ERP: not yet implemented (deferred)
+- Splunk/SIEM audit sink: not yet implemented (deferred)
+- Kubernetes deployment: not yet implemented (deferred)
+- No test coverage for /explain-selection or SelectionExplanationCard (test suite does not exist yet)
+
+---
+
+## 5. Overall Assessment
 
 The 18 documentation files are well-structured and internally consistent in their technical content. The issues found fell into three categories:
 

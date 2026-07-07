@@ -450,7 +450,8 @@ There is no `GET /health` defined in `api.py`. Health probing must use a
 
 Runs Stage 1 (intent classification) then Stage 2 (BecknIntent extraction).
 Stage 3 (ANN cache + MCP validation) is disabled. Synchronous; blocks on
-Ollama inference.
+Ollama inference. Phase 4 adds `/explain-selection` as a companion endpoint
+served by the Docker `intention-parser` container alongside `/parse`.
 
 (Source: IntentParser/api.py lines 48–50 — Confidence: High)
 
@@ -571,6 +572,107 @@ running on port 3000.
 5. `trigger_open_rfq_flow()` — stub.
 
 `recovery_log` contains messages from each step.
+
+---
+
+### POST /explain-selection
+
+Generates a 2–3 sentence natural-language explanation of why the ML scoring
+model recommended a specific supplier over the alternatives. Intended for
+procurement officers who need a plain-English rationale alongside the ranked
+comparison table.
+
+```
+Endpoint: POST /explain-selection
+Service:  intention-parser (Docker, port 8001 — services/intention-parser/src/handler.py)
+Auth:     None (internal service, behind Next.js authenticated proxy)
+```
+
+(Source: services/intention-parser/src/handler.py — Confidence: High)
+
+**Request body**
+
+```json
+{
+  "offerings": [
+    {
+      "provider": "OfficeWorld Supplies",
+      "item": "A4 Paper 80gsm",
+      "price": 168.0,
+      "currency": "INR",
+      "delivery_hours": 48,
+      "composite_score": 0.91,
+      "rank": 1,
+      "is_recommended": true,
+      "score_details": [
+        {
+          "criterion": "ML Score",
+          "raw": "0.91",
+          "normalized": 0.91,
+          "explanation": "Highest composite score across price, speed, and risk"
+        }
+      ]
+    }
+  ],
+  "recommended_provider": "OfficeWorld Supplies",
+  "rank_and_select_summary": "OfficeWorld ranked first on composite score..."
+}
+```
+
+`offerings` must be sorted by `rank` ascending (1 = best). All evaluated
+offerings should be included so the LLM can contrast the recommended supplier
+against the alternatives. `rank_and_select_summary` is the reasoning step
+content from the orchestrator's `rank_and_select` node; pass `null` if
+unavailable.
+
+**Offering fields**
+
+| Field | Type | Notes |
+|-------|------|-------|
+| `provider` | `string` | Supplier name |
+| `item` | `string` | Item name |
+| `price` | `float` | Unit price |
+| `currency` | `string` | e.g. `"INR"` |
+| `delivery_hours` | `int \| null` | Fulfillment time in hours |
+| `composite_score` | `float \| null` | 0.0–1.0 composite ML score |
+| `rank` | `int \| null` | 1 = best |
+| `is_recommended` | `bool` | `true` for the selected offering |
+| `score_details` | `array` | Per-criterion breakdown (see below) |
+
+**score_details item fields**
+
+| Field | Type | Notes |
+|-------|------|-------|
+| `criterion` | `string` | e.g. `"ML Score"`, `"Price"`, `"Delivery"` |
+| `raw` | `string` | Raw value from scoring model |
+| `normalized` | `float` | 0.0–1.0 normalized score |
+| `explanation` | `string` | Human-readable explanation from scoring service |
+
+**Response (200)**
+
+```json
+{ "explanation": "OfficeWorld Supplies was selected because it achieved the highest composite score of 0.91, combining the lowest price per unit at ₹168 with the fastest delivery at 48 hours. The two alternative suppliers scored materially lower on both price competitiveness and fulfillment speed." }
+```
+
+**Response (502 — LLM failure)**
+
+```json
+{ "explanation": "" }
+```
+
+The empty string signals a non-fatal LLM error. The frontend
+(`SelectionExplanationCard`) handles this gracefully by showing an error
+fallback state rather than blocking the procurement workflow.
+
+**Implementation notes**
+
+- Builds a ranked comparison block with all offerings' prices, delivery times,
+  and scoring details and injects it into the system prompt.
+- Calls Ollama `qwen3:1.7b` via `AsyncOpenAI(base_url=OLLAMA_URL)` with
+  `temperature=0.3`, `max_tokens=350`.
+- Strips `<think>…</think>` blocks from the model response before returning.
+- Returns `{"explanation": ""}` on any LLM error; never propagates a 5xx that
+  would interrupt the calling flow.
 
 ---
 

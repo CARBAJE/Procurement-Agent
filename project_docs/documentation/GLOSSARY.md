@@ -32,6 +32,9 @@ A PostgreSQL append-only table that records every procurement lifecycle event (n
 **autonomous mode**
 An execution mode (set via `PROCUREMENT_EXECUTION_MODE=autonomous`) in which the orchestrator commits a Beckn order automatically when the order value falls within the requester's pre-configured approval threshold and the ERP budget gate returns `allowed: true`. See [Architecture](ARCHITECTURE.md) §5 (Orchestrator Pipeline).
 
+**acceptance_status_type**
+PostgreSQL ENUM type on the `negotiation_outcomes.acceptance_status` column. Valid values: `accepted`, `rejected`, `advisory`, `escalated`, `skipped`. The value `"agreed"` is **not** valid and was incorrectly used in `order_repo.py` before the Phase 4 fix. See [Database Reference](DATABASE.md) §3 (ENUMs).
+
 ---
 
 ## B
@@ -53,6 +56,9 @@ The seller-side protocol participant that receives Beckn discovery and order req
 
 **BudgetConstraints**
 A typed Pydantic v2 sub-model (`{"max": float, "min": float}`) that is a required field of `BecknIntent`; using a typed model (rather than a raw string) enforces that budget values are numeric and prevents downstream services from needing to parse free-form budget text. See [Architecture](ARCHITECTURE.md) §4 (IntentParser 3-Stage Pipeline).
+
+**budget_remaining**
+Field added to `procurement_requests` by migration `23_budget_remaining.sql` to track the remaining procurement budget per request after a purchase order is committed. Applied to the host PostgreSQL instance (`host.docker.internal:5432`). Idempotent (`ADD COLUMN IF NOT EXISTS`). See [Database Reference](DATABASE.md) §5 (Recent Migrations).
 
 ---
 
@@ -154,6 +160,9 @@ An open-source ML lifecycle platform used by the `ComparativeAndScoreing` MLOps 
 **NDCG@5 (Normalised Discounted Cumulative Gain at rank 5)**
 The ranking quality metric used to evaluate the comparative-scoring service; it measures how well the model ranks the most relevant supplier offers in the top five positions, with a discount applied to lower-ranked positions — the Phase 2 ML target is NDCG@5 ≥ 0.85. See [Components](COMPONENTS.md) §3.1 (Models in Use).
 
+**negotiation_strategy_type**
+PostgreSQL ENUM type on the `negotiation_outcomes.strategy_applied` column. Valid values: `aggressive` (buyer opens with a significant discount ask), `accept_margin` (buyer accepts if supplier meets a minimum margin), `advisory` (result is advisory only, no binding commit), `escalate` (escalate to human approver), `skipped` (no negotiation attempted for new orders without negotiation). The value `"negotiated"` is **not** valid and was incorrectly used in `order_repo.py` before the Phase 4 fix. See [Database Reference](DATABASE.md) §3 (ENUMs).
+
 ---
 
 ## O
@@ -176,6 +185,9 @@ The Go binary (`fidedocker/onix-adapter`) that acts as the Beckn protocol middle
 **orchestrator**
 The FastAPI + aiohttp pipeline state machine (service `:8004`) that sequences the five procurement steps — intent parsing, discovery, scoring, ERP budget gate, and Beckn `select → init → confirm` — and exposes two flows: `POST /run` (end-to-end) and `POST /compare` + `POST /commit` (two-phase with human review). See [Architecture](ARCHITECTURE.md) §5.1 (Orchestrator Pipeline).
 
+**original_price**
+The catalog list price of a supplier offering before any negotiation takes place. Passed by the orchestrator to `_persist_order_record()` and stored in `negotiation_outcomes.initial_price`. Enables correct savings calculation: `discount_pct = round((initial_price - final_price) / initial_price * 100, 2)`. When no negotiation is attempted (`strategy_applied = 'skipped'`), `initial_price` and `final_price` are equal and `discount_pct` is 0.0. See [Database Reference](DATABASE.md) §2.2 (`negotiation_outcomes`).
+
 **Outbox pattern**
 The transactional messaging pattern used by `erp-adapter` to guarantee that every committed purchase order eventually triggers a PO push to the vendor ERP without requiring a Kafka broker; the orchestrator writes a row to `erp_sync_records` in the same PostgreSQL transaction as the `purchase_orders` insert, and a background worker picks it up via `FOR UPDATE SKIP LOCKED`. See [System Design](SYSTEM_DESIGN.md) §Outbox Pattern for ERP PO Push.
 
@@ -185,6 +197,9 @@ The transactional messaging pattern used by `erp-adapter` to guarantee that ever
 
 **pgvector**
 A PostgreSQL extension (version 0.7.0) that adds a native `vector(n)` column type and HNSW / IVFFlat indexes for approximate nearest-neighbour search directly inside PostgreSQL 16; used here to store 384-dimensional BPP catalog embeddings and agent memory vectors, eliminating the need for a separate Qdrant deployment. See [System Design](SYSTEM_DESIGN.md) §pgvector Instead of Qdrant.
+
+**po_request_id**
+The direct `request_id` FK column added to the `purchase_orders` table by migration `24_po_request_id.sql`. Links a purchase order directly to its originating `procurement_request` row, eliminating the multi-hop JOIN through `approval_decisions → negotiation_outcomes → scored_offers → seller_offerings → discovery_queries → beckn_intents → parsed_intents → procurement_requests` that analytics queries previously required. Idempotent (`ADD COLUMN IF NOT EXISTS`). See [Database Reference](DATABASE.md) §2.2 (`purchase_orders`) and §5 (Recent Migrations).
 
 **Phase2Scorer**
 The ML-based supplier ranking component in `comparative-scoring` (:8003) that calls the optional `prediction-api` RankNet model (from `docker-compose.mlops.yaml`) to rank `DiscoverOffering` items by predicted relevance; when the `prediction-api` is unavailable, `comparative-scoring` falls back to the Phase 1 minimum-price heuristic. See [Components](COMPONENTS.md) §1 (Full Technology Matrix).
@@ -228,6 +243,9 @@ A formal procurement document sent to suppliers when no matching item is found i
 
 ## S
 
+**SelectionExplanationCard**
+React component (internal to `RunView.tsx`) that calls `POST /explain-selection` on the intention-parser and renders a 2–3 sentence LLM-generated explanation of why the ML scoring model recommended a specific supplier. Uses `qwen3:1.7b` via Ollama (always `SIMPLE_MODEL` regardless of query complexity). The corresponding Next.js proxy route enforces a 30 000 ms timeout to accommodate 5–15 second LLM inference times. See [Configuration](CONFIGURATION.md) §3 (frontend, `INTENT_PARSER_URL`).
+
 **sentence-transformers**
 A Python library (PyTorch-backed) that provides pre-trained transformer-based text embedding models; used by IntentParser Stage 3 and the mcp-sidecar to encode procurement queries and catalog item descriptions into 384-dimensional `all-MiniLM-L6-v2` vectors for cosine similarity search in pgvector. See [Components](COMPONENTS.md) §4 (Embedding Models).
 
@@ -246,3 +264,13 @@ The HTTP streaming transport used by the MCP protocol in this project; the mcp-s
 
 **targetType: url**
 The ONIX routing configuration value set in all four routing YAML files (`config/generic-routing-BAPCaller.yaml`, etc.) that instructs the ONIX adapter to route Beckn messages directly to a configured URL rather than performing a DeDi registry lookup; enables a fully offline Beckn flow inside the Docker bridge network and can be reverted to `bap`/`bpp` with a single-line change for production network registration. See [System Design](SYSTEM_DESIGN.md) §DeDi Registry Bypass.
+
+**trigger(href)**
+Method added to `useNavigationGuard` in Phase 4. Programmatically opens the leave-confirmation modal with a pre-set destination `href`, enabling Cancel buttons and other non-anchor UI elements to participate in the navigation guard without being wrapped in `<a>` tags. Returned as part of the `{ showModal, confirming, dismiss, confirmLeave, trigger }` tuple. See also: **useNavigationGuard**.
+
+---
+
+## U
+
+**useNavigationGuard**
+React hook (`src/hooks/useNavigationGuard.ts`) that intercepts navigation away from an active procurement run. Handles three navigation vectors: browser back/forward (`popstate` event), tab or window close (`beforeunload` event), and in-app `<a>` tag clicks (click event delegation on the document). Returns `{ showModal, confirming, dismiss, confirmLeave, trigger }` — consumers render a confirmation modal when `showModal` is `true` and call `confirmLeave()` or `dismiss()` based on the user's choice.

@@ -164,7 +164,16 @@ await asyncio.gather(
 
 **Kafka consumer gap:** No dead-letter queue exists for the Kafka consumer. Malformed or unrecognised messages are logged and skipped; `enable_auto_commit=True` advances the offset regardless. A message that cannot be JSON-parsed will never be reprocessed.
 
-### 4.4 Always-200 Discovery Engine
+### 4.4 LLM Supplier Selection Explanation — Non-Blocking Side-Channel
+
+The supplier selection explanation (`POST /explain-selection` on the intention-parser Docker service) is intentionally designed as a non-blocking side-channel, not a pipeline step.
+
+- The main procurement pipeline — discover → score → rank → HITL decision — completes independently of the explanation call. The ranked comparison table is available to the buyer before the explanation response arrives.
+- `SelectionExplanationCard` fires after the page renders via `useEffect`. A `useRef` guard ensures the call is made exactly once per render, not on every re-render. The buyer can review the comparison table and make a proceed/approve decision while the LLM is still generating.
+- The explanation call fails gracefully: a 502 response from intention-parser (e.g. Ollama unreachable) sets `llmError=true` and renders an advisory message in the card. The error never propagates to the pipeline state machine, never triggers a retry, and never blocks the proceed or approve action.
+- `qwen3:1.7b` is the model used for explanation generation regardless of query complexity, because this is a post-decision summarisation task rather than structured extraction; latency matters more than raw model capacity here.
+
+### 4.5 Always-200 Discovery Engine
 
 The `discovery_engine` service (currently orphaned — it has no `docker-compose.yml` entry and no callers) returns HTTP 200 for all requests, including partial failures:
 
@@ -174,7 +183,7 @@ The `discovery_engine` service (currently orphaned — it has no `docker-compose
 
 Callers must check `degraded: true` and `failed_networks`. The per-network circuit breaker (`DISCOVERY_CB_FAILURE_THRESHOLD=3`, `DISCOVERY_CB_RECOVERY_TIMEOUT_S=30`) excludes misbehaving networks from fan-out results rather than failing the entire response.
 
-### 4.5 Negotiation Engine Three-Layer Guardrails
+### 4.6 Negotiation Engine Three-Layer Guardrails
 
 Counter-offers in the negotiation engine pass through three independent validation layers before being sent to a BPP:
 
@@ -384,3 +393,21 @@ Set `targetType: url` in all four ONIX routing YAML files under `config/` (`gene
 - The `config/README.md` documents the exact 3-step production procedure for switching to DeDi and rotating key material.
 
 **Related constraint — ONIX schema validator pin at commit `d43ec30d`:** Later ONIX commits introduced a `$ref` resolution bug in `SignatureHeader` / `AckSignatureHeader` that causes 100% of Beckn transactions to fail schema validation. The `fidedocker/onix-adapter` image is pinned to the last known-good commit. Do not upgrade without running a full end-to-end signing test covering discover → select → init → confirm → status with ED25519-signed payloads.
+
+---
+
+## 8. Frontend State Management
+
+### 8.1 Navigation Guard Design
+
+The `useNavigationGuard` hook protects in-progress procurement runs from accidental navigation. It uses a three-pronged intercept approach so that all navigation vectors — browser controls, in-app links, and programmatic triggers — are covered:
+
+1. **`popstate` listener** — intercepts browser back/forward navigation. When the guard is active, a history entry is pushed on mount so that the first back-press fires `popstate` instead of leaving the page. Each `popstate` event re-pushes the entry to keep the guard armed, then shows the confirmation modal.
+
+2. **`beforeunload`** — fires the browser-native tab-close or page-reload dialog. The message text cannot be customised; the browser always shows its own generic prompt. This is a browser security constraint, not a framework limitation.
+
+3. **DOM capture-phase `click` listener on `document`** — intercepts in-app `<a>` clicks before Next.js router handles them. The capture phase (third argument `true` on `addEventListener`) ensures the handler fires before any React event handlers or the router's own link handler, allowing the guard to call `preventDefault()` and show the modal first.
+
+**Phase 4 addition — `trigger(href)` method:** Buttons and other non-anchor interactive elements that need to participate in the guard cannot be handled by the `<a>`-click intercept. `trigger(href)` provides a programmatic modal activation path: the caller passes the intended destination `href`, the guard shows the confirmation modal, and on confirmation the guard disables itself and navigates to the href. This is how the Cancel button on the RunView page participates in the guard without being wrapped in an `<a>` tag.
+
+The guard is disabled (and all listeners removed) on component unmount, on successful confirmation, and via an explicit `disable()` call used when the orchestrator commits a run — at that point navigation is intentional and should not be intercepted.
