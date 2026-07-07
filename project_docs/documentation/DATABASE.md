@@ -31,19 +31,154 @@ The `procurement_agent` database holds all 16 primary application tables. The `n
 
 ### 2.1 Core Procurement
 
+**Figure 1 — Main procurement pipeline (`procurement_agent` database)**
+
 ```mermaid
-flowchart TD
-    users --> procurement_requests
-    procurement_requests --> parsed_intents
-    parsed_intents --> beckn_intents
-    beckn_intents --> discovery_queries
-    bpp --> seller_offerings
-    discovery_queries --> seller_offerings
-    seller_offerings --> scored_offers
-    scored_offers --> negotiation_outcomes
-    negotiation_outcomes --> approval_decisions
-    approval_decisions --> purchase_orders
-    bpp --> purchase_orders
+erDiagram
+    users {
+        uuid user_id PK
+        varchar email
+        user_role role
+        decimal approval_threshold
+    }
+    bpp {
+        uuid bpp_id PK
+        varchar name
+        varchar network_id
+        float reliability_score
+    }
+    procurement_requests {
+        uuid request_id PK
+        uuid requester_id FK
+        text raw_input_text
+        procurement_status status
+    }
+    parsed_intents {
+        uuid intent_id PK
+        uuid request_id FK
+        intent_class_type intent_class
+        float confidence_score
+    }
+    beckn_intents {
+        uuid beckn_intent_id PK
+        uuid intent_id FK
+        varchar item
+        int delivery_timeline_hours
+        decimal budget_max
+    }
+    discovery_queries {
+        uuid query_id PK
+        uuid beckn_intent_id FK
+        varchar transaction_id
+    }
+    catalog_cache {
+        varchar cache_key PK
+        uuid query_id FK
+        jsonb cached_offerings
+        timestamp expires_at
+    }
+    seller_offerings {
+        uuid offering_id PK
+        uuid query_id FK
+        uuid bpp_id FK
+        varchar item_name
+        decimal price
+    }
+    scored_offers {
+        uuid score_id PK
+        uuid offering_id FK
+        float total_score
+        int rank
+    }
+    negotiation_outcomes {
+        uuid negotiation_id PK
+        uuid score_id FK
+        decimal final_price
+        float discount_percent
+    }
+    approval_decisions {
+        uuid approval_id PK
+        uuid negotiation_id FK
+        uuid requester_id FK
+        uuid approver_id FK
+        approval_status_type status
+    }
+    purchase_orders {
+        uuid po_id PK
+        uuid approval_id FK
+        uuid bpp_id FK
+        po_status_type status
+        decimal agreed_price
+    }
+
+    users ||--o{ procurement_requests : "requester_id"
+    users ||--o{ approval_decisions : "requester_id"
+    users |o--o{ approval_decisions : "approver_id"
+    bpp ||--o{ seller_offerings : "bpp_id"
+    bpp ||--o{ purchase_orders : "bpp_id"
+    procurement_requests ||--o| parsed_intents : "request_id"
+    parsed_intents ||--o| beckn_intents : "intent_id"
+    beckn_intents ||--o{ discovery_queries : "beckn_intent_id"
+    discovery_queries ||--o{ catalog_cache : "query_id"
+    discovery_queries ||--o{ seller_offerings : "query_id"
+    seller_offerings ||--o| scored_offers : "offering_id"
+    scored_offers ||--o| negotiation_outcomes : "score_id"
+    negotiation_outcomes ||--o| approval_decisions : "negotiation_id"
+    approval_decisions ||--o| purchase_orders : "approval_id"
+```
+
+**Figure 2 — Supporting and observability tables**
+
+```mermaid
+erDiagram
+    procurement_requests {
+        uuid request_id PK
+    }
+    purchase_orders {
+        uuid po_id PK
+    }
+    users {
+        uuid user_id PK
+    }
+    erp_sync_records {
+        uuid sync_id PK
+        uuid po_id FK
+        erp_system_type erp_system
+        erp_sync_status status
+        varchar idempotency_key
+    }
+    audit_trail_events {
+        uuid event_id PK
+        uuid request_id FK
+        uuid po_id FK
+        uuid actor_id FK
+        audit_event_type event_type
+    }
+    agent_memory_vectors {
+        uuid vector_id PK
+        uuid source_request_id FK
+        vector embedding_vector
+        memory_entity_type entity_type
+    }
+    model_governance_records {
+        uuid record_id PK
+        model_name_type model_name
+        varchar model_version
+        float accuracy_score
+    }
+    bpp_catalog_semantic_cache {
+        uuid id PK
+        text item_name
+        vector item_embedding
+        text bpp_id
+        int hit_count
+    }
+
+    purchase_orders ||--o{ erp_sync_records : "po_id"
+    procurement_requests |o--o{ audit_trail_events : "request_id"
+    purchase_orders |o--o{ audit_trail_events : "po_id"
+    users |o--o{ audit_trail_events : "actor_id"
+    procurement_requests |o--o{ agent_memory_vectors : "source_request_id"
 ```
 
 #### `users` (migration `01_users.sql`)
@@ -132,6 +267,18 @@ Many per `beckn_intents` row — one row per `POST /discover` call.
 | `cache_hit` | BOOLEAN | TRUE = response served from Redis (15-min TTL) |
 | `results_count` | INT | Number of offerings returned |
 | `queried_at` | TIMESTAMP | — |
+
+#### `catalog_cache` (migration `07_catalog_cache.sql`)
+
+PostgreSQL-layer cache of raw `on_discover` catalog payloads. A cache entry is keyed by a hash of the query parameters so that identical intents within the TTL window skip a live Beckn network round-trip. Distinct from the Redis 15-minute short-lived cache — this table stores the normalised catalog payload for audit and replay.
+
+| Column | Type | Notes |
+|---|---|---|
+| `cache_key` | VARCHAR(500) PK | SHA-256 hash of the BecknIntent parameters (item, location, budget, timeline) |
+| `query_id` | UUID FK → `discovery_queries` | `ON DELETE CASCADE` |
+| `cached_offerings` | JSONB NOT NULL | Full `on_discover` catalog payload at time of caching |
+| `created_at` | TIMESTAMP | — |
+| `expires_at` | TIMESTAMP | Cache row considered stale after this timestamp; eviction job removes expired rows |
 
 #### `seller_offerings` (migrations `08_seller_offerings.sql` + `21_order_detail_fidelity.sql`)
 
@@ -337,6 +484,35 @@ These three tables live in the separate `negotiation` database, not in `procurem
 | `negotiation_session` | `transaction_id TEXT` | One row per negotiation lifecycle. `status CHECK IN ('active','completed','escalated','failed','timed_out')`. Root of the FK chain. |
 | `negotiation_round` | `round_id UUID` | One row per round per session. UNIQUE `(transaction_id, round_no)`. `decision CHECK IN ('counter','accept','reject','escalate','timeout')`. |
 | `negotiation_policy_decision` | `decision_id UUID` | Guardrail audit log. `rule_violated TEXT` (G1–G12), `severity CHECK IN ('LOW','MEDIUM','HIGH')`, `action_taken CHECK IN ('CLAMP','ESCALATE','LOG','BLOCK')`. Mirrors the Kafka `procurement.negotiation.policy_violations.v1` topic when Kafka is available. |
+
+```mermaid
+erDiagram
+    negotiation_session {
+        text transaction_id PK
+        varchar item_name
+        decimal budget_max
+        varchar status
+    }
+    negotiation_round {
+        uuid round_id PK
+        text transaction_id FK
+        int round_no
+        decimal offer_price
+        varchar decision
+    }
+    negotiation_policy_decision {
+        uuid decision_id PK
+        uuid round_id FK
+        text transaction_id FK
+        text rule_violated
+        varchar severity
+        varchar action_taken
+    }
+
+    negotiation_session ||--o{ negotiation_round : "transaction_id"
+    negotiation_session ||--o{ negotiation_policy_decision : "transaction_id"
+    negotiation_round ||--o{ negotiation_policy_decision : "round_id"
+```
 
 ---
 

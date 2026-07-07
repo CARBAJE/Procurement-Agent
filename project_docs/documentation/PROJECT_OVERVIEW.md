@@ -48,7 +48,7 @@ Every decision — intent parse, discover results, score rationale, approval dec
 | IT buyer (complex) | IT manager sourcing servers, networking equipment, software licences | Same dashboard; additional CPO benchmarking panel comparing contracted price vs live Beckn market |
 | System administrator | Infosys ops engineer or client IT team | Docker Compose stack; environment variable configuration; ERP connector setup |
 | Procurement approver | Line manager or CFO | Email / Slack approval notification; approval workflow UI in the dashboard |
-| Infosys InStep internship team | Four engineers (Eduardo Garcia Diaz, Cristian, CARBAJE, Emilio) building the reference implementation | Direct API access; local Docker Compose stack; pytest suite |
+| Infosys InStep internship team | Three engineers (Eduardo Garcia Diaz, Cristian Montiel Garcia, Jose Emiliano Carrillo Barreiro) building the reference implementation | Direct API access; local Docker Compose stack; pytest suite |
 
 The primary demo context is the Infosys InStep internship programme. The system is the reference implementation that Infosys intends to productise for enterprise procurement clients targeting the $9.5 B global enterprise procurement software market.
 
@@ -60,7 +60,7 @@ The primary demo context is the Infosys InStep internship programme. The system 
 
 This is a **16-week Infosys InStep internship project** (April–July 2026). It delivers a functionally complete reference implementation across three phases, with a fourth hardening phase explicitly deferred. It is **not a production system**. All deployment runs on a single developer workstation using Docker Compose. No cloud infrastructure, no Kubernetes cluster, and no live Beckn network registration are part of the current scope.
 
-### What is in scope (Phases 1–3, complete)
+### What is in scope
 
 - Full Beckn Protocol v2.0.0 lifecycle: `discover → select → init → confirm → status`
 - Three-stage NL intent parsing pipeline (LLM classify → LLM extract → hybrid pgvector ANN + MCP sidecar validation)
@@ -75,7 +75,7 @@ This is a **16-week Infosys InStep internship project** (April–July 2026). It 
 - Analytics dashboard: spend metrics, cycle-time KPIs, CPO benchmarking
 - Notification fan-out: Kafka → Slack Block Kit, Teams Adaptive Card, SMTP email
 
-### What is deferred (Phase 4, not started)
+### What is deferred
 
 Kubernetes / Helm deployment, CI/CD pipeline (GitHub Actions), OWASP pen test, integration test coverage >= 80%, Kafka as primary event bus for audit and ERP, LangSmith LLM tracing, Splunk/SIEM sink, retention enforcement job, and Kong API gateway. See Section 7 for the full phase breakdown.
 
@@ -125,13 +125,13 @@ The ERP adapter defines `ERPAdapter` as a Python `typing.Protocol` with six meth
 
 | Phase | Weeks | Focus | Status | Key deliverables |
 |---|---|---|---|---|
-| **1** | 1–4 (April 2026) | Foundation and Protocol Integration | Complete | ONIX Go adapter (ED25519, schema validator pinned at d43ec30d); core Beckn API flows (discover + select + init + confirm + status); NL IntentParser Stage 1+2 (qwen3 via Ollama + instructor); LangGraph ReAct agent framework; PostgreSQL schema (24 SQL scripts); shared domain models (BecknIntent, DiscoverOffering) |
-| **2** | 5–8 (April–May 2026) | Core Intelligence and Transaction Flow | Complete | Six-service microservices pipeline (beckn-bap-client, catalog-normalizer, data-normalizer, comparative-scoring, orchestrator, analytics); IntentParser Stage 3 (pgvector ANN + MCP sidecar); ADR-0001 Redis Pub/Sub async discovery; sim-bpp replacing sandbox-2.0; RankNet MLOps stack (optional); ERP adapter (budget gate + outbox); Next.js frontend scaffold |
-| **3** | 9–12 (June–July 2026) | Advanced Intelligence and Enterprise Features | Complete (current branch: `phase3`) | Agent memory with time-decayed loyalty bonuses (pgvector RAG); SOX 404 audit trail (9 event types, 7-year retention, frontend viewer); RBAC + three-tier approval workflow; LangGraph autonomous negotiation engine with three-layer guardrails; real-time order tracking (WebSocket + sim-bpp auto-advance + Kafka); notification fan-out (Slack / Teams / email); analytics dashboard; Keycloak OIDC authentication |
-| **4** | 13–16 | Hardening and Production Readiness | Not started | Kubernetes + Helm chart + ArgoCD GitOps; CI/CD pipeline (GitHub Actions lint → test → build → Helm); OWASP Top 10 pen test; integration test coverage >= 80%; eval suite accuracy >= 85%; Kafka as primary event bus for audit and ERP; LangSmith LLM tracing; Splunk/SIEM sink; retention enforcement job; Kong API gateway; mTLS to SAP/Oracle |
+| **1** | 1–4 | Foundation and Protocol Integration | Complete | ONIX Go adapter; core Beckn API flows (discover + select + init + confirm + status); NL IntentParser (qwen3 via Ollama + instructor); LangGraph ReAct agent framework; PostgreSQL schema; shared domain models (BecknIntent, DiscoverOffering) |
+| **2** | 5–8 | Core Intelligence and Transaction Flow | Complete | Six-service microservices pipeline (beckn-bap-client, catalog-normalizer, data-normalizer, comparative-scoring, orchestrator, analytics); IntentParser Stage 3 (pgvector ANN + MCP sidecar); ADR-0001 Redis Pub/Sub async discovery; sim-bpp replacing sandbox-2.0; RankNet MLOps stack (optional); ERP adapter (budget gate + outbox); Next.js frontend scaffold |
+| **3** | 9–12 | Advanced Intelligence and Enterprise Features | Complete | Agent memory with time-decayed loyalty bonuses (pgvector RAG); audit trail; RBAC + three-tier approval workflow; LangGraph autonomous negotiation engine with three-layer guardrails; real-time order tracking (WebSocket + sim-bpp auto-advance + Kafka); notification fan-out (Slack / Teams / email); analytics dashboard; Keycloak OIDC authentication |
+| **4** | 13–16 | Hardening and Production Readiness | In progress | Kubernetes + Helm chart + ArgoCD GitOps; CI/CD pipeline (GitHub Actions lint → test → build → Helm); OWASP Top 10 pen test; integration test coverage >= 80%; eval suite accuracy >= 85%; Kafka as primary event bus for audit and ERP; LangSmith LLM tracing; Splunk/SIEM s   ink; retention enforcement job; Kong API gateway; mTLS to SAP/Oracle |
 
 ---
 
 ## 8. Known Limitations
 
-As of July 2026, the system is a functionally complete pilot that demonstrates the full procurement lifecycle end-to-end but has several gaps before it is production-grade. It runs on a single developer workstation with no horizontal scaling, no rolling deploys, and no automated health-based restarts. The Kafka broker is present only for real-time order-status notifications; the primary audit trail and ERP PO push paths use PostgreSQL direct-insert and outbox patterns with `kafka_offset=0` placeholders. The Phase 4 hardening work (Kubernetes, CI/CD, OWASP pen test, >= 80% integration test coverage) has not started. Authentication requires a live Phase Two Keycloak cloud tenant (`euc1.auth.ac`) and cannot run in a fully offline environment. The `embedding_model_type` database ENUM does not include the actual model names deployed (`BAAI/bge-small-en-v1.5` is absent), which is a known schema inconsistency worked around by storing a proxy label. The discovery_engine service (`services/discovery_engine/`) — intended to fan out across multiple Beckn networks — is code-complete but unintegrated: it is absent from `docker-compose.yml` and has no callers. The negotiation outcome is not persisted to the audit trail (the `negotiate` event type exists in the schema but has zero write sites). For the full list of spec-vs-as-built deviations, see [Architecture](ARCHITECTURE.md) and `KnowledgeBase/project_scaffold/implementation_deviations.md`.
+As of July 2026, the system is a functionally complete pilot that demonstrates the full procurement lifecycle end-to-end but has several gaps before it is production-grade. It runs on a single developer workstation with no horizontal scaling, no rolling deploys, and no automated health-based restarts. The Kafka broker is present only for real-time order-status notifications; the primary audit trail and ERP PO push paths use PostgreSQL direct-insert and outbox patterns with `kafka_offset=0` placeholders. Authentication requires a live Phase Two Keycloak cloud tenant (`euc1.auth.ac`) and cannot run in a fully offline environment.

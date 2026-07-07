@@ -236,19 +236,6 @@ The entire system runs on a single Docker Compose host. There is no horizontal s
 | Port collision workarounds | orchestrator maps both `:8000` and `:8004` for frontend compatibility; negotiation-engine uses `:18004` to avoid conflict | Kubernetes service DNS eliminates host-port workarounds |
 | `discovery_engine` multi-network fan-out is not deployed | No `docker-compose.yml` entry, no callers | Wire into orchestrator's discovery step in Phase 4 if multi-network support is needed |
 
-### 6.2 Phase 4 Production Readiness Targets
-
-Per the project KnowledgeBase, Phase 4 deliverables include:
-
-- Kubernetes (EKS/AKS/GKE) with Helm charts and ArgoCD GitOps
-- Horizontal Pod Autoscaler for orchestrator and intention-parser
-- P95 latency validation (target: full pipeline under 5 seconds)
-- 80% integration test coverage
-- OWASP penetration test
-- Real Kafka broker replacing the Redis-fallback pattern in notification-dispatcher
-- DeDi registry integration for real Beckn network connectivity (change `targetType: url` → `targetType: bap/bpp` in routing YAMLs)
-
-See [Deployment](DEPLOYMENT.md) for Docker Compose startup commands and service dependency ordering.
 
 ---
 

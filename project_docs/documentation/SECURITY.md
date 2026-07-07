@@ -316,10 +316,6 @@ The variables below have no safe default and will leave the system insecure or n
 | `BAP_ID` (`bap.example.com`) | beckn-bap-client | Placeholder — must be the registered BAP identifier on the target Beckn network |
 | `BAP_URI` (`http://localhost:8000/beckn`) | beckn-bap-client | Localhost URI; ONIX cannot route callbacks back correctly from a remote network |
 
-### 5.4 Phase 4 Plan
-
-Phase 4 hardening moves all secrets to Kubernetes Secrets managed by a KMS (AWS KMS / Azure Key Vault). No plaintext secrets in Helm values files. Trivy image scanning in CI blocks builds on HIGH/CRITICAL CVEs. TLS 1.3 for all inter-service APIs. AES-256 at rest for the PostgreSQL tablespace.
-
 ---
 
 ## 6. Known Security Gaps

@@ -453,17 +453,6 @@ PYTHONPATH=$(pwd) .venv-test/bin/python -m pytest \
 | erp-adapter smoke tests | Yes | No | No | Yes | No |
 | ComparativeAndScoreing MLOps | No | No | No | Yes (mlops compose) | Yes |
 
-### Phase 4 targets (not yet met)
-
-The Phase 4 hardening milestone sets the following bar before production readiness:
-
-- Integration test coverage >= 80%
-- Evaluation suite accuracy >= 85% (100 scenarios)
-- OWASP Top 10 pen test signed off
-- P95 agent response latency < 5 s under representative load
-
-Reaching 80% integration coverage requires, at minimum, new test suites for `beckn-bap-client`, `catalog-normalizer`, the orchestrator pipeline, and the frontend.
-
 ---
 
 ## 8. End-to-End Smoke Test

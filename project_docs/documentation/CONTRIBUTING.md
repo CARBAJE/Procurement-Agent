@@ -1,84 +1,14 @@
 # Contributing Guide
 
-This guide covers everything a developer needs before opening a pull request: environment setup, Git conventions, the pre-submission checklist, documentation expectations, code style, known trouble spots, and PR review criteria.
+This guide covers Git conventions, the pre-submission checklist, documentation expectations, code style, and PR review criteria. For environment setup and first-time configuration see [Installation](INSTALLATION.md).
 
-Cross-references: [Architecture](ARCHITECTURE.md) · [Components](COMPONENTS.md) · [API Reference](API_REFERENCE.md) · [Environment Variables](ENVIRONMENT.md) · [Installation](INSTALLATION.md) · [Database](DATABASE.md)
-
----
-
-## 1. Development Setup
-
-Follow [INSTALLATION.md](INSTALLATION.md) for the complete first-time walkthrough. The checklist below is a quick state-check before you start coding.
-
-### 1.1 Prerequisites Checklist
-
-| Requirement | Command to verify | Notes |
-|---|---|---|
-| Docker Engine running | `docker info` | Required for the 18-service stack |
-| `conda activate infosys_project` | `conda info --envs` | All local Python services need this env |
-| Ollama serving `qwen3:8b` and `qwen3:1.7b` | `ollama list` | Used by IntentParser Stages 1–2 |
-| Root `.env` present and populated | `cat .env \| head -5` | Copy from `.env.example`; never commit `.env` |
-| Database initialised | `pytest database/test_database.py -v -q` | Must pass 67 tests before first run |
-
-### 1.2 Services That Must Run Outside Docker
-
-Three processes are **not** in `docker-compose.yml` and must be started manually on the host in addition to `docker compose up -d`.
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│  Host processes (conda activate infosys_project)                │
-│                                                                 │
-│  IntentParser       FastAPI :8001   NL → BecknIntent pipeline   │
-│  mcp-sidecar        FastAPI :3000   MCP SSE bridge (Stage 3)    │
-│  claude_openai_proxy FastAPI :8012  Claude CLI → OpenAI compat. │
-└─────────────────────────────────────────────────────────────────┘
-```
-
-**IntentParser** (Stage 3 requires direct access to the conda `sentence-transformers` model cache and a live Ollama instance):
-
-```bash
-conda activate infosys_project
-cd IntentParser
-uvicorn api:app --port 8001 --reload
-```
-
-**mcp-sidecar** (`BAP_API_KEY` must be a real shell variable — dotenv loading does not apply here):
-
-```bash
-conda activate infosys_project
-cd services/mcp-sidecar
-BAP_API_KEY="any-non-empty-string-in-dev" uvicorn server:app --port 3000
-```
-
-**claude_openai_proxy** (required for autonomous negotiation and the demo gateway; wraps the host-installed `claude` CLI):
-
-```bash
-export CLAUDE_PROXY_KEY=your-local-proxy-key
-uvicorn services.claude_openai_proxy.main:app --host 0.0.0.0 --port 8012
-```
-
-For persistent operation on Linux, see the systemd unit at `services/claude_openai_proxy/claude-proxy.service`. Without this proxy, the `negotiation_engine` and `demo-gateway` containers cannot reach their LLM backend at `host.docker.internal:8012`.
-
-### 1.3 Docker Stack Startup
-
-```bash
-# Full stack (18 services on the beckn_network bridge)
-docker compose up -d
-
-# Discovery infrastructure only (minimal footprint for Beckn protocol work)
-docker compose up -d redis onix-bap onix-bpp
-
-# Tail a specific service
-docker compose logs -f orchestrator
-```
-
-See [COMPONENTS.md](COMPONENTS.md) for the full port map and service roles.
+Cross-references: [Architecture](ARCHITECTURE.md) · [API Reference](API_REFERENCE.md) · [Configuration](CONFIGURATION.md) · [Installation](INSTALLATION.md) · [Database](DATABASE.md)
 
 ---
 
-## 2. Git Workflow
+## 1. Git Workflow
 
-### 2.1 Branch Naming
+### 1.1 Branch Naming
 
 | Prefix | When to use | Example |
 |---|---|---|
@@ -89,7 +19,7 @@ See [COMPONENTS.md](COMPONENTS.md) for the full port map and service roles.
 
 Branch from `main`. Submit PRs back to `main`. Long-running feature work should rebase onto `main` before opening the PR.
 
-### 2.2 Commit Message Format
+### 1.2 Commit Message Format
 
 ```
 <type>(<scope>): <imperative summary, ≤72 characters>
@@ -104,19 +34,19 @@ Optional footer: Refs #123, Co-authored-by: Name <email>
 - **Scope** is the service or module: `orchestrator`, `intent-parser`, `data-normalizer`, `frontend`, `database`, `mcp-sidecar`, etc.
 - **Types**: `feat`, `fix`, `refactor`, `test`, `docs`, `chore`.
 
-### 2.3 PR Process
+### 1.3 PR Process
 
 1. Open the PR against `main` with a description that answers:
    - **What** changed (brief summary).
    - **Why** it was needed (motivation, linked issue if any).
    - **How to test** it manually (curl command, unit test path, or acceptance step).
 2. Keep PRs focused. A PR that touches both a new feature and an unrelated refactor should be split.
-3. Ensure the pre-submission checklist (Section 3) is complete before requesting review.
+3. Ensure the pre-submission checklist (Section 2) is complete before requesting review.
 4. At least one approval is required before merging.
 
 ---
 
-## 3. Pre-Submission Checklist
+## 2. Pre-Submission Checklist
 
 Work through this list before marking a PR ready for review.
 
@@ -129,7 +59,7 @@ Work through this list before marking a PR ready for review.
 
 ### Configuration
 
-- [ ] New environment variables are added in three places: the service's `config.py`, the root `.env.example`, and [ENVIRONMENT.md](ENVIRONMENT.md).
+- [ ] New environment variables are added in three places: the service's `config.py`, the root `.env.example`, and [CONFIGURATION.md](CONFIGURATION.md).
 - [ ] Config values are read through Pydantic Settings v2 in the service's `config.py` — not accessed inline.
 
 ### Database
@@ -153,7 +83,7 @@ Work through this list before marking a PR ready for review.
 ### Documentation
 
 - [ ] If a service API changed, [API_REFERENCE.md](API_REFERENCE.md) is updated.
-- [ ] If a service was added or removed, [COMPONENTS.md](COMPONENTS.md) and `docker-compose.yml` comments are updated.
+- [ ] If a service was added or removed, the Component Reference section of [ARCHITECTURE.md](ARCHITECTURE.md) and `docker-compose.yml` comments are updated.
 - [ ] `CLAUDE.md` "What NOT to do" section was reviewed; no new code violates its constraints.
 
 ### Wire-shape
@@ -164,9 +94,9 @@ Work through this list before marking a PR ready for review.
 
 ---
 
-## 4. Documentation Standards
+## 3. Documentation Standards
 
-### 4.1 New Service
+### 3.1 New Service
 
 Every new service directory must contain a `README.md` with these sections:
 
@@ -179,7 +109,7 @@ Every new service directory must contain a `README.md` with these sections:
 | Run command | Exact command for local dev and for Docker. |
 | Testing | How to run the service's tests; infra required. |
 
-### 4.2 Shared Library Changes
+### 3.2 Shared Library Changes
 
 `shared/`, `DataNormalizer/`, and `CatalogNormalizer/` are volume-mounted into multiple containers. Changes take effect immediately in running containers without a rebuild, but they affect all consumers simultaneously.
 
@@ -189,19 +119,19 @@ When modifying a shared model:
 - Update the Pydantic model and all consumers in the same PR.
 - Run the unit tests for every consumer that has a test suite before opening the PR.
 
-### 4.3 Significant Features
+### 3.3 Significant Features
 
 For substantial new features (a new pipeline stage, a new async flow, a new integration):
 
 - Add a record to `docs/architecture/decisions/` following the ADR format in `0001-use-redis-pubsub-for-async-beckn-responses.md`.
 - Update the relevant `KnowledgeBase/project_scaffold/` notes if they cover the changed area.
-- Consider whether `ARCHITECTURE.md` or `COMPONENTS.md` needs a structural update.
+- Consider whether `ARCHITECTURE.md` (including §9 Component Reference) needs a structural update.
 
 ---
 
-## 5. Code Style
+## 4. Code Style
 
-### 5.1 Python
+### 4.1 Python
 
 - PEP 8. Line length 100 characters.
 - **Type hints on all function signatures.** Return types included.
@@ -210,14 +140,14 @@ For substantial new features (a new pipeline stage, a new async flow, a new inte
 - **Error handling in MCP tools**: return `{"found": False, ...}` on all failure paths. Never raise. See `services/mcp-sidecar/server.py::search_bpp_catalog`.
 - Discovery POSTs from the MCP sidecar use `asyncio.create_task(...)`, not `await`. Awaiting the POST reintroduces the deadlock that [ADR-0001](../docs/architecture/decisions/0001-use-redis-pubsub-for-async-beckn-responses.md) was written to prevent.
 
-### 5.2 TypeScript (Frontend)
+### 4.2 TypeScript (Frontend)
 
 - Strict mode (`"strict": true` in `tsconfig.json`).
 - Component library: Radix UI primitives with Tailwind utility classes. Do not import a second component library.
 - All backend calls go through the Axios wrappers in `frontend/src/lib/api.ts`. Do not add raw `fetch` calls in page components.
 - The frontend uses NextAuth with Phase Two hosted Keycloak (`KeycloakProvider` only). There are no stub credentials for local dev — a live Phase Two tenant is required. See `frontend/.env.example` for the required variables (`KEYCLOAK_CLIENT_ID`, `KEYCLOAK_CLIENT_SECRET`, `KEYCLOAK_ISSUER`).
 
-### 5.3 SQL Migrations
+### 4.3 SQL Migrations
 
 ```
 NN_description.sql     ← two-digit numeric prefix, lowercase, underscores
@@ -229,67 +159,7 @@ NN_description.sql     ← two-digit numeric prefix, lowercase, underscores
 
 ---
 
-## 6. Known Problem Areas
-
-These are active issues that contributors should be aware of before touching the relevant code. They are not bugs to fix speculatively — but understanding them prevents introducing new breakage.
-
-### 6.1 Silent Fire-and-Forget Write Failures
-
-`services/orchestrator/src/workflow.py` has 13 call sites for `_persist_audit` and several for `_persist_memory`. These are fire-and-forget `asyncio.create_task` calls. If the data-normalizer is unreachable or returns a 4xx/5xx, the failure is logged but does not surface to the caller. After any change to the memory or audit write path, check the orchestrator logs explicitly:
-
-```bash
-docker compose logs -f orchestrator | grep -i "persist\|memory\|audit"
-```
-
-Note also: the `negotiate` audit event type is defined in the schema but is **not** written anywhere in the autonomous negotiation flow (`_run_autonomous_negotiation` in `workflow.py` has zero `_persist_audit` calls). This is a known compliance gap; do not assume the audit trail is complete for negotiated orders.
-
-### 6.2 Port Confusion: demo-gateway vs catalog-normalizer
-
-The demo-gateway (`services/frontend_demo_gateway/`) runs on port **:8015** in Docker (and its default in `workflow.py` is also 8015). Its own README documents `--port 8005`, which is **incorrect** — port 8005 belongs to catalog-normalizer. If you run demo-gateway standalone for local development, use `--port 8015`:
-
-```bash
-uvicorn services.frontend_demo_gateway.main:app --port 8015
-```
-
-Similarly, negotiation_engine binds container port 8004 but is mapped to host port **:18004** to avoid conflict with orchestrator's :8004. Use `http://localhost:18004` when calling it directly.
-
-### 6.3 Bap-1/ Is Reference Code, Not Live
-
-`Bap-1/` contains a runnable FastAPI server (port 8000), 129 tests, and a `CLAUDE.md`. It is **not** wired into `docker-compose.yml` and is not called by any service in `services/`. Changes to `Bap-1/` have no runtime effect on the live stack.
-
-`Bap-1/` is valuable for two things only:
-
-1. **Wire-shape reference**: `Bap-1/CLAUDE.md` contains 8 hard-won Beckn v2 wire-shape gotchas that apply to all Beckn traffic in the repo. Read it before touching the Beckn adapter.
-2. **Protocol-layer tests**: 129 tests cover the Beckn adapter, callbacks, sessions, and LangGraph graph — the only documented end-to-end protocol coverage in the repo.
-
-For new features, write code in `services/`, not `Bap-1/`.
-
-### 6.4 discovery_engine Is Orphaned
-
-`services/discovery_engine/` contains a complete `MultiNetworkCoordinator` (fan-out, deduplication, circuit breakers per network). It has its own `tests/` directory and passes them. However, it has **no entry in `docker-compose.yml`**, is never called by orchestrator or beckn-bap-client, and is not imported by any other service.
-
-The operational discovery path is entirely inside `services/beckn-bap-client/`. Do not extend `discovery_engine` expecting it to affect runtime behaviour, and do not use it as a model for how discovery currently works in production.
-
-### 6.5 catalog-normalizer: OLLAMA_URL, Not OPENAI_API_KEY
-
-The `services/catalog-normalizer/README.md` incorrectly states that `OPENAI_API_KEY` is required for the LLM fallback on `UNKNOWN` catalog formats. The actual implementation in `CatalogNormalizer/llm_fallback.py` uses an Ollama shim — the relevant variables are `OLLAMA_URL` (default `http://localhost:11434/v1`) and `NORMALIZER_MODEL` (default `qwen3:1.7b`). Setting `OPENAI_API_KEY` has no effect. If the fallback is failing, check Ollama availability, not OpenAI credentials.
-
-### 6.6 Dual 22_ Migration Prefix
-
-Two files in `database/sql/` share the `22_` prefix:
-
-- `22_agent_memory_vector_dim.sql`
-- `22_pending_approval_columns.sql`
-
-`setup_database.py` sorts files lexicographically; on most POSIX systems `_agent_` sorts before `_pending_`. The two migrations are currently independent, so either execution order is safe. However, if you add a migration that depends on columns from either of these files, pick a prefix of `23` or higher and verify the dependency chain manually.
-
-### 6.7 recovery.py Stubs Log Only
-
-`IntentParser/recovery.py` contains three functions — `log_unmet_demand`, `notify_buyer_no_stock`, `trigger_open_rfq_flow` — that are called when Stage 3 validation returns `not_found`. All three are async stubs that only write to the Python logger. No database write, no external notification, and no RFQ is triggered. Do not add logic to these functions under the assumption that they are being called in a meaningful flow — the recovery path is currently a silent no-op beyond the log line.
-
----
-
-## 7. Reviewing Others' PRs
+## 5. Reviewing Others' PRs
 
 When reviewing a PR, check for the following categories of issue in addition to correctness and logic.
 

@@ -455,3 +455,292 @@ The eight most impactful decisions made during Phases 1–3. Full ADR rationale 
 | **ONIX schema validator pinned to `d43ec30d`** | Image pinned; do not upgrade without an end-to-end signing test | A post-`d43ec30d` commit introduced a `$ref` resolution bug in `SignatureHeader` that breaks ED25519 validation on every signed message |
 | **Vendor-neutral `ERPAdapter` typing.Protocol** | One Protocol, three implementations (SAP / Oracle / mock), factory by `ERP_VENDORS` env var | New ERP vendors require only a new six-method implementation class; no changes to orchestrator, budget-gate logic, or webhook routes |
 | **Docker Compose instead of Kubernetes (Phases 1–3)** | 18-service `docker-compose.yml` on `beckn_network`; Kubernetes is Phase 4 scope | Single-command startup, sub-minute cold start, and sufficient isolation to prove the full Beckn lifecycle without cluster management overhead |
+
+---
+
+## 9. Component Reference
+
+The system consists of 21 named components across five logical layers. Each entry describes the component's role, run mode, responsibilities, and notable implementation details including known bugs and deviations from documentation. For environment variable details see [Configuration](CONFIGURATION.md). For endpoint shapes see [API Reference](API_REFERENCE.md).
+
+> **Note on claude_openai_proxy (:8012).** A host-only loopback service wraps the Claude Code CLI as an OpenAI-compatible endpoint. It is not in `docker-compose.yml`, but `negotiation_engine` and `frontend_demo_gateway` both depend on it at runtime via `http://host.docker.internal:8012/v1`. It must be started manually (`uvicorn services.claude_openai_proxy.main:app --host 0.0.0.0 --port 8012`) before those services can function.
+
+### Dependency Overview
+
+```mermaid
+flowchart TD
+    FE[frontend :3000]
+    ORCH[orchestrator :8004]
+    IP[IntentParser :8001]
+    BAP[beckn-bap-client :8002]
+    CS[comparative-scoring :8003]
+    DN[data-normalizer :8006]
+    CN[catalog-normalizer :8005]
+    EA[erp-adapter :8007]
+    EM[erp-mock :8008]
+    NE[negotiation_engine :18004]
+    DG[frontend_demo_gateway :8015]
+    AN[analytics :8009]
+    ND[notification-dispatcher :8010]
+    MCP[mcp-sidecar :3000]
+    OBAP[onix-bap :8081]
+    OBPP[onix-bpp :8082]
+    SBpp[sim-bpp :3002]
+    CLPRX[claude_openai_proxy :8012]
+
+    FE --> ORCH
+    FE --> AN
+    FE --> DN
+    FE --> DG
+    ORCH --> IP
+    ORCH --> BAP
+    ORCH --> CS
+    ORCH --> DN
+    ORCH --> EA
+    ORCH --> DG
+    IP --> MCP
+    MCP --> BAP
+    BAP --> OBAP
+    BAP --> CN
+    OBAP --> OBPP
+    OBPP --> SBpp
+    SBpp --> DN
+    EA --> EM
+    DG --> NE
+    DG --> CLPRX
+    NE --> CLPRX
+    CS -->|optional| MLOps[ComparativeAndScoreing :8004]
+```
+
+### IntentParser (:8001, local)
+
+- **Role:** Three-stage NL-to-BecknIntent pipeline that classifies buyer intent, extracts structured procurement parameters, and validates them against live BPP catalogs.
+- **Run mode:** Local process (not Dockerized at this path); `uvicorn api:app --port 8001 --reload` inside `conda activate infosys_project`. A Docker wrapper exists as `intention-parser`.
+- **Language / framework:** Python 3.11, FastAPI, instructor + Ollama, sentence-transformers, asyncpg + pgvector.
+- **Key responsibilities:**
+  - Stage 1: LLM intent classification (`qwen3:8b` or `qwen3:1.7b`) — returns `ParsedIntent` with confidence score.
+  - Stage 2: Structured `BecknIntent` extraction via instructor; complexity-routes to `COMPLEX_MODEL` (queries >120 chars, ≥2 numeric tokens, or procurement keywords) vs `SIMPLE_MODEL`.
+  - Stage 3 (`/parse/full` only): Hybrid pgvector ANN cosine search against `bpp_catalog_semantic_cache` followed by MCP sidecar probe on cache miss; thresholds `VALIDATED ≥ 0.85 / AMBIGUOUS 0.45–0.85 / CACHE_MISS < 0.45`.
+  - Recovery flow: `broaden_procurement_query` → Stage 3 retry → stub handlers (`log_unmet_demand`, `notify_buyer_no_stock`, `trigger_open_rfq_flow`) — all three stubs are no-op logger calls as of Phase 3.
+  - Enforces canonical `BecknIntent` encodings: `delivery_timeline` as int hours, `location_coordinates` as `"lat,lon"` decimal, `budget_constraints` as typed `{max, min}`.
+- **Upstream dependencies:** Ollama (qwen3:8b and qwen3:1.7b), PostgreSQL + pgvector (`bpp_catalog_semantic_cache`), mcp-sidecar :3000 (Stage 3 only), Claude Sonnet 4.6 via `ANTHROPIC_API_KEY` (opt-in broadening fallback).
+- **Notable behavior:** In Docker (`intention-parser` container) both models are overridden to `qwen3:1.7b`, collapsing two-tier routing. Similarity thresholds are named constants in `config.py` and are not env-configurable.
+
+### orchestrator (:8004)
+
+- **Role:** Central pipeline state machine that drives the full procurement lifecycle from NL query to confirmed Beckn order.
+- **Run mode:** Docker container; host ports `8000` and `8004` both map to container port `8004` (dual mapping for frontend compatibility).
+- **Language / framework:** Python 3.11, FastAPI, LangGraph, aiohttp.
+- **Key responsibilities:**
+  - 4-step pipeline: Step 1 intent parsing → Step 2 Beckn discovery → Step 3 comparative scoring → Step 4 select/init/confirm.
+  - Two-phase `POST /compare` + `POST /commit` flow alongside single-shot `POST /run`.
+  - Approval workflow: auto-approval below `requester.approval_threshold`; manager/CFO routing above.
+  - Persists audit trail at 13 call sites via fire-and-forget `asyncio.create_task` — never raises on failure.
+  - Routes autonomous negotiation through `DEMO_GATEWAY_URL/api/demo/negotiate`.
+- **Upstream dependencies:** intention-parser :8001, beckn-bap-client :8002, comparative-scoring :8003, data-normalizer :8006, erp-adapter :8007, analytics :8009, frontend_demo_gateway :8015.
+- **Notable behavior:** All in-memory state is lost on container restart. `ERP_BUDGET_CHECK_REQUIRED=false` in the default stack (fail-open) — must be `true` in production. The `/compare`+`/commit` path does not invoke negotiation.
+
+### beckn-bap-client (:8002)
+
+- **Role:** Beckn Protocol v2.0.0 BAP client that translates orchestrator/MCP sidecar requests into signed Beckn messages and collects asynchronous callbacks.
+- **Run mode:** Docker container; host port 8002 → container port 8002.
+- **Language / framework:** Python 3.11, FastAPI, aiohttp.
+- **Key responsibilities:**
+  - Sends all five Beckn actions to onix-bap :8081 (direct BPP POST is prohibited).
+  - Receives `POST /on_discover`: publishes to `beckn_results:{txn_id}` Redis channel AND enqueues to `CallbackCollector` — dual-path implements ADR-0001.
+  - Handles `POST /bap/receiver/{action}` for all other `on_*` callbacks.
+  - Delegates `on_discover` normalization to catalog-normalizer :8005.
+- **Notable behavior:** `REDIS_URL` must be a real env var (not just in `.env`) — read via `os.getenv()` in `handler.py`, bypassing the Pydantic Settings model.
+
+### data-normalizer (:8006)
+
+- **Role:** Sole write path into PostgreSQL for the entire stack; also serves audit trail read and agent memory endpoints.
+- **Run mode:** Docker container; host port 8006 → container port 8006.
+- **Language / framework:** Python 3.11, FastAPI, asyncpg, sentence-transformers (all-MiniLM-L6-v2).
+- **Key responsibilities:**
+  - Receives persistence payloads from all other services; normalizes field types on write.
+  - Builds the full FK chain on `POST /normalize/order`: negotiation_outcomes → approval_decisions → purchase_orders.
+  - Manages agent memory: embeds content with all-MiniLM-L6-v2 (384-dim) and stores in `agent_memory_vectors`.
+- **Notable behavior:** Memory embedding failures are silently skipped. all-MiniLM-L6-v2 downloads from Hugging Face on first startup (~10–30 s cold start).
+
+### erp-adapter (:8007)
+
+- **Role:** Vendor-neutral ERP integration layer: synchronous budget gate, async PO push with outbox retry, and inbound HMAC-verified vendor webhooks.
+- **Run mode:** Docker container; host port 8007 → container port 8007.
+- **Language / framework:** Python 3.11, FastAPI, asyncpg, pybreaker.
+- **Key responsibilities:**
+  - `POST /api/v1/budget/check` — synchronous gate (≤800 ms); fail-closed when `ERP_BUDGET_CHECK_REQUIRED=true`.
+  - `POST /api/v1/po/sync` — PostgreSQL outbox with `FOR UPDATE SKIP LOCKED`, per-vendor circuit breakers, exponential backoff (5/30/120/600/3600 s).
+  - `POST /api/v1/webhooks/{vendor}/po-status` — zero-downtime HMAC rotation via primary + `_NEXT` secondary secret.
+  - Adapter selected at startup via `ERP_VENDORS` env var (SAP / Oracle / mock).
+- **Notable behavior:** `ERP_BUDGET_CHECK_REQUIRED=false` in the default stack — must be `true` in production.
+
+### erp-mock (:8008)
+
+- **Role:** In-memory local ERP stub simulating SAP S/4HANA and Oracle ERP Cloud surfaces for development.
+- **Run mode:** Docker container; host port 8008 → container port 8008. All state is non-durable.
+- **Key responsibilities:**
+  - Six named scenarios selectable via `MOCK_SCENARIO` env var or `X-Mock-Scenario` header.
+  - Emits HMAC-signed webhook callbacks to erp-adapter after `WEBHOOK_DELAY_SECONDS` on every PO creation.
+- **Notable behavior:** The Oracle HMAC mock webhook emitter currently only signs with `SAP_WEBHOOK_HMAC_SECRET`.
+
+### negotiation_engine (:18004 host / :8004 container)
+
+- **Role:** Automated price negotiation LangGraph state machine with policy-bounded counter-offers and three-layer guardrails.
+- **Run mode:** Docker container; host port **18004** (avoids collision with orchestrator at 8004).
+- **Language / framework:** Python 3.11, FastAPI, LangGraph.
+- **Key responsibilities:**
+  - Hard 20% maximum discount cap enforced at three independent layers: Pydantic (L1), policy shield (L2), ONIX schema (L3).
+  - Per-category discount profiles: commodity 10%, specialized 5%, it_equipment/medical 0% advisory-only.
+  - `OnSelectListener` subscribes to Redis `beckn_on_select_results` to resume parked LangGraph states.
+  - Checkpoints to PostgreSQL via `AsyncPostgresSaver` when `NEGOTIATION_POSTGRES_DSN` is set; falls back to `MemorySaver`.
+- **Upstream dependencies:** Redis :6379, PostgreSQL (separate `negotiation` DB port 55432), claude_openai_proxy :8012.
+- **Notable behavior:** The orchestrator never calls negotiation_engine directly — all paths go through frontend_demo_gateway.
+
+### comparative-scoring (:8003)
+
+- **Role:** Thin scoring adapter forwarding offering lists to the Phase 2 ML RankNet backend with cheapest-wins heuristic fallback.
+- **Run mode:** Docker container; host port 8003 → container port 8003.
+- **Key responsibilities:**
+  - `POST /score` — tries `{PREDICTION_API_URL}/score` (8 s timeout); falls back to min-price heuristic.
+- **Notable behavior:** `SCORING_FALLBACK_ENABLED=true` by default — always functional without the MLOps stack.
+
+### ComparativeAndScoreing (MLOps)
+
+- **Role:** Phase 2 MLOps stack providing a RankNet/LambdaRank learning-to-rank model; separate `docker-compose.mlops.yaml`.
+- **Run mode:** Not in the main `docker-compose.yml`. prediction-api host port 8004, MLflow UI on port 5000.
+- **Key responsibilities:**
+  - `nn.Linear(3,1)` forward pass on `[x_price, x_speed, x_risk]` (all min-max scaled within session).
+  - Training: 200 epochs SGD/AdamW; auto-promotes to MLflow Staging if `NDCG@5 ≥ 0.85`. Never auto-promotes to Production.
+- **Notable behavior:** Production promotion is always manual via the MLflow CLI.
+
+### discovery_engine
+
+- **Role:** Multi-network Beckn discovery fan-out service with per-network circuit breakers and geographic deduplication.
+- **Run mode:** **Orphaned** — code is complete at `services/discovery_engine/` but there is no entry in `docker-compose.yml` and no other service calls it.
+- **Notable behavior:** The operational discovery path is entirely inside `services/beckn-bap-client/`. Do not extend `discovery_engine` expecting it to affect runtime behaviour.
+
+### catalog-normalizer (:8005)
+
+- **Role:** Beckn catalog normalization bridge mapping raw `on_discover` payload variants to `DiscoverOffering` objects.
+- **Run mode:** Docker container; host port 8005 → container port 8005.
+- **Key responsibilities:**
+  - `POST /normalize` — detects format variant (1–5) and maps to `[DiscoverOffering]`.
+  - Variants 1–4: deterministic rule-based mappers. Variant 5: LLM fallback via instructor + Ollama.
+- **Notable behavior:** The service README incorrectly states `OPENAI_API_KEY` is required — the implementation reads `OLLAMA_URL` and `NORMALIZER_MODEL`. `OPENAI_API_KEY` is never read.
+
+### mcp-sidecar (:3000, local)
+
+- **Role:** MCP SSE bridge exposing `search_bpp_catalog` to IntentParser Stage 3; implements the subscriber side of ADR-0001.
+- **Run mode:** Local process (not Dockerized); `BAP_API_KEY="<any-string>" uvicorn server:app --port 3000`.
+- **Key responsibilities:**
+  - Pre-subscribes to `beckn_results:{txn_id}` on Redis, fires `POST beckn-bap-client/discover` as `asyncio.create_task` (never `await`), waits up to `REDIS_RESULT_TIMEOUT` (default 15 s).
+  - All failure paths return `{"found": false, "items": [], "probe_latency_ms": elapsed}` — never a JSON-RPC error.
+- **Notable behavior:** The discover POST **must** use `asyncio.create_task(...)`, never `await`. `REDIS_URL` and `REDIS_RESULT_TIMEOUT` must be real env vars (read via `os.getenv()`, not Pydantic Settings).
+
+### sim-bpp (:3002)
+
+- **Role:** Local Beckn BPP simulator (Node.js) replacing `fidedocker/sandbox-2.0`; hot-reloadable catalog, async callbacks.
+- **Run mode:** Docker container; host port 3002 → container port 3002.
+- **Key responsibilities:**
+  - AND-token matching against `catalog.json` (9 providers, 31 items); re-read on every request.
+  - Auto-advance lifecycle: `ACCEPTED → PACKED → SHIPPED → OUT_FOR_DELIVERY → DELIVERED`; PATCHes data-normalizer and publishes to Kafka per transition.
+- **Notable behavior:** `SIM_BPP_AUTO_ADVANCE` defaults to `false` in code but is `true` in `docker-compose.yml`.
+
+### intention-parser (Docker wrapper)
+
+- **Role:** Thin Docker container wrapping the IntentParser package; exposes Stages 1 and 2 only (Stage 3 disabled in Docker context).
+- **Run mode:** Docker container; host port 8001 → container port 8001.
+- **Notable behavior:** Both models overridden to `qwen3:1.7b` in `docker-compose.yml` — `qwen3:8b` is never invoked from Docker.
+
+### frontend_demo_gateway (:8015)
+
+- **Role:** Demo BFF bridging the Next.js frontend to the PyTorch scoring model and the LangGraph negotiation engine.
+- **Run mode:** Docker container; host port **8015**. (The service's own README incorrectly states port 8005.)
+- **Key responsibilities:**
+  - `POST /api/demo/negotiate` + `GET /api/demo/negotiate/{thread_id}` — negotiation lifecycle.
+  - `POST /api/demo/negotiate/{thread_id}/supplier-respond` — calls `SupplierAgent` via claude_openai_proxy; publishes result to Redis `beckn_on_select_results`, resuming the parked LangGraph.
+- **Notable behavior:** The only path through which the orchestrator's autonomous negotiation reaches negotiation_engine.
+
+### analytics (:8009)
+
+- **Role:** Procurement reporting service querying PostgreSQL for aggregated KPIs, spend trends, and CPO benchmarks.
+- **Run mode:** Docker container; host port 8009 → container port 8009.
+- **Key responsibilities:**
+  - `GET /analytics?period=30d|90d|180d` — full dashboard payload.
+  - `GET /benchmark?period=...` — CPO benchmarking: contracted price vs best available market price.
+- **Notable behavior:** Returns HTTP 503 (not mock data) when the DB connection pool is unavailable.
+
+### notification-dispatcher (:8010)
+
+- **Role:** Kafka consumer fanning order status events out to Slack, Microsoft Teams, and email.
+- **Run mode:** Docker container; no host port published. Consumer never starts if `KAFKA_BOOTSTRAP` is empty.
+- **Key responsibilities:**
+  - `confirmed`/`delivered` → all three channels; `shipped`/`cancelled` → Slack + Teams only.
+  - `asyncio.gather(return_exceptions=True)` — one channel failure never blocks others.
+- **Notable behavior:** `KAFKA_BOOTSTRAP` is empty by default — no notifications are sent in the default Docker stack.
+
+### onix-bap (:8081, Go)
+
+- **Role:** BAP-side Go ONIX adapter validating Beckn schemas, routing outbound requests, and signing/verifying ED25519 signatures.
+- **Run mode:** Docker container (`fidedocker/onix-adapter`, linux/amd64); host port 8081.
+- **Key responsibilities:**
+  - Signs outbound messages; applies split routing for `on_discover` (ADR-0001); routes all other `on_*` callbacks to `beckn-bap-client /bap/receiver/{action}`.
+- **Notable behavior:** Target URLs in routing YAMLs must NOT include the action name — ONIX appends it. Schema validator pinned to commit `d43ec30d` — do not upgrade without an end-to-end signing test.
+
+### onix-bpp (:8082, Go)
+
+- **Role:** BPP-side Go ONIX adapter mirroring onix-bap's functionality for the inbound direction.
+- **Run mode:** Docker container (`fidedocker/onix-adapter`, linux/amd64); host port 8082.
+- **Notable behavior:** A `networkId` vs `domain` inconsistency in `config/generic-routing-BPPReceiver.yaml` is unresolved and may cause routing issues at runtime.
+
+### frontend (Next.js, :3000)
+
+- **Role:** Buyer-facing Next.js 13.5 web application: procurement wizard, order tracking, approvals, analytics dashboard, agent reasoning panel, audit trail viewer.
+- **Run mode:** Local dev (`npm run dev`). Not Dockerized.
+- **Language / framework:** Next.js 13.5, Tailwind CSS, shadcn/ui, recharts, NextAuth 4, Keycloak OIDC.
+- **Key responsibilities:**
+  - All backend calls proxied through Next.js API routes: `/api/orchestrator/*`, `/api/analytics/*`, `/api/audit/*`, `/api/users/*`, `/api/demo/*`.
+  - Authentication via NextAuth 4 + Keycloak only — no stub credentials mode, requires a live OIDC tenant.
+- **Notable behavior:** No frontend tests, no App Router error boundaries. All recharts charts must be wrapped in `dynamic(..., { ssr: false })`.
+
+### shared/ (cross-service models)
+
+- **Role:** Anti-corruption layer Python package providing canonical Pydantic v2 models shared across all Python services.
+- **Run mode:** Python package; volume-mounted into Docker containers at `/app/shared`.
+- **Notable behavior:**
+
+| Field | Canonical encoding | Common wrong form |
+|---|---|---|
+| `delivery_timeline` | `72` (int hours) | `"P3D"` (ISO 8601) |
+| `location_coordinates` | `"12.9716,77.5946"` | `"Mumbai"` (city name) |
+| `budget_constraints` | `BudgetConstraints(max=200.0, min=0.0)` | `"max 200 INR"` (raw string) |
+
+### Dependency Matrix
+
+Checkmarks indicate that the row service makes HTTP, Redis, or Kafka calls to the column service.
+
+| Caller \ Called | orchestrator | IntentParser / i-p | beckn-bap-client | data-normalizer | erp-adapter | erp-mock | negotiation_engine | comparative-scoring | C&S prediction-api | catalog-normalizer | mcp-sidecar | sim-bpp | frontend_demo_gateway | analytics | onix-bap | onix-bpp | claude_openai_proxy | PostgreSQL | Redis | Kafka | Ollama |
+|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| **frontend** | ✓ | | | ✓ | | | | | | | | | ✓ | ✓ | | | | | | | |
+| **orchestrator** | | ✓ | ✓ | ✓ | ✓ | | | ✓ | | | | | ✓ | ✓ | | | | | | | |
+| **IntentParser (local)** | | | | | | | | | | | ✓ | | | | | | | ✓ | | | ✓ |
+| **beckn-bap-client** | | | | | | | | | | ✓ | | | | | ✓ | | | | ✓ | | |
+| **data-normalizer** | | | | | | | | | | | | | | | | | | ✓ | | | ✓ |
+| **erp-adapter** | | | | | | ✓ | | | | | | | | | | | | ✓ | ✓ | ✓ | |
+| **erp-mock** | | | | | ✓ | | | | | | | | | | | | | | | | |
+| **negotiation_engine** | | | | | | | | | | | | | | | | | ✓ | ✓ | ✓ | ✓ | ✓ |
+| **comparative-scoring** | | | | | | | | | ✓ | | | | | | | | | | | | |
+| **ComparativeAndScoreing** | | | | | | | | | | | | | | | | | | ✓ | | | |
+| **discovery_engine** | | | | | | | | | | | | | | | | | | | | | |
+| **catalog-normalizer** | | | | | | | | | | | | | | | | | | | | | ✓ |
+| **mcp-sidecar** | | | ✓ | | | | | | | | | | | | | | | | ✓ | | |
+| **sim-bpp** | | | | ✓ | | | | | | | | | | | | ✓ | | | | ✓ | |
+| **intention-parser (Docker)** | | | | | | | | | | | | | | | | | | | | | ✓ |
+| **frontend_demo_gateway** | | | | | | | ✓ | | | | | | | | | | ✓ | | ✓ | | |
+| **analytics** | | | | | | | | | | | | | | | | | | ✓ | | | |
+| **notification-dispatcher** | | | | | | | | | | | | | | | | | | ✓ | | ✓ | |
+| **onix-bap** | | | | | | | | | | | | | | | | ✓ | | | ✓ | | |
+| **onix-bpp** | | | | | | | | | | | | ✓ | | | | | | | ✓ | | |
+| **shared/** | | | | | | | | | | | | | | | | | | | | | |
+
+> **Key:** ✓ = service in that row calls the service in that column over the network. `discovery_engine` has no active callers or callees in the deployed stack (orphaned). `shared/` has no runtime dependencies (it is an imported library).

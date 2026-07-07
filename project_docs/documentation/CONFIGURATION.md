@@ -17,6 +17,33 @@ Configuration in the Procurement Agent follows four rules:
 
 ## 2. Configuration Files
 
+### How It Works
+
+```
+repo root
+├── .env                  ← loaded by docker-compose.yml; sets defaults for all containers
+├── IntentParser/
+│   └── config.py         ← Pydantic BaseSettings; reads env vars at import time
+├── services/
+│   ├── orchestrator/src/config.py
+│   ├── beckn-bap-client/src/config.py
+│   ├── mcp-sidecar/config.py
+│   └── ...               ← every service has its own config.py
+└── frontend/
+    └── .env.local        ← Next.js convention; never committed (git-ignored)
+```
+
+**Docker deployments:** `docker-compose.yml` reads the root `.env` file and passes variables into each container's `environment:` block. All containers share the same `.env` but each service only reads the variables it declares in its own `config.py`.
+
+**Local services (IntentParser, mcp-sidecar):** These run outside Docker and must have variables exported into the shell before starting:
+
+```bash
+# Inside conda activate infosys_project
+export $(grep -v '^#' .env | xargs)
+cd IntentParser && uvicorn api:app --port 8001 --reload
+cd services/mcp-sidecar && BAP_API_KEY="any-dev-string" uvicorn server:app --port 3000
+```
+
 ### File Map
 
 | File | Purpose | Read by |
