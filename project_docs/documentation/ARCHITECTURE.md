@@ -133,7 +133,7 @@ flowchart TD
 | Redis | 6379 | 6379 | Docker |
 | Kafka | 9092 | 9092 | Docker |
 
-> **Port collision notes.** The orchestrator container maps both `:8000` and `:8004` on the host — `:8000` matches the Next.js frontend `BAP_URL` default and `:8004` is used for direct testing. The negotiation-engine uses `:18004` to avoid colliding with orchestrator's `:8004`. `discovery_engine` at `services/discovery_engine/` is fully implemented but has no entry in `docker-compose.yml` and is not called by any service; it is orphaned.
+> **Port collision notes.** The orchestrator container maps both `:8000` and `:8004` on the host — `:8000` matches the Next.js frontend `BAP_URL` default and `:8004` is used for direct testing. The negotiation-engine uses `:18004` to avoid colliding with orchestrator's `:8004`.
 
 ---
 

@@ -134,4 +134,4 @@ The ERP adapter defines `ERPAdapter` as a Python `typing.Protocol` with six meth
 
 ## 8. Known Limitations
 
-As of July 2026, the system is a functionally complete pilot that demonstrates the full procurement lifecycle end-to-end but has several gaps before it is production-grade. It runs on a single developer workstation with no horizontal scaling, no rolling deploys, and no automated health-based restarts. The Kafka broker is present only for real-time order-status notifications; the primary audit trail and ERP PO push paths use PostgreSQL direct-insert and outbox patterns with `kafka_offset=0` placeholders. Authentication requires a live Phase Two Keycloak cloud tenant (`euc1.auth.ac`) and cannot run in a fully offline environment.
+As of July 2026, the system is a functionally complete pilot that demonstrates the full procurement lifecycle end-to-end but has several gaps before it is production-grade. It runs on a single developer workstation with no horizontal scaling, no rolling deploys, and no automated health-based restarts. Authentication requires a live Phase Two Keycloak cloud tenant (`euc1.auth.ac`) and cannot run in a fully offline environment.

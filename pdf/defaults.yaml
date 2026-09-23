@@ -1,0 +1,59 @@
+# ==============================================================
+# Pandoc Defaults File
+# Requires Pandoc >= 2.8  (released 2019)
+# ==============================================================
+# This file centralises all Pandoc CLI options so that build scripts
+# only need to pass --defaults defaults.yaml plus the input file list.
+# Reference: https://pandoc.org/MANUAL.html#defaults-files
+
+# Input format: GitHub-Flavoured Markdown + useful extensions
+# Must be a single quoted string — multi-line YAML scalars add whitespace
+# that Pandoc rejects as an unknown format name.
+from: "markdown+smart+pipe_tables+fenced_code_blocks+fenced_code_attributes-auto_identifiers+definition_lists+yaml_metadata_block+implicit_header_references+backtick_code_blocks"
+
+# Output
+to: pdf
+pdf-engine: xelatex          # Change to pdflatex or lualatex if xelatex is unavailable
+
+# Template
+template: eisvogel
+
+# Lua filter: assigns GFM-style IDs to all headings so that cross-document
+# links written for GitHub rendering (e.g. #4-async-discovery-decoupling-adr-0001)
+# resolve correctly in the compiled PDF.
+filters:
+  - gfm-ids.lua
+
+# Metadata / variables
+metadata-file: metadata.yaml
+
+# Table of contents
+toc: true
+toc-depth: 3
+
+# Numbering
+number-sections: true
+
+# Every H1 heading becomes a LaTeX chapter (top-level-division=chapter).
+# H2 -> section, H3 -> subsection, H4 -> subsubsection.
+top-level-division: chapter
+
+# Syntax highlighting
+highlight-style: tango
+
+# listings: true is intentionally disabled.
+# The LaTeX `listings` package does not handle Unicode characters (→, —, etc.)
+# that appear in the documentation code blocks. Pandoc's native highlighting
+# (highlight-style: tango) is Unicode-safe and produces equivalent visual output.
+
+# Resource paths — Pandoc searches these directories when resolving
+# relative image and include paths found in the Markdown source files.
+resource-path:
+  - assets
+  - ../project_docs/documentation
+
+# Extra LaTeX variables
+variables:
+  book: "true"
+  float-placement-figure: "htbp"
+  table-use-row-colors: "false"

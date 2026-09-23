@@ -60,7 +60,7 @@ Role values are read from `realm_access.roles` in the ID token. If no recognized
 | Web origins | `${NEXTAUTH_URL}` |
 | Realm roles mapper | Token claim name `realm_access.roles`, Add to ID token: ON |
 
-> **Warning:** No Keycloak realm export or setup guide exists in the repository. Developers cloning the repo cannot authenticate to the frontend without access to the Phase Two tenant (`euc1.auth.ac`, realm `procurement-agent`). A Keycloak setup guide is a Phase 4 deliverable.
+> **Warning:** No Keycloak realm export or setup guide exists in the repository. Developers cloning the repo cannot authenticate to the frontend without access to the Phase Two tenant (`euc1.auth.ac`, realm `procurement-agent`).
 
 ### 1.2 Internal Service Authentication
 

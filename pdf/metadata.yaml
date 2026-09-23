@@ -1,0 +1,181 @@
+---
+# ==============================================================
+# DOCUMENT IDENTITY
+# ==============================================================
+title: "Agentic AI Procurement Agent on Beckn Protocol"
+subtitle: "System Documentation"
+author: "Eduardo Garcia Diaz, Jose Emiliano Carrillo Barreiro, Cristian Montiel Garcia"
+date: "July 2026"
+lang: en-US
+
+# Embedded PDF metadata (visible in PDF readers and search engines)
+subject: >
+  Technical documentation for the Agentic AI Procurement Agent —
+  an event-driven assistant that translates natural-language purchase
+  requests into validated Beckn Protocol v2.0.0 transactions.
+keywords:
+  - Beckn Protocol
+  - Procurement Agent
+  - FastAPI
+  - LangGraph
+  - pgvector
+  - AI
+  - Infosys InStep
+  - Python
+  - Go
+  - Next.js
+
+# ==============================================================
+# TABLE OF CONTENTS
+# ==============================================================
+toc: true
+toc-own-page: true
+toc-depth: 3
+
+# ==============================================================
+# SECTION NUMBERING
+# ==============================================================
+numbersections: true
+secnumdepth: 3
+
+# ==============================================================
+# PAGE LAYOUT
+# ==============================================================
+# Paper size: A4 professional margins (wider than default for readability)
+geometry: "left=2.0cm,right=2.0cm,top=3.2cm,bottom=3.2cm"
+fontsize: 11pt
+linestretch: 1.3
+
+# Document class: scrreprt gives chapters, clean headings, KOMA-Script quality
+documentclass: scrreprt
+classoption:
+  - oneside
+  - open=any
+
+# ==============================================================
+# CUSTOM TITLE PAGE (TikZ/LaTeX — defined in header-includes)
+# ==============================================================
+titlepage: false
+
+# ==============================================================
+# HEADER AND FOOTER (Eisvogel variables)
+# ==============================================================
+header-left:  "Agentic AI Procurement Agent"
+header-center: ""
+header-right: "Technical Documentation"
+footer-left:  "Infosys InStep — Internal Use"
+footer-center: ""
+footer-right: "\\thepage"
+disable-header-and-footer: false
+
+# ==============================================================
+# CODE BLOCKS
+# ==============================================================
+# highlight-style is set in defaults.yaml (tango).
+# listings package is disabled — pandoc's native highlighting handles Unicode.
+code-block-font-size: "\\small"
+
+# ==============================================================
+# TABLES
+# ==============================================================
+# Pandoc uses the longtable LaTeX package by default, which allows
+# tables to span multiple pages. No additional configuration needed.
+table-use-row-colors: false
+
+# ==============================================================
+# HYPERLINKS AND PDF NAVIGATION
+# ==============================================================
+colorlinks: true
+# Use safe named xcolor colors here — raw hex values like "1A3A5C" are NOT
+# valid xcolor color names and cause "Undefined color" LaTeX errors.
+# The exact hex colors are applied via \AtBeginDocument in header-includes below.
+linkcolor: "black"
+urlcolor: "blue"
+citecolor: "black"
+filecolor: "black"
+
+# ==============================================================
+# CUSTOM COLORS AND TITLE PAGE
+# ==============================================================
+# First \AtBeginDocument: corporate hyperlink colors.
+# Second \AtBeginDocument (in the | block): custom TikZ title page.
+header-includes:
+  - "\\AtBeginDocument{\\definecolor{DocNavy}{HTML}{1A3A5C}\\definecolor{DocBlue}{HTML}{1764AB}\\hypersetup{linkcolor=DocNavy,urlcolor=DocBlue,citecolor=DocNavy,filecolor=DocNavy}}"
+  - "\\usepackage{etoolbox}"
+  - "\\setlength{\\LTleft}{0pt}\\setlength{\\LTright}{0pt}"
+  - "\\AtBeginEnvironment{longtable}{\\small\\setlength{\\tabcolsep}{3pt}}"
+  - |
+    \usepackage{tikz}
+    \usetikzlibrary{calc}
+    \definecolor{CoverNavy}{HTML}{1A3A5C}
+    \definecolor{CoverOrange}{HTML}{F07C00}
+    \AtBeginDocument{%
+      \pagecolor{CoverNavy}%
+      \begin{titlepage}%
+        \begin{tikzpicture}[remember picture,overlay]%
+          \fill[CoverOrange]
+              (current page.north west)
+              rectangle
+              ($(current page.north east)+(0,-0.75cm)$);
+          \fill[CoverOrange]
+              ($(current page.south west)+(0,0.42cm)$)
+              rectangle
+              (current page.south east);
+        \end{tikzpicture}%
+        \color{white}%
+        \vspace*{1.8cm}%
+        \begin{center}%
+          {\fontsize{7.5}{9}\selectfont\scshape%
+            \color{white!50!CoverNavy}%
+            Infosys InStep\enspace\enspace%
+            }%
+        \end{center}%
+        \vspace{3.8cm}%
+        \noindent\hspace{1.8cm}%
+        \begin{minipage}{13.8cm}%
+          {\fontsize{27}{33}\selectfont\bfseries\color{white}%
+            Agentic AI Procurement\\[0.12em]%
+            Agent on Beckn Protocol\par}%
+          \vspace{0.55cm}%
+          {\color{CoverOrange}\hrule height 0.65pt\relax}%
+          \vspace{0.42cm}%
+          {\fontsize{13.5}{17}\selectfont\mdseries%
+            \color{white!75!CoverNavy}%
+            System Documentation\par}%
+        \end{minipage}%
+        \vfill%
+        \noindent\hspace{1.8cm}%
+        \begin{minipage}{13.8cm}%
+          {\fontsize{9}{13}\selectfont%
+            \color{white!58!CoverNavy}%
+            Eduardo Garcia Diaz\enspace\textperiodcentered\enspace%
+            Jose Emiliano Carrillo Barreiro\enspace\textperiodcentered\enspace%
+            Cristian Montiel Garcia\par}%
+          \vspace{0.22cm}%
+          {\fontsize{8.5}{11}\selectfont%
+            \color{white!40!CoverNavy}%
+            Infosys InStep\enspace\textperiodcentered\enspace July 2026}%
+        \end{minipage}%
+        \vspace{1.5cm}%
+      \end{titlepage}%
+      \pagecolor{white}%
+    }
+
+# ==============================================================
+# FONTS  (XeLaTeX / LuaLaTeX only)
+# ==============================================================
+# Disabled — using LaTeX/Eisvogel defaults (Latin Modern) for maximum
+# MiKTeX compatibility out of the box. To use custom fonts, install the
+# relevant MiKTeX packages (tex-gyre, dejavu) and uncomment:
+#
+# mainfont: "TeX Gyre Termes"      # Times New Roman substitute
+# sansfont: "TeX Gyre Heros"       # Helvetica substitute
+# monofont: "DejaVu Sans Mono"     # Monospace
+# monofontoptions:
+#   - Scale=0.88
+
+# ==============================================================
+# CAPTION STYLE
+# ==============================================================
+caption-justification: raggedright
+...

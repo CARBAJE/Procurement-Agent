@@ -1,0 +1,2642 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Agentic AI Procurement Agent · Enterprise Sales Deck</title>
+
+    <!-- Distinctive corporate typography (not Inter/Roboto) -->
+    <link rel="preconnect" href="https://api.fontshare.com" crossorigin>
+    <link href="https://api.fontshare.com/v2/css?f[]=cabinet-grotesk@400,500,800&f[]=general-sans@400,500,600,700&f[]=jetbrains-mono@400&display=swap" rel="stylesheet">
+
+<style>
+/* ===========================================
+   THEME TOKENS — change here to change everything
+   =========================================== */
+:root {
+    /* Brand palette */
+    --bg-deep:      #0F2B5B;   /* Deep corporate blue */
+    --bg-deep-2:    #0A1F42;   /* Darker shade for gradients */
+    --indigo:       #4F46E5;   /* Electric indigo accent */
+    --indigo-soft:  rgba(79, 70, 229, 0.12);
+    --emerald:      #10B981;   /* Positive metric green */
+    --coral:        #EF4444;   /* Pain/negative red */
+    --amber:        #F59E0B;   /* Warning/mid-tier amber */
+
+    /* Neutrals */
+    --paper:        #FFFFFF;
+    --paper-2:      #F8F9FA;   /* Light slide background */
+    --ink:          #0F172A;   /* Primary text on light */
+    --ink-2:        #334155;   /* Secondary text */
+    --ink-3:        #64748B;   /* Tertiary text */
+    --hair:         #E5E7EB;   /* Hairline borders */
+    --hair-dark:    rgba(255,255,255,0.10);
+    --on-dark:      rgba(255,255,255,0.72);
+
+    /* Typography */
+    --font-display: "Cabinet Grotesk", "Söhne", sans-serif;
+    --font-body:    "General Sans", "Söhne", sans-serif;
+    --font-mono:    "JetBrains Mono", ui-monospace, monospace;
+
+    --title-size:    clamp(1.75rem, 4.6vw, 3.75rem);
+    --h2-size:       clamp(1.25rem, 3vw, 2.25rem);
+    --h3-size:       clamp(1rem, 2vw, 1.5rem);
+    --body-size:     clamp(0.85rem, 1.15vw, 1.05rem);
+    --small-size:    clamp(0.68rem, 0.9vw, 0.85rem);
+    --micro-size:    clamp(0.6rem, 0.75vw, 0.72rem);
+
+    --slide-padding: clamp(1.5rem, 4vw, 4rem);
+    --content-gap:   clamp(0.75rem, 1.6vw, 1.5rem);
+    --element-gap:   clamp(0.4rem, 0.9vw, 0.85rem);
+
+    /* Motion (professional / corporate = fast, subtle) */
+    --ease:  cubic-bezier(0.22, 1, 0.36, 1);
+    --dur:   0.55s;
+}
+
+/* ===========================================
+   BASE
+   =========================================== */
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body {
+    height: 100%;
+    overflow-x: hidden;
+    background: var(--paper-2);
+    color: var(--ink);
+    font-family: var(--font-body);
+    font-feature-settings: "ss01","ss02","cv01";
+    -webkit-font-smoothing: antialiased;
+}
+html {
+    scroll-snap-type: y mandatory;
+    scroll-behavior: smooth;
+}
+body { min-height: 100vh; }
+
+/* ===========================================
+   VIEWPORT-BASE.CSS (full contents, per skill spec)
+   =========================================== */
+.slide {
+    width: 100vw;
+    height: 100vh;
+    height: 100dvh;
+    overflow: hidden;
+    scroll-snap-align: start;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+}
+.slide-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    max-height: 100%;
+    overflow: hidden;
+    padding: var(--slide-padding);
+}
+.card, .container, .content-box {
+    max-width: min(94vw, 1240px);
+}
+img, .image-container {
+    max-width: 100%;
+    max-height: min(50vh, 400px);
+    object-fit: contain;
+}
+/* Responsive breakpoints */
+@media (max-height: 700px) {
+    :root {
+        --slide-padding: clamp(0.75rem, 3vw, 2rem);
+        --content-gap: clamp(0.4rem, 1.2vw, 1rem);
+        --title-size: clamp(1.3rem, 4vw, 2.75rem);
+        --h2-size: clamp(1rem, 2.6vw, 1.75rem);
+    }
+}
+@media (max-height: 600px) {
+    :root {
+        --slide-padding: clamp(0.5rem, 2.5vw, 1.5rem);
+        --title-size: clamp(1.1rem, 3.6vw, 2rem);
+        --body-size: clamp(0.72rem, 1.1vw, 0.92rem);
+    }
+    .nav-dots, .keyboard-hint, .decorative { display: none; }
+}
+@media (max-width: 600px) {
+    :root { --title-size: clamp(1.3rem, 7vw, 2.5rem); }
+    .grid, .flow, .cards-row { grid-template-columns: 1fr !important; flex-direction: column !important; }
+}
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        transition-duration: 0.15s !important;
+    }
+    html { scroll-behavior: auto; }
+}
+
+/* ===========================================
+   SHARED SLIDE STRUCTURE
+   =========================================== */
+.slide-dark {
+    background: var(--bg-deep);
+    color: var(--paper);
+}
+.slide-dark.gradient {
+    background:
+        radial-gradient(ellipse at 25% 20%, rgba(79,70,229,0.35) 0%, transparent 55%),
+        radial-gradient(ellipse at 80% 90%, rgba(16,185,129,0.10) 0%, transparent 55%),
+        linear-gradient(140deg, var(--bg-deep) 0%, var(--bg-deep-2) 100%);
+}
+.slide-light  { background: var(--paper-2); color: var(--ink); }
+.slide-white  { background: var(--paper);  color: var(--ink); }
+
+/* Grid overlay (subtle structural texture on dark slides) */
+.slide-dark::before {
+    content: "";
+    position: absolute; inset: 0;
+    background-image:
+        linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px);
+    background-size: 64px 64px;
+    pointer-events: none;
+    mask-image: radial-gradient(ellipse at center, black 40%, transparent 80%);
+}
+
+/* Eyebrow / section chip */
+.eyebrow {
+    font-family: var(--font-mono);
+    font-size: var(--micro-size);
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--indigo);
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5em;
+    margin-bottom: 0.75rem;
+}
+.slide-dark .eyebrow { color: #A5B4FC; }
+.eyebrow::before {
+    content: "";
+    width: 1.6em; height: 1px;
+    background: currentColor;
+}
+
+/* Titles */
+h1, h2, h3 {
+    font-family: var(--font-display);
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    line-height: 1.05;
+}
+h1 { font-size: var(--title-size); }
+h2 { font-size: var(--h2-size); margin-bottom: 0.6rem; }
+h3 { font-size: var(--h3-size); font-weight: 500; letter-spacing: -0.01em; }
+
+/* Lede paragraph */
+.lede {
+    font-size: clamp(0.95rem, 1.35vw, 1.2rem);
+    line-height: 1.5;
+    color: var(--ink-2);
+    max-width: 62ch;
+    margin-top: 0.75rem;
+}
+.slide-dark .lede { color: var(--on-dark); }
+
+/* Body text */
+p, li { font-size: var(--body-size); line-height: 1.55; }
+
+/* ===========================================
+   FOOTER (all slides)
+   =========================================== */
+.slide-footer {
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    padding: 0.9rem var(--slide-padding);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-family: var(--font-mono);
+    font-size: var(--micro-size);
+    color: var(--ink-3);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    z-index: 3;
+}
+.slide-dark .slide-footer { color: rgba(255,255,255,0.42); }
+.slide-footer .brand { display: flex; align-items: center; gap: 0.5rem; }
+.slide-footer .brand-dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--indigo);
+    box-shadow: 0 0 0 3px rgba(79,70,229,0.18);
+}
+
+/* ===========================================
+   NAVIGATION DOTS
+   =========================================== */
+.nav-dots {
+    position: fixed;
+    right: clamp(0.5rem, 1.5vw, 1.5rem);
+    top: 50%;
+    transform: translateY(-50%);
+    display: flex; flex-direction: column;
+    gap: 0.55rem;
+    z-index: 100;
+}
+.nav-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: rgba(15,23,42,0.22);
+    border: 0;
+    cursor: pointer;
+    transition: all 0.25s var(--ease);
+    padding: 0;
+}
+.nav-dot:hover { transform: scale(1.35); background: rgba(15,23,42,0.5); }
+.nav-dot.active {
+    background: var(--indigo);
+    transform: scale(1.35);
+    box-shadow: 0 0 0 3px rgba(79,70,229,0.18);
+}
+.nav-dot.on-dark { background: rgba(255,255,255,0.28); }
+.nav-dot.on-dark:hover { background: rgba(255,255,255,0.6); }
+.nav-dot.on-dark.active { background: var(--indigo); }
+
+/* Progress bar (top) */
+.progress-bar {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: transparent;
+    z-index: 100;
+}
+.progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--indigo), #818CF8);
+    width: 0%;
+    transition: width 0.15s linear;
+}
+
+/* Keyboard hint */
+.keyboard-hint {
+    position: fixed;
+    bottom: 3.2rem; right: 1rem;
+    font-family: var(--font-mono);
+    font-size: var(--micro-size);
+    color: var(--ink-3);
+    opacity: 0.55;
+    z-index: 90;
+    pointer-events: none;
+}
+.slide-dark ~ .keyboard-hint { color: rgba(255,255,255,0.4); }
+
+/* ===========================================
+   ANIMATIONS — Professional/Corporate style
+   Subtle, fast (250-450ms), purposeful
+   =========================================== */
+.reveal {
+    opacity: 0;
+    transform: translateY(14px);
+    transition:
+        opacity var(--dur) var(--ease),
+        transform var(--dur) var(--ease);
+}
+.slide.visible .reveal { opacity: 1; transform: translateY(0); }
+
+/* Stagger delays */
+.slide.visible .reveal.d0 { transition-delay: 0.00s; }
+.slide.visible .reveal.d1 { transition-delay: 0.08s; }
+.slide.visible .reveal.d2 { transition-delay: 0.16s; }
+.slide.visible .reveal.d3 { transition-delay: 0.24s; }
+.slide.visible .reveal.d4 { transition-delay: 0.32s; }
+.slide.visible .reveal.d5 { transition-delay: 0.40s; }
+.slide.visible .reveal.d6 { transition-delay: 0.48s; }
+
+.reveal-scale {
+    opacity: 0;
+    transform: scale(0.96);
+    transition:
+        opacity var(--dur) var(--ease),
+        transform var(--dur) var(--ease);
+}
+.slide.visible .reveal-scale { opacity: 1; transform: scale(1); }
+
+/* Bar grow (used in Slides 2 and 7) */
+@keyframes barGrow {
+    from { transform: scaleX(0); }
+    to   { transform: scaleX(1); }
+}
+.slide.visible .bar-fill {
+    animation: barGrow 0.9s var(--ease) 0.35s both;
+    transform-origin: left center;
+}
+
+/* Counter/number softly grow */
+.slide.visible .hero-num {
+    animation: heroPop 0.9s var(--ease) 0.1s both;
+}
+@keyframes heroPop {
+    from { opacity: 0; transform: translateY(20px) scale(0.94); letter-spacing: 0.02em; }
+    to   { opacity: 1; transform: translateY(0)   scale(1);    letter-spacing: -0.05em; }
+}
+
+/* ===========================================
+   SLIDE 1 — COVER
+   =========================================== */
+.title-slide .slide-content {
+    justify-content: center;
+    padding: var(--slide-padding);
+}
+.title-grid {
+    display: grid;
+    grid-template-columns: 1.15fr 1fr;
+    gap: clamp(2rem, 5vw, 5rem);
+    align-items: center;
+    width: 100%;
+    max-width: 1200px;
+    margin: 0 auto;
+}
+.title-eyebrow {
+    font-family: var(--font-mono);
+    font-size: var(--micro-size);
+    letter-spacing: 0.24em;
+    text-transform: uppercase;
+    color: #A5B4FC;
+    margin-bottom: 1.2rem;
+    display: flex; align-items: center; gap: 0.6rem;
+}
+.title-eyebrow .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--indigo); box-shadow: 0 0 0 4px rgba(79,70,229,0.28); }
+.title-slide h1 {
+    font-size: clamp(2.25rem, 6vw, 5rem);
+    line-height: 0.98;
+    letter-spacing: -0.03em;
+    margin-bottom: 1.4rem;
+    background: linear-gradient(180deg, #FFFFFF 0%, #C7D2FE 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+}
+.title-slide .tagline {
+    font-family: var(--font-display);
+    font-weight: 500;
+    font-size: clamp(1rem, 1.7vw, 1.4rem);
+    color: var(--on-dark);
+    line-height: 1.35;
+    max-width: 26ch;
+}
+.title-slide .tagline em { color: #A5B4FC; font-style: normal; }
+.title-meta {
+    margin-top: 2rem;
+    display: flex; align-items: center; gap: 0.75rem;
+    font-family: var(--font-mono);
+    font-size: var(--small-size);
+    color: rgba(255,255,255,0.5);
+}
+.title-meta .pipe { width: 1px; height: 1em; background: currentColor; opacity: 0.4; }
+
+/* Cover visual: chat → PO transformation */
+.cover-viz {
+    position: relative;
+    aspect-ratio: 1;
+    max-width: 480px;
+    margin-left: auto;
+}
+.cover-node {
+    position: absolute;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 12px;
+    backdrop-filter: blur(8px);
+    padding: 1rem 1.2rem;
+    color: var(--paper);
+}
+.cover-node .label {
+    font-family: var(--font-mono);
+    font-size: 0.62rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: rgba(255,255,255,0.5);
+    margin-bottom: 0.35rem;
+}
+.cover-node .content { font-size: 0.9rem; line-height: 1.35; }
+.cover-node.node-input {
+    top: 4%; left: 0;
+    width: 62%;
+    animation: floatY 5s ease-in-out infinite;
+}
+.cover-node.node-po {
+    bottom: 4%; right: 0;
+    width: 62%;
+    background: rgba(79,70,229,0.15);
+    border-color: rgba(79,70,229,0.42);
+    animation: floatY 5s ease-in-out infinite reverse;
+}
+.cover-node.node-po .status {
+    display: inline-flex; align-items: center; gap: 0.35em;
+    margin-top: 0.4rem;
+    font-family: var(--font-mono);
+    font-size: 0.6rem;
+    letter-spacing: 0.12em;
+    color: var(--emerald);
+    padding: 0.2rem 0.5rem;
+    background: rgba(16,185,129,0.12);
+    border: 1px solid rgba(16,185,129,0.35);
+    border-radius: 999px;
+}
+.cover-node .status::before {
+    content: ""; width: 5px; height: 5px; border-radius: 50%; background: currentColor;
+}
+@keyframes floatY {
+    0%,100% { transform: translateY(0); }
+    50%     { transform: translateY(-8px); }
+}
+/* Connecting SVG line + node network */
+.cover-viz svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+
+/* ===========================================
+   SLIDE 2 — PROBLEM (timeline)
+   =========================================== */
+.problem-header { margin-bottom: 2rem; max-width: 900px; }
+.timeline {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: clamp(0.5rem, 1.5vw, 1.5rem);
+    position: relative;
+    padding: 2rem 0 1.5rem;
+    margin-bottom: 1.5rem;
+}
+.timeline::before {
+    content: "";
+    position: absolute;
+    top: 3.75rem;
+    left: 6%; right: 6%;
+    height: 2px;
+    background: linear-gradient(90deg, rgba(239,68,68,0.15), rgba(239,68,68,0.65), rgba(239,68,68,0.15));
+}
+.timeline-step {
+    display: flex; flex-direction: column; align-items: center;
+    text-align: center;
+    position: relative; z-index: 1;
+}
+.timeline-clock {
+    width: clamp(2.5rem, 4vw, 3.5rem);
+    height: clamp(2.5rem, 4vw, 3.5rem);
+    border-radius: 50%;
+    background: var(--paper);
+    border: 2px solid var(--coral);
+    display: flex; align-items: center; justify-content: center;
+    color: var(--coral);
+    margin-bottom: 0.75rem;
+    box-shadow: 0 6px 20px rgba(239,68,68,0.15);
+}
+.timeline-clock svg { width: 55%; height: 55%; }
+.timeline-name {
+    font-family: var(--font-display);
+    font-weight: 500;
+    font-size: var(--body-size);
+    color: var(--ink);
+    margin-bottom: 0.2rem;
+}
+.timeline-days {
+    font-family: var(--font-mono);
+    font-size: var(--micro-size);
+    color: var(--coral);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+.problem-stats {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1.5rem;
+    margin-top: 1rem;
+}
+.stat-block {
+    padding: 1rem 1.2rem;
+    background: var(--paper);
+    border-left: 3px solid var(--coral);
+    border-radius: 4px;
+}
+.stat-block .stat-value {
+    font-family: var(--font-display);
+    font-weight: 800;
+    font-size: clamp(1.15rem, 1.75vw, 1.5rem);
+    color: var(--ink);
+    letter-spacing: -0.02em;
+    line-height: 1;
+    margin-bottom: 0.35rem;
+}
+.stat-block .stat-value .accent { color: var(--indigo); }
+.stat-block .stat-label { font-size: var(--small-size); color: var(--ink-2); line-height: 1.35; }
+
+/* ===========================================
+   SLIDE 3 — CURRENT REALITY (3-column)
+   =========================================== */
+.compare-3 {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1.2rem;
+    align-items: stretch;
+    margin-top: 1.75rem;
+}
+.compare-col {
+    background: var(--paper);
+    border: 1px solid var(--hair);
+    border-radius: 12px;
+    padding: 1.4rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    position: relative;
+}
+.compare-col .col-tag {
+    font-family: var(--font-mono);
+    font-size: var(--micro-size);
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    margin-bottom: 0.15rem;
+}
+.compare-col h3 {
+    font-family: var(--font-display);
+    font-size: clamp(1.05rem, 1.55vw, 1.35rem);
+    font-weight: 800;
+    letter-spacing: -0.01em;
+}
+.compare-col ul { list-style: none; display: flex; flex-direction: column; gap: 0.55rem; }
+.compare-col ul li {
+    font-size: var(--small-size);
+    color: var(--ink-2);
+    padding-left: 1.15rem;
+    position: relative;
+    line-height: 1.4;
+}
+.compare-col ul li::before {
+    content: "";
+    position: absolute; left: 0; top: 0.5em;
+    width: 6px; height: 6px; border-radius: 50%;
+    background: currentColor; opacity: 0.5;
+}
+.compare-col.col-promise { border-color: rgba(79,70,229,0.35); }
+.compare-col.col-promise .col-tag { color: var(--indigo); }
+.compare-col.col-reality {
+    background: linear-gradient(180deg, #FEF2F2 0%, #FFFFFF 100%);
+    border-color: rgba(239,68,68,0.35);
+}
+.compare-col.col-reality .col-tag { color: var(--coral); }
+.compare-col.col-reality h3 { color: #B91C1C; }
+.compare-col.col-reality ul li::before { background: var(--coral); opacity: 1; }
+.lock-icon {
+    position: absolute; top: 1.2rem; right: 1.2rem;
+    width: 22px; height: 22px;
+    color: var(--coral);
+    opacity: 0.6;
+}
+
+/* ===========================================
+   SLIDE 4 — SOLUTION
+   =========================================== */
+.solution-grid {
+    display: grid;
+    grid-template-columns: 1fr 1.05fr;
+    gap: clamp(1.5rem, 3vw, 3rem);
+    align-items: center;
+    margin-top: 1rem;
+}
+.solution-left h1 { margin-bottom: 0.8rem; }
+.check-list { list-style: none; display: flex; flex-direction: column; gap: 0.65rem; margin-top: 1.25rem; }
+.check-list li {
+    display: flex; align-items: flex-start; gap: 0.7rem;
+    font-size: var(--body-size);
+    color: var(--ink-2);
+    line-height: 1.5;
+}
+.check-list li .check {
+    flex-shrink: 0;
+    width: 20px; height: 20px; border-radius: 50%;
+    background: rgba(16,185,129,0.14);
+    color: var(--emerald);
+    display: flex; align-items: center; justify-content: center;
+    margin-top: 0.12em;
+}
+.check-list li .check svg { width: 60%; height: 60%; }
+.check-list li strong { color: var(--ink); font-weight: 600; font-family: var(--font-display); }
+
+/* Dashboard mockup */
+.dash-mock {
+    background: var(--paper);
+    border: 1px solid var(--hair);
+    border-radius: 14px;
+    box-shadow: 0 24px 60px rgba(15,42,91,0.12), 0 4px 12px rgba(15,42,91,0.05);
+    padding: 1.2rem;
+    display: flex; flex-direction: column;
+    gap: 0.9rem;
+    font-size: var(--small-size);
+}
+.dash-mock .dash-topbar {
+    display: flex; align-items: center; gap: 0.4rem;
+    padding-bottom: 0.6rem;
+    border-bottom: 1px solid var(--hair);
+}
+.dash-mock .dash-topbar .dot { width: 8px; height: 8px; border-radius: 50%; background: #D1D5DB; }
+.dash-mock .dash-topbar .dot:nth-child(1) { background: #F87171; }
+.dash-mock .dash-topbar .dot:nth-child(2) { background: #FBBF24; }
+.dash-mock .dash-topbar .dot:nth-child(3) { background: #34D399; }
+.dash-mock .dash-topbar .url {
+    margin-left: 0.6rem; padding: 0.15rem 0.55rem;
+    background: var(--paper-2); border-radius: 4px;
+    font-family: var(--font-mono); font-size: 0.62rem; color: var(--ink-3);
+}
+.dash-mock .status-badge {
+    display: inline-flex; align-items: center; gap: 0.4em;
+    padding: 0.35rem 0.85rem;
+    background: rgba(16,185,129,0.14);
+    color: #047857;
+    border-radius: 999px;
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    width: fit-content;
+}
+.dash-mock .status-badge::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.dash-mock .dash-title {
+    font-family: var(--font-display);
+    font-weight: 800;
+    font-size: 1.15rem;
+    letter-spacing: -0.01em;
+}
+.dash-mock .dash-order-id {
+    font-family: var(--font-mono);
+    font-size: 0.65rem;
+    color: var(--ink-3);
+    letter-spacing: 0.06em;
+}
+.dash-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.8rem;
+    padding: 0.7rem 0;
+    border-bottom: 1px dashed var(--hair);
+}
+.dash-row:last-of-type { border-bottom: 0; }
+.dash-row .k {
+    font-family: var(--font-mono);
+    font-size: 0.6rem;
+    color: var(--ink-3);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-bottom: 0.2rem;
+}
+.dash-row .v {
+    font-family: var(--font-display);
+    font-weight: 500;
+    font-size: 0.9rem;
+    color: var(--ink);
+}
+.dash-row .v.price {
+    font-weight: 800;
+    color: var(--indigo);
+    font-size: 1.1rem;
+    letter-spacing: -0.01em;
+}
+.dash-row .v .strike { color: var(--ink-3); text-decoration: line-through; font-size: 0.75rem; font-weight: 400; margin-right: 0.5em; }
+
+/* ===========================================
+   SLIDE 5 — HOW IT WORKS (5-step flow)
+   =========================================== */
+.flow {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 0.6rem;
+    margin-top: 2rem;
+    position: relative;
+}
+.flow-step {
+    background: var(--paper);
+    border: 1px solid var(--hair);
+    border-radius: 12px;
+    padding: 1.1rem 0.9rem;
+    display: flex; flex-direction: column;
+    gap: 0.55rem;
+    position: relative;
+    text-align: left;
+    transition: all 0.3s var(--ease);
+}
+.flow-step:hover { border-color: var(--indigo); transform: translateY(-3px); box-shadow: 0 12px 28px rgba(79,70,229,0.14); }
+.flow-step .step-num {
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+    letter-spacing: 0.14em;
+    color: var(--indigo);
+    font-weight: 500;
+}
+.flow-step .step-icon {
+    width: 40px; height: 40px;
+    border-radius: 10px;
+    background: var(--indigo-soft);
+    color: var(--indigo);
+    display: flex; align-items: center; justify-content: center;
+    margin-bottom: 0.25rem;
+}
+.flow-step .step-icon svg { width: 55%; height: 55%; }
+.flow-step .step-name {
+    font-family: var(--font-display);
+    font-weight: 800;
+    font-size: clamp(0.95rem, 1.25vw, 1.15rem);
+    color: var(--ink);
+    letter-spacing: -0.01em;
+    line-height: 1.15;
+}
+.flow-step .step-desc {
+    font-size: var(--small-size);
+    color: var(--ink-2);
+    line-height: 1.4;
+    flex: 1;
+}
+.flow-step .step-latency {
+    display: inline-block;
+    font-family: var(--font-mono);
+    font-size: 0.62rem;
+    padding: 0.2rem 0.5rem;
+    background: rgba(16,185,129,0.12);
+    color: #047857;
+    border-radius: 4px;
+    letter-spacing: 0.06em;
+    margin-top: 0.15rem;
+    align-self: flex-start;
+}
+.flow-step:not(:last-child)::after {
+    content: "→";
+    position: absolute;
+    right: -0.65rem;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--indigo);
+    font-size: 1rem;
+    font-family: var(--font-mono);
+    z-index: 2;
+    background: var(--paper-2);
+    padding: 0.15rem 0.15rem;
+}
+.flow-caption {
+    margin-top: 1.75rem;
+    padding: 0.85rem 1.15rem;
+    background: rgba(79,70,229,0.06);
+    border-left: 3px solid var(--indigo);
+    border-radius: 4px;
+    font-size: var(--small-size);
+    color: var(--ink-2);
+    line-height: 1.5;
+    max-width: 900px;
+}
+.flow-caption strong { color: var(--indigo); font-family: var(--font-display); font-weight: 600; }
+
+/* ===========================================
+   SLIDE 6 — FEATURE GRID (6 cards)
+   =========================================== */
+.feat-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    grid-template-rows: repeat(2, 1fr);
+    gap: 0.9rem;
+    margin-top: 1.5rem;
+}
+.feat-card {
+    background: var(--paper);
+    border: 1px solid var(--hair);
+    border-radius: 12px;
+    padding: 1.1rem 1.15rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    transition: all 0.3s var(--ease);
+    position: relative;
+    overflow: hidden;
+}
+.feat-card::before {
+    content: "";
+    position: absolute; top: 0; left: 0; right: 0;
+    height: 2px;
+    background: var(--indigo);
+    transform: scaleX(0); transform-origin: left;
+    transition: transform 0.35s var(--ease);
+}
+.feat-card:hover { transform: translateY(-4px); box-shadow: 0 18px 34px rgba(15,42,91,0.10); border-color: rgba(79,70,229,0.35); }
+.feat-card:hover::before { transform: scaleX(1); }
+.feat-card .feat-icon {
+    width: 38px; height: 38px;
+    border-radius: 8px;
+    background: var(--indigo-soft);
+    color: var(--indigo);
+    display: flex; align-items: center; justify-content: center;
+    margin-bottom: 0.1rem;
+}
+.feat-card .feat-icon svg { width: 55%; height: 55%; }
+.feat-card .feat-name {
+    font-family: var(--font-display);
+    font-weight: 800;
+    font-size: clamp(0.95rem, 1.25vw, 1.1rem);
+    color: var(--ink);
+    letter-spacing: -0.01em;
+}
+.feat-card .feat-desc {
+    font-size: clamp(0.72rem, 0.95vw, 0.85rem);
+    color: var(--ink-2);
+    line-height: 1.45;
+    flex: 1;
+}
+.feat-card .feat-tag {
+    font-family: var(--font-mono);
+    font-size: 0.6rem;
+    color: var(--indigo);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-top: auto;
+}
+
+/* ===========================================
+   SLIDE 7 — BENEFITS (before/after bars)
+   =========================================== */
+.bars {
+    display: flex;
+    flex-direction: column;
+    gap: 1.1rem;
+    margin-top: 1.5rem;
+}
+.bar-row {
+    display: grid;
+    grid-template-columns: 210px 1fr;
+    gap: 1.25rem;
+    align-items: center;
+}
+.bar-label {
+    font-family: var(--font-display);
+    font-weight: 500;
+    font-size: var(--small-size);
+    color: var(--ink-2);
+    line-height: 1.3;
+}
+.bar-label strong { color: var(--ink); font-weight: 800; display: block; font-size: 0.95em; }
+.bar-track {
+    display: flex; flex-direction: column; gap: 0.35rem;
+}
+.bar {
+    display: flex; align-items: center; gap: 0.75rem;
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    letter-spacing: 0.05em;
+}
+.bar .bar-tag { width: 62px; color: var(--ink-3); text-transform: uppercase; }
+.bar .bar-fill {
+    height: 20px;
+    border-radius: 4px;
+    display: flex; align-items: center; padding: 0 0.6rem;
+    color: var(--paper);
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 0.78rem;
+    white-space: nowrap;
+}
+.bar.before .bar-fill { background: linear-gradient(90deg, #EF4444, #DC2626); }
+.bar.after  .bar-fill { background: linear-gradient(90deg, #10B981, #059669); }
+
+/* ===========================================
+   SLIDE 8 — DIFFERENTIATORS (comparison table)
+   =========================================== */
+.diff-table {
+    display: grid;
+    grid-template-columns: 1.6fr 1fr 1fr;
+    background: rgba(255,255,255,0.02);
+    border: 1px solid rgba(255,255,255,0.10);
+    border-radius: 12px;
+    overflow: hidden;
+    margin-top: 1.5rem;
+    backdrop-filter: blur(8px);
+}
+.diff-table .th {
+    padding: 0.9rem 1.15rem;
+    background: rgba(15,42,91,0.55);
+    font-family: var(--font-mono);
+    font-size: var(--micro-size);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--on-dark);
+    border-bottom: 1px solid rgba(255,255,255,0.10);
+}
+.diff-table .th.th-us {
+    color: #A5B4FC;
+    background: rgba(79,70,229,0.20);
+}
+.diff-table .cell {
+    padding: 0.85rem 1.15rem;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+    font-size: var(--small-size);
+    color: var(--on-dark);
+    display: flex; align-items: center; gap: 0.55rem;
+}
+.diff-table .cell.capability {
+    font-family: var(--font-display);
+    font-weight: 500;
+    color: var(--paper);
+    font-size: var(--body-size);
+}
+.diff-table .cell.us { background: rgba(79,70,229,0.08); color: var(--paper); font-weight: 500; }
+.diff-table .cell .mark { flex-shrink: 0; width: 20px; height: 20px; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
+.diff-table .cell .mark.no  { background: rgba(239,68,68,0.18); color: #FCA5A5; }
+.diff-table .cell .mark.yes { background: rgba(16,185,129,0.20); color: #6EE7B7; }
+.diff-table .cell .mark svg { width: 60%; height: 60%; }
+.diff-table > *:nth-last-child(-n+3) { border-bottom: 0; }
+
+/* ===========================================
+   SLIDE 9 — ARCHITECTURE (4 layers)
+   =========================================== */
+.arch-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 0.55rem;
+    margin-top: 1.5rem;
+}
+.arch-layer {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.10);
+    border-radius: 10px;
+    padding: 0.9rem 1.3rem;
+    display: grid;
+    grid-template-columns: 200px 1fr auto;
+    gap: 1.5rem;
+    align-items: center;
+    position: relative;
+    backdrop-filter: blur(6px);
+}
+.arch-layer .layer-name {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: #A5B4FC;
+    font-weight: 500;
+}
+.arch-layer .layer-stack {
+    display: flex; flex-wrap: wrap; gap: 0.4rem;
+}
+.arch-chip {
+    padding: 0.25rem 0.7rem;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.14);
+    border-radius: 999px;
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+    color: var(--paper);
+    letter-spacing: 0.03em;
+}
+.arch-chip.accent {
+    background: rgba(79,70,229,0.22);
+    border-color: rgba(79,70,229,0.55);
+    color: #C7D2FE;
+}
+.arch-layer .layer-flow {
+    color: var(--indigo);
+    font-family: var(--font-mono);
+    font-size: 0.85rem;
+}
+.arch-caption {
+    margin-top: 1.1rem;
+    display: flex; gap: 2rem; flex-wrap: wrap;
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    color: rgba(255,255,255,0.55);
+    letter-spacing: 0.06em;
+}
+.arch-caption strong { color: #A5B4FC; font-weight: 500; }
+
+/* ===========================================
+   SLIDE 10 — USE CASES (4 cards)
+   =========================================== */
+.use-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1rem;
+    margin-top: 1.5rem;
+}
+.use-card {
+    background: var(--paper);
+    border: 1px solid var(--hair);
+    border-radius: 12px;
+    padding: 1.2rem 1.35rem;
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 1rem;
+    align-items: start;
+    transition: all 0.3s var(--ease);
+}
+.use-card:hover { border-color: var(--indigo); transform: translateY(-3px); box-shadow: 0 16px 32px rgba(15,42,91,0.10); }
+.use-card .use-icon {
+    width: 44px; height: 44px;
+    border-radius: 10px;
+    background: var(--indigo-soft);
+    color: var(--indigo);
+    display: flex; align-items: center; justify-content: center;
+}
+.use-card .use-icon svg { width: 55%; height: 55%; }
+.use-card .use-body { display: flex; flex-direction: column; gap: 0.35rem; }
+.use-card .use-mode {
+    font-family: var(--font-mono);
+    font-size: 0.65rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--indigo);
+}
+.use-card .use-name {
+    font-family: var(--font-display);
+    font-weight: 800;
+    font-size: 1.05rem;
+    color: var(--ink);
+    letter-spacing: -0.01em;
+    line-height: 1.15;
+}
+.use-card .use-desc {
+    font-size: var(--small-size);
+    color: var(--ink-2);
+    line-height: 1.4;
+}
+.use-card .use-result {
+    display: inline-flex; align-items: center; gap: 0.5em;
+    margin-top: 0.4rem;
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    padding: 0.25rem 0.65rem;
+    background: rgba(16,185,129,0.12);
+    color: #047857;
+    border-radius: 4px;
+    letter-spacing: 0.04em;
+    width: fit-content;
+    font-weight: 500;
+}
+
+/* ===========================================
+   SLIDE 11 — KPIs (dashboard)
+   =========================================== */
+.kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 0.85rem;
+    margin-top: 1.5rem;
+}
+.kpi-card {
+    background: var(--paper);
+    border: 1px solid var(--hair);
+    border-radius: 12px;
+    padding: 1.1rem 1.2rem;
+    display: flex; flex-direction: column;
+    gap: 0.35rem;
+    position: relative;
+    overflow: hidden;
+}
+.kpi-card .kpi-label {
+    font-family: var(--font-mono);
+    font-size: 0.62rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+}
+.kpi-card .kpi-value {
+    font-family: var(--font-display);
+    font-weight: 800;
+    font-size: clamp(1.35rem, 2.1vw, 1.85rem);
+    color: var(--ink);
+    letter-spacing: -0.03em;
+    line-height: 1;
+}
+.kpi-card .kpi-value.accent { color: var(--indigo); }
+.kpi-card .kpi-value.pos    { color: var(--emerald); }
+.kpi-card .kpi-sub {
+    font-family: var(--font-mono);
+    font-size: 0.62rem;
+    color: var(--ink-3);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    margin-top: 0.35rem;
+    line-height: 1.35;
+}
+
+/* Sample-scenario chip (marks slide 11 KPIs as illustrative) */
+.scenario-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.7rem;
+    margin-top: 0.9rem;
+    padding: 0.4rem 0.95rem;
+    background: rgba(245, 158, 11, 0.10);
+    border: 1px solid rgba(245, 158, 11, 0.35);
+    border-radius: 999px;
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    color: #92400E;
+    letter-spacing: 0.03em;
+    align-self: flex-start;
+    width: fit-content;
+    max-width: 100%;
+}
+.scenario-chip .chip-mark {
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--amber);
+    padding-right: 0.7rem;
+    border-right: 1px solid rgba(245, 158, 11, 0.35);
+    white-space: nowrap;
+}
+
+.chart-wrap {
+    margin-top: 1.25rem;
+    background: var(--paper);
+    border: 1px solid var(--hair);
+    border-radius: 12px;
+    padding: 1.15rem 1.3rem;
+    display: grid;
+    grid-template-columns: 220px 1fr;
+    gap: 1.5rem;
+    align-items: center;
+}
+.chart-wrap .chart-title {
+    font-family: var(--font-display);
+    font-weight: 500;
+    font-size: 0.95rem;
+    color: var(--ink);
+    margin-bottom: 0.35rem;
+}
+.chart-wrap .chart-sub {
+    font-size: 0.7rem;
+    color: var(--ink-3);
+    line-height: 1.4;
+}
+.chart-wrap svg { width: 100%; height: 100%; max-height: 110px; }
+
+/* ===========================================
+   SLIDE 12 — SCALABILITY
+   =========================================== */
+.scale-viz {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr auto 1fr;
+    gap: 1.2rem;
+    align-items: center;
+    justify-items: center;
+    margin: 2rem auto 1.5rem;
+    max-width: 900px;
+}
+.scale-node {
+    background: var(--paper);
+    border: 1px solid var(--hair);
+    border-radius: 12px;
+    padding: 1rem 1.2rem;
+    text-align: center;
+    box-shadow: 0 4px 14px rgba(15,42,91,0.06);
+    width: 100%;
+}
+.scale-node .replica-count {
+    font-family: var(--font-display);
+    font-weight: 800;
+    font-size: 1.5rem;
+    color: var(--indigo);
+    letter-spacing: -0.02em;
+}
+.scale-node .replica-label {
+    font-family: var(--font-mono);
+    font-size: 0.62rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    margin-top: 0.2rem;
+}
+.scale-node .replica-icons {
+    display: flex; justify-content: center; gap: 0.15rem;
+    margin-top: 0.4rem;
+    color: var(--indigo);
+    opacity: 0.75;
+}
+.scale-node .replica-icons svg { width: 12px; height: 12px; }
+.scale-arrow {
+    color: var(--indigo);
+    font-family: var(--font-mono);
+    font-size: 1.2rem;
+    font-weight: 500;
+}
+.scale-infra {
+    display: flex; justify-content: center; gap: 2rem;
+    flex-wrap: wrap;
+    margin-top: 2rem;
+    padding-top: 1.5rem;
+    border-top: 1px dashed var(--hair);
+}
+.infra-chip {
+    display: flex; align-items: center; gap: 0.5rem;
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    color: var(--ink-2);
+    letter-spacing: 0.04em;
+}
+.infra-chip .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--indigo); }
+.scale-bullets {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.7rem 1.5rem;
+    margin-top: 1.5rem;
+    max-width: 1000px;
+}
+.scale-bullets li {
+    display: flex; gap: 0.6rem; align-items: flex-start;
+    font-size: var(--small-size);
+    color: var(--ink-2);
+    line-height: 1.45;
+    list-style: none;
+}
+.scale-bullets li strong { color: var(--ink); font-family: var(--font-display); font-weight: 600; }
+.scale-bullets li::before {
+    content: "";
+    flex-shrink: 0;
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--indigo);
+    margin-top: 0.55em;
+}
+
+/* ===========================================
+   SLIDE 13 — ROADMAP
+   =========================================== */
+.roadmap {
+    margin-top: 1.75rem;
+    position: relative;
+}
+.roadmap-line {
+    height: 2px;
+    background: linear-gradient(90deg,
+        var(--emerald) 0%, var(--emerald) 45%,
+        var(--indigo) 45%, var(--indigo) 60%,
+        var(--hair) 60%, var(--hair) 100%);
+    position: relative;
+    margin: 3rem 4% 3rem;
+    border-radius: 2px;
+}
+.roadmap-steps {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1rem;
+    position: relative;
+    margin-top: -3.5rem;
+    padding: 0 2%;
+}
+.rd-step {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    padding-top: 0;
+}
+.rd-marker {
+    width: 32px; height: 32px;
+    border-radius: 50%;
+    background: var(--paper);
+    border: 2px solid;
+    display: flex; align-items: center; justify-content: center;
+    z-index: 2;
+    margin-bottom: 0.6rem;
+    position: relative;
+    top: 2.7rem;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+}
+.rd-marker svg { width: 55%; height: 55%; }
+.rd-step.done .rd-marker { border-color: var(--emerald); color: var(--emerald); }
+.rd-step.active .rd-marker {
+    border-color: var(--indigo); color: var(--indigo);
+    box-shadow: 0 4px 12px rgba(79,70,229,0.30), 0 0 0 6px rgba(79,70,229,0.10);
+}
+.rd-step.planned .rd-marker { border-color: var(--ink-3); color: var(--ink-3); opacity: 0.7; }
+
+.rd-body {
+    background: var(--paper);
+    border: 1px solid var(--hair);
+    border-radius: 10px;
+    padding: 0.9rem 1rem;
+    width: 100%;
+    margin-top: 3rem;
+    min-height: 145px;
+}
+.rd-step.done .rd-body    { border-top: 3px solid var(--emerald); }
+.rd-step.active .rd-body  { border-top: 3px solid var(--indigo); background: linear-gradient(180deg, rgba(79,70,229,0.04), var(--paper)); }
+.rd-step.planned .rd-body { border-top: 3px solid var(--hair); }
+
+.rd-phase {
+    font-family: var(--font-mono);
+    font-size: 0.65rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    margin-bottom: 0.3rem;
+}
+.rd-step.done .rd-phase   { color: var(--emerald); }
+.rd-step.active .rd-phase { color: var(--indigo); }
+.rd-title {
+    font-family: var(--font-display);
+    font-weight: 800;
+    font-size: 0.95rem;
+    color: var(--ink);
+    line-height: 1.15;
+    margin-bottom: 0.5rem;
+    letter-spacing: -0.01em;
+}
+.rd-list {
+    list-style: none;
+    display: flex; flex-direction: column;
+    gap: 0.25rem;
+    font-size: 0.72rem;
+    color: var(--ink-2);
+    line-height: 1.35;
+}
+.rd-list li { padding-left: 0.9rem; position: relative; }
+.rd-list li::before {
+    content: ""; position: absolute; left: 0; top: 0.55em;
+    width: 4px; height: 4px; border-radius: 50%;
+    background: currentColor; opacity: 0.5;
+}
+
+/* ===========================================
+   SLIDE 14 — SUMMARY (hero stat)
+   =========================================== */
+.hero-slide .slide-content {
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    padding: var(--slide-padding);
+}
+.hero-eyebrow {
+    font-family: var(--font-mono);
+    font-size: var(--micro-size);
+    letter-spacing: 0.24em;
+    text-transform: uppercase;
+    color: #A5B4FC;
+    margin-bottom: 1.5rem;
+}
+.hero-num {
+    font-family: var(--font-display);
+    font-weight: 800;
+    font-size: clamp(6rem, 20vw, 18rem);
+    letter-spacing: -0.05em;
+    line-height: 0.85;
+    background: linear-gradient(180deg, #FFFFFF 0%, #C7D2FE 50%, #4F46E5 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    margin-bottom: 1rem;
+}
+.hero-caption {
+    font-family: var(--font-display);
+    font-weight: 500;
+    font-size: clamp(1rem, 1.8vw, 1.4rem);
+    color: var(--paper);
+    max-width: 32ch;
+    line-height: 1.3;
+    margin-bottom: 3rem;
+}
+.hero-bullets {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1.4rem;
+    max-width: 1100px;
+    width: 100%;
+    padding-top: 2rem;
+    border-top: 1px solid rgba(255,255,255,0.14);
+}
+.hero-bullets li {
+    list-style: none;
+    text-align: left;
+    display: flex; flex-direction: column; gap: 0.3rem;
+}
+.hero-bullets .h-num {
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+    color: var(--indigo);
+    letter-spacing: 0.14em;
+}
+.hero-bullets .h-text {
+    font-size: var(--small-size);
+    color: var(--on-dark);
+    line-height: 1.45;
+}
+.hero-bullets .h-text strong { color: var(--paper); font-family: var(--font-display); font-weight: 600; }
+
+/* ===========================================
+   SLIDE 15 — CTA
+   =========================================== */
+.cta-grid {
+    display: grid;
+    grid-template-columns: 1.15fr 1fr;
+    gap: clamp(2rem, 4vw, 5rem);
+    align-items: center;
+    max-width: 1200px;
+    width: 100%;
+    margin: 0 auto;
+}
+.cta-left h1 {
+    font-size: clamp(2rem, 5vw, 4rem);
+    line-height: 1;
+    letter-spacing: -0.03em;
+    margin-bottom: 1.2rem;
+}
+.cta-lede {
+    font-size: clamp(0.95rem, 1.35vw, 1.2rem);
+    color: var(--on-dark);
+    margin-bottom: 2rem;
+    line-height: 1.5;
+    max-width: 34ch;
+}
+.cta-button {
+    display: inline-flex;
+    align-items: center; gap: 0.75rem;
+    padding: 1rem 1.6rem;
+    background: var(--indigo);
+    color: var(--paper);
+    border-radius: 8px;
+    text-decoration: none;
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 1rem;
+    letter-spacing: -0.01em;
+    box-shadow: 0 12px 32px rgba(79,70,229,0.45), 0 2px 8px rgba(79,70,229,0.2);
+    transition: all 0.3s var(--ease);
+    border: 0; cursor: pointer;
+}
+.cta-button:hover { transform: translateY(-2px); box-shadow: 0 16px 40px rgba(79,70,229,0.55), 0 4px 12px rgba(79,70,229,0.25); }
+.cta-button .arrow { transition: transform 0.3s var(--ease); }
+.cta-button:hover .arrow { transform: translateX(4px); }
+
+.cta-contact {
+    margin-top: 2rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid rgba(255,255,255,0.14);
+    font-family: var(--font-mono);
+    font-size: var(--small-size);
+    color: rgba(255,255,255,0.55);
+    letter-spacing: 0.06em;
+    line-height: 1.6;
+}
+.cta-contact strong { color: #A5B4FC; font-weight: 500; }
+
+.cta-cards {
+    display: flex; flex-direction: column;
+    gap: 0.9rem;
+}
+.cta-card {
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 12px;
+    padding: 1.2rem 1.4rem;
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 1rem;
+    align-items: center;
+    backdrop-filter: blur(6px);
+    transition: all 0.3s var(--ease);
+}
+.cta-card:hover { border-color: rgba(79,70,229,0.5); background: rgba(79,70,229,0.10); transform: translateX(4px); }
+.cta-card .cta-badge {
+    font-family: var(--font-mono);
+    font-size: 0.65rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    padding: 0.35rem 0.65rem;
+    background: rgba(79,70,229,0.25);
+    color: #C7D2FE;
+    border-radius: 4px;
+    white-space: nowrap;
+}
+.cta-card .cta-body h3 {
+    font-family: var(--font-display);
+    font-weight: 800;
+    font-size: 1.05rem;
+    color: var(--paper);
+    letter-spacing: -0.01em;
+    margin-bottom: 0.15rem;
+}
+.cta-card .cta-body p { font-size: var(--small-size); color: var(--on-dark); line-height: 1.4; }
+
+/* ===========================================
+   INLINE EDIT MODE (opt-in default: ON)
+   =========================================== */
+.edit-hotzone {
+    position: fixed; top: 0; left: 0;
+    width: 80px; height: 80px;
+    z-index: 10000; cursor: pointer;
+}
+.edit-toggle {
+    position: fixed;
+    top: 16px; left: 16px;
+    width: 44px; height: 44px;
+    border-radius: 50%;
+    background: var(--indigo);
+    color: var(--paper);
+    border: 0;
+    font-size: 1.15rem;
+    cursor: pointer;
+    z-index: 10001;
+    box-shadow: 0 6px 16px rgba(79,70,229,0.4);
+    opacity: 0; pointer-events: none;
+    transition: opacity 0.3s ease, transform 0.2s ease;
+    display: flex; align-items: center; justify-content: center;
+}
+.edit-toggle.show, .edit-toggle.active { opacity: 1; pointer-events: auto; }
+.edit-toggle.active { background: var(--emerald); box-shadow: 0 6px 16px rgba(16,185,129,0.45); }
+.edit-toggle:hover { transform: scale(1.08); }
+.edit-banner {
+    position: fixed;
+    top: 16px; left: 74px;
+    background: rgba(15,42,91,0.94);
+    color: var(--paper);
+    padding: 0.55rem 0.95rem;
+    border-radius: 8px;
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    letter-spacing: 0.04em;
+    opacity: 0; pointer-events: none;
+    transition: opacity 0.3s ease;
+    z-index: 10001;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+}
+.edit-banner.active { opacity: 1; pointer-events: auto; }
+.edit-banner kbd {
+    background: rgba(255,255,255,0.15);
+    padding: 0.1rem 0.35rem;
+    border-radius: 3px;
+    font-family: inherit;
+    font-size: 0.68rem;
+    margin: 0 0.15rem;
+}
+body.edit-active [contenteditable="true"] {
+    outline: 2px dashed rgba(79,70,229,0.5);
+    outline-offset: 4px;
+    border-radius: 3px;
+    transition: outline 0.15s ease;
+}
+body.edit-active [contenteditable="true"]:hover  { outline-color: rgba(79,70,229,0.85); }
+body.edit-active [contenteditable="true"]:focus  { outline: 2px solid var(--indigo); outline-offset: 4px; }
+
+</style>
+</head>
+<body>
+
+<!-- Inline edit toggle (hidden by default, revealed via hotzone or E key) -->
+<div class="edit-hotzone" aria-hidden="true"></div>
+<button class="edit-toggle" id="editToggle" title="Toggle edit mode (E)">✏️</button>
+<div class="edit-banner" id="editBanner">
+    Edit mode ON · click any text · <kbd>Ctrl+S</kbd> to export · <kbd>E</kbd> to exit
+</div>
+
+<!-- Progress indicator + navigation dots -->
+<div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+<nav class="nav-dots" id="navDots" aria-label="Slide navigation"></nav>
+<div class="keyboard-hint">← → arrows · space</div>
+
+<!-- =================== SLIDE 1 — COVER =================== -->
+<section class="slide slide-dark gradient title-slide" data-slide="1" data-dark="true">
+    <div class="slide-content">
+        <div class="title-grid">
+            <div class="title-left">
+                <div class="title-eyebrow reveal d0"><span class="dot"></span>Infosys · Beckn Protocol v2.0.0</div>
+                <h1 class="reveal d1" contenteditable="false">Agentic AI<br>Procurement Agent</h1>
+                <p class="tagline reveal d2" contenteditable="false">From natural language to purchase order in <em>seconds</em>, not days.</p>
+                <div class="title-meta reveal d3">
+                    <span>ENTERPRISE SALES BRIEFING</span>
+                    <span class="pipe"></span>
+                    <span>2026</span>
+                </div>
+            </div>
+            <div class="title-right reveal-scale d2">
+                <div class="cover-viz">
+                    <!-- Node network SVG background -->
+                    <svg viewBox="0 0 400 400" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <defs>
+                            <linearGradient id="line-grad" x1="0" y1="0" x2="1" y2="1">
+                                <stop offset="0%" stop-color="#4F46E5" stop-opacity="0.5"/>
+                                <stop offset="100%" stop-color="#4F46E5" stop-opacity="0.1"/>
+                            </linearGradient>
+                        </defs>
+                        <!-- Connecting lines -->
+                        <path d="M 90 100 Q 200 200 310 300" stroke="url(#line-grad)" stroke-width="1" stroke-dasharray="4 4"/>
+                        <!-- Network nodes -->
+                        <circle cx="200" cy="200" r="4" fill="#4F46E5"/>
+                        <circle cx="200" cy="200" r="16" fill="none" stroke="#4F46E5" stroke-width="1" opacity="0.4"/>
+                        <circle cx="200" cy="200" r="32" fill="none" stroke="#4F46E5" stroke-width="1" opacity="0.2"/>
+                        <circle cx="130" cy="240" r="3" fill="#A5B4FC" opacity="0.7"/>
+                        <circle cx="280" cy="150" r="3" fill="#A5B4FC" opacity="0.7"/>
+                        <circle cx="270" cy="260" r="3" fill="#A5B4FC" opacity="0.7"/>
+                        <circle cx="150" cy="150" r="3" fill="#A5B4FC" opacity="0.7"/>
+                        <line x1="130" y1="240" x2="200" y2="200" stroke="#A5B4FC" stroke-width="0.5" opacity="0.3"/>
+                        <line x1="280" y1="150" x2="200" y2="200" stroke="#A5B4FC" stroke-width="0.5" opacity="0.3"/>
+                        <line x1="270" y1="260" x2="200" y2="200" stroke="#A5B4FC" stroke-width="0.5" opacity="0.3"/>
+                        <line x1="150" y1="150" x2="200" y2="200" stroke="#A5B4FC" stroke-width="0.5" opacity="0.3"/>
+                    </svg>
+                    <div class="cover-node node-input">
+                        <div class="label">Buyer input · NL</div>
+                        <div class="content" contenteditable="false">"300 m Cat6 cable, Mumbai, 5 days"</div>
+                    </div>
+                    <div class="cover-node node-po">
+                        <div class="label">Purchase order</div>
+                        <div class="content" contenteditable="false">PO-2026-4821 · ₹287,400</div>
+                        <div class="status">CONFIRMED</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="slide-footer">
+        <div class="brand"><span class="brand-dot"></span><span>Agentic AI Procurement Agent · Infosys</span></div>
+        <span>01 / 15</span>
+    </div>
+</section>
+
+<!-- =================== SLIDE 2 — THE PROBLEM =================== -->
+<section class="slide slide-light" data-slide="2">
+    <div class="slide-content">
+        <div class="problem-header">
+            <div class="eyebrow reveal d0">The Problem</div>
+            <h1 class="reveal d1" contenteditable="false">Enterprise procurement<br>is broken.</h1>
+            <p class="lede reveal d2" contenteditable="false">Corporate purchasing takes between <strong>3 and 30 business days</strong> — not from lack of budget, but from manual processes and closed systems.</p>
+        </div>
+
+        <div class="timeline reveal d3">
+            <div class="timeline-step">
+                <div class="timeline-clock">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                </div>
+                <div class="timeline-name">Request</div>
+                <div class="timeline-days">Day 0</div>
+            </div>
+            <div class="timeline-step">
+                <div class="timeline-clock">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                </div>
+                <div class="timeline-name">RFQ</div>
+                <div class="timeline-days">Day 1–5</div>
+            </div>
+            <div class="timeline-step">
+                <div class="timeline-clock">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                </div>
+                <div class="timeline-name">Quote</div>
+                <div class="timeline-days">Day 5–12</div>
+            </div>
+            <div class="timeline-step">
+                <div class="timeline-clock">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                </div>
+                <div class="timeline-name">Approval</div>
+                <div class="timeline-days">Day 12–22</div>
+            </div>
+            <div class="timeline-step">
+                <div class="timeline-clock">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                </div>
+                <div class="timeline-name">Order</div>
+                <div class="timeline-days">Day 22–30</div>
+            </div>
+        </div>
+
+        <div class="problem-stats reveal d4">
+            <div class="stat-block">
+                <div class="stat-value"><span class="accent">3–30</span> days</div>
+                <div class="stat-label" contenteditable="false">Standard procurement cycle time</div>
+            </div>
+            <div class="stat-block">
+                <div class="stat-value">Months</div>
+                <div class="stat-label" contenteditable="false">Every new bilateral supplier integration</div>
+            </div>
+            <div class="stat-block">
+                <div class="stat-value">Manual</div>
+                <div class="stat-label" contenteditable="false">Data re-entered in every system: procurement, finance, ERP</div>
+            </div>
+        </div>
+    </div>
+    <div class="slide-footer">
+        <div class="brand"><span class="brand-dot"></span><span>Agentic AI Procurement Agent · Infosys</span></div>
+        <span>02 / 15</span>
+    </div>
+</section>
+
+<!-- =================== SLIDE 3 — CURRENT REALITY =================== -->
+<section class="slide slide-light" data-slide="3">
+    <div class="slide-content">
+        <div class="eyebrow reveal d0">The Current Reality</div>
+        <h1 class="reveal d1" contenteditable="false">SAP Ariba, Coupa, and Oracle<br>are not enough.</h1>
+        <p class="lede reveal d2" contenteditable="false">Existing platforms digitized the process but did not transform it. They remain closed ecosystems, with supplier lock-in and no learning.</p>
+
+        <div class="compare-3">
+            <div class="compare-col reveal d3">
+                <div class="col-tag">Traditional Platforms</div>
+                <h3 contenteditable="false">Closed by design</h3>
+                <ul>
+                    <li contenteditable="false">Every supplier requires months of bilateral integration</li>
+                    <li contenteditable="false">Buyers see only pre-agreed suppliers — the pool is fixed</li>
+                    <li contenteditable="false">Manual negotiation via emails and phone calls</li>
+                    <li contenteditable="false">No institutional memory across purchases</li>
+                </ul>
+            </div>
+            <div class="compare-col col-promise reveal d4">
+                <div class="col-tag">What they promise</div>
+                <h3 contenteditable="false">"End-to-end automation"</h3>
+                <ul>
+                    <li contenteditable="false">Digital catalogs and workflow orchestration</li>
+                    <li contenteditable="false">Vendor-managed supplier onboarding</li>
+                    <li contenteditable="false">Analytics and spend dashboards</li>
+                    <li contenteditable="false">SOX-ready audit exports</li>
+                </ul>
+            </div>
+            <div class="compare-col col-reality reveal d5">
+                <svg class="lock-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                <div class="col-tag">The reality</div>
+                <h3 contenteditable="false">Locked in, learning nothing</h3>
+                <ul>
+                    <li contenteditable="false">Onboarding a new supplier = new IT project</li>
+                    <li contenteditable="false">Cycles unchanged; only the buttons moved online</li>
+                    <li contenteditable="false">Every purchase starts from a blank slate</li>
+                    <li contenteditable="false">No leverage on price beyond human negotiation</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+    <div class="slide-footer">
+        <div class="brand"><span class="brand-dot"></span><span>Agentic AI Procurement Agent · Infosys</span></div>
+        <span>03 / 15</span>
+    </div>
+</section>
+
+<!-- =================== SLIDE 4 — OUR SOLUTION =================== -->
+<section class="slide slide-white" data-slide="4">
+    <div class="slide-content">
+        <div class="solution-grid">
+            <div class="solution-left">
+                <div class="eyebrow reveal d0">Our Solution</div>
+                <h1 class="reveal d1" contenteditable="false">One prompt.<br>One purchase order.<br>Seconds.</h1>
+                <p class="lede reveal d2" contenteditable="false">An AI agent that converts free text into a confirmed PO — multi-supplier discovery, ML scoring, autonomous negotiation, SOX 404 compliance — on the open <strong>Beckn Protocol v2.0.0</strong>.</p>
+
+                <ul class="check-list reveal d3">
+                    <li><span class="check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span><span><strong>Natural language:</strong> "300 m Cat6 cable, Mumbai, 5 days, budget 15K"</span></li>
+                    <li><span class="check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span><span><strong>Real-time supplier discovery</strong> — no bilateral IT agreements required</span></li>
+                    <li><span class="check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span><span><strong>Compares, negotiates, and commits</strong> automatically with full audit trail</span></li>
+                    <li><span class="check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span><span><strong>Vendor-neutral ERP</strong> — SAP S/4HANA, Oracle ERP Cloud, Microsoft Dynamics</span></li>
+                </ul>
+            </div>
+
+            <div class="solution-right reveal-scale d3">
+                <div class="dash-mock">
+                    <div class="dash-topbar">
+                        <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+                        <span class="url">procurement.internal / order / confirmed</span>
+                    </div>
+                    <div class="status-badge">Order Confirmed</div>
+                    <div>
+                        <div class="dash-title" contenteditable="false">Cat6 UTP Cable · 300 m</div>
+                        <div class="dash-order-id">PO-2026-4821 · Mumbai · 5 days SLA</div>
+                    </div>
+                    <div class="dash-row">
+                        <div>
+                            <div class="k">Selected supplier</div>
+                            <div class="v" contenteditable="false">NetSupply Distributors</div>
+                        </div>
+                        <div>
+                            <div class="k">ML score</div>
+                            <div class="v" contenteditable="false">0.94 · rank 1 of 6</div>
+                        </div>
+                    </div>
+                    <div class="dash-row">
+                        <div>
+                            <div class="k">Negotiated price</div>
+                            <div class="v price" contenteditable="false"><span class="strike">₹319,000</span> ₹287,400</div>
+                        </div>
+                        <div>
+                            <div class="k">Cycle time</div>
+                            <div class="v" contenteditable="false">42 seconds</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="slide-footer">
+        <div class="brand"><span class="brand-dot"></span><span>Agentic AI Procurement Agent · Infosys</span></div>
+        <span>04 / 15</span>
+    </div>
+</section>
+
+<!-- =================== SLIDE 5 — HOW IT WORKS =================== -->
+<section class="slide slide-light" data-slide="5">
+    <div class="slide-content">
+        <div class="eyebrow reveal d0">How it works</div>
+        <h1 class="reveal d1" contenteditable="false">From text to purchase order in 5 steps.</h1>
+        <p class="lede reveal d2" contenteditable="false">The agent orchestrates the full <strong>Beckn v2.0.0 lifecycle</strong> — discover, select, init, confirm, status — automatically and auditably.</p>
+
+        <div class="flow reveal d3">
+            <div class="flow-step">
+                <div class="step-num">01</div>
+                <div class="step-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div>
+                <div class="step-name" contenteditable="false">Understand</div>
+                <div class="step-desc" contenteditable="false">Local qwen3 LLM extracts item, quantity, budget, location, deadline</div>
+                <span class="step-latency">&lt; 2 sec</span>
+            </div>
+            <div class="flow-step">
+                <div class="step-num">02</div>
+                <div class="step-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><circle cx="4" cy="6" r="2"/><circle cx="20" cy="6" r="2"/><circle cx="4" cy="18" r="2"/><circle cx="20" cy="18" r="2"/><line x1="6" y1="7" x2="10" y2="11"/><line x1="18" y1="7" x2="14" y2="11"/><line x1="6" y1="17" x2="10" y2="13"/><line x1="18" y1="17" x2="14" y2="13"/></svg></div>
+                <div class="step-name" contenteditable="false">Discover</div>
+                <div class="step-desc" contenteditable="false">Beckn fan-out via ONIX adapter across all connected supplier networks</div>
+                <span class="step-latency">&lt; 5 sec</span>
+            </div>
+            <div class="flow-step">
+                <div class="step-num">03</div>
+                <div class="step-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></div>
+                <div class="step-name" contenteditable="false">Evaluate</div>
+                <div class="step-desc" contenteditable="false">RankNet ML scoring on price, delivery speed, risk + agent memory of past orders</div>
+                <span class="step-latency">&lt; 3 sec</span>
+            </div>
+            <div class="flow-step">
+                <div class="step-num">04</div>
+                <div class="step-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8h1a4 4 0 0 1 0 8h-1"/><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4z"/><line x1="6" y1="1" x2="6" y2="4"/><line x1="10" y1="1" x2="10" y2="4"/><line x1="14" y1="1" x2="14" y2="4"/></svg></div>
+                <div class="step-name" contenteditable="false">Negotiate</div>
+                <div class="step-desc" contenteditable="false">LangGraph engine issues counter-offers within category-specific policy caps</div>
+                <span class="step-latency">&lt; 20 sec</span>
+            </div>
+            <div class="flow-step">
+                <div class="step-num">05</div>
+                <div class="step-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><polyline points="9 15 11 17 15 13"/></svg></div>
+                <div class="step-name" contenteditable="false">Confirm</div>
+                <div class="step-desc" contenteditable="false">PO written to PostgreSQL, 9-event audit trail, ERP push via outbox</div>
+                <span class="step-latency">&lt; 5 sec</span>
+            </div>
+        </div>
+
+        <div class="flow-caption reveal d5">
+            Total wall-clock time on routine autonomous flows: <strong>~45 seconds</strong>. Every step that previously required human intervention is now automatic — and immutably logged for SOX 404.
+        </div>
+    </div>
+    <div class="slide-footer">
+        <div class="brand"><span class="brand-dot"></span><span>Agentic AI Procurement Agent · Infosys</span></div>
+        <span>05 / 15</span>
+    </div>
+</section>
+
+<!-- =================== SLIDE 6 — KEY FEATURES =================== -->
+<section class="slide slide-light" data-slide="6">
+    <div class="slide-content">
+        <div class="eyebrow reveal d0">Enterprise Capabilities</div>
+        <h1 class="reveal d1" contenteditable="false">Seven enterprise capabilities, one agent.</h1>
+        <p class="lede reveal d2" contenteditable="false">From intent to fulfillment, every critical procurement function is covered, governed, and audited.</p>
+
+        <div class="feat-grid">
+            <div class="feat-card reveal d3">
+                <div class="feat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><line x1="9" y1="1" x2="9" y2="4"/><line x1="15" y1="1" x2="15" y2="4"/><line x1="9" y1="20" x2="9" y2="23"/><line x1="15" y1="20" x2="15" y2="23"/><line x1="20" y1="9" x2="23" y2="9"/><line x1="20" y1="14" x2="23" y2="14"/><line x1="1" y1="9" x2="4" y2="9"/><line x1="1" y1="14" x2="4" y2="14"/></svg></div>
+                <div class="feat-name" contenteditable="false">Local AI</div>
+                <div class="feat-desc" contenteditable="false">qwen3 LLM runs on-device. Sensitive procurement data never leaves your infrastructure.</div>
+                <div class="feat-tag">Data sovereignty</div>
+            </div>
+            <div class="feat-card reveal d3">
+                <div class="feat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg></div>
+                <div class="feat-name" contenteditable="false">Open Protocol</div>
+                <div class="feat-desc" contenteditable="false">Beckn v2.0.0 with ED25519-signed transactions. Any Beckn supplier available on day one.</div>
+                <div class="feat-tag">No lock-in</div>
+            </div>
+            <div class="feat-card reveal d3">
+                <div class="feat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></div>
+                <div class="feat-name" contenteditable="false">Autonomous Negotiation</div>
+                <div class="feat-desc" contenteditable="false">LangGraph engine with a hard 20% discount cap enforced at three governance layers.</div>
+                <div class="feat-tag">Policy-safe</div>
+            </div>
+            <div class="feat-card reveal d4">
+                <div class="feat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M18.7 8L13 13.7l-3-3L6 15"/></svg></div>
+                <div class="feat-name" contenteditable="false">ML Scoring · RankNet</div>
+                <div class="feat-desc" contenteditable="false">Pairwise ranking on price, delivery speed, and supplier risk. MLflow-managed with weekly drift detection.</div>
+                <div class="feat-tag">Continuously learning</div>
+            </div>
+            <div class="feat-card reveal d4">
+                <div class="feat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg></div>
+                <div class="feat-name" contenteditable="false">Agent Memory</div>
+                <div class="feat-desc" contenteditable="false">pgvector semantic search over past confirmed orders. Time-decayed loyalty bonus rewards reliable suppliers.</div>
+                <div class="feat-tag">Institutional knowledge</div>
+            </div>
+            <div class="feat-card reveal d4">
+                <div class="feat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></div>
+                <div class="feat-name" contenteditable="false">SOX 404 Audit Trail</div>
+                <div class="feat-desc" contenteditable="false">9 event types, 7-year retention, JSONB reasoning payload. Audit-ready from day one — no BI project needed.</div>
+                <div class="feat-tag">Compliance built-in</div>
+            </div>
+        </div>
+    </div>
+    <div class="slide-footer">
+        <div class="brand"><span class="brand-dot"></span><span>Agentic AI Procurement Agent · Infosys</span></div>
+        <span>06 / 15</span>
+    </div>
+</section>
+
+<!-- =================== SLIDE 7 — BENEFITS =================== -->
+<section class="slide slide-light" data-slide="7">
+    <div class="slide-content">
+        <div class="eyebrow reveal d0">Business Impact</div>
+        <h1 class="reveal d1" contenteditable="false">Less time. Lower costs. More control.</h1>
+        <p class="lede reveal d2" contenteditable="false">The impact is not incremental — it is transformational.</p>
+
+        <div class="bars reveal d3">
+            <div class="bar-row">
+                <div class="bar-label"><strong>Cycle time</strong>Routine autonomous order</div>
+                <div class="bar-track">
+                    <div class="bar before"><span class="bar-tag">Before</span><span class="bar-fill" style="width: 100%">5–7 days</span></div>
+                    <div class="bar after"><span class="bar-tag">After</span><span class="bar-fill" style="width: 8%">~45 s</span></div>
+                </div>
+            </div>
+            <div class="bar-row">
+                <div class="bar-label"><strong>Savings per order</strong>Autonomous negotiation</div>
+                <div class="bar-track">
+                    <div class="bar before"><span class="bar-tag">Before</span><span class="bar-fill" style="width: 20%">0%</span></div>
+                    <div class="bar after"><span class="bar-tag">After</span><span class="bar-fill" style="width: 45%">5–10%</span></div>
+                </div>
+            </div>
+            <div class="bar-row">
+                <div class="bar-label"><strong>Supplier pool</strong>Available on day one</div>
+                <div class="bar-track">
+                    <div class="bar before"><span class="bar-tag">Before</span><span class="bar-fill" style="width: 30%">50–200 fixed</span></div>
+                    <div class="bar after"><span class="bar-tag">After</span><span class="bar-fill" style="width: 100%">Unlimited (any Beckn node)</span></div>
+                </div>
+            </div>
+            <div class="bar-row">
+                <div class="bar-label"><strong>Compliance</strong>SOX 404 · GDPR · IT Act 2000</div>
+                <div class="bar-track">
+                    <div class="bar before"><span class="bar-tag">Before</span><span class="bar-fill" style="width: 60%">Separate BI + audit projects</span></div>
+                    <div class="bar after"><span class="bar-tag">After</span><span class="bar-fill" style="width: 100%">Built-in, day one</span></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="slide-footer">
+        <div class="brand"><span class="brand-dot"></span><span>Agentic AI Procurement Agent · Infosys</span></div>
+        <span>07 / 15</span>
+    </div>
+</section>
+
+<!-- =================== SLIDE 8 — DIFFERENTIATORS =================== -->
+<section class="slide slide-dark gradient" data-slide="8" data-dark="true">
+    <div class="slide-content">
+        <div class="eyebrow reveal d0">Differentiators</div>
+        <h1 class="reveal d1" contenteditable="false">What no traditional platform can do.</h1>
+        <p class="lede reveal d2" contenteditable="false">The difference isn't isolated features — it's open architecture, continuous learning, and multi-layer governance.</p>
+
+        <div class="diff-table reveal d3">
+            <div class="th">Capability</div>
+            <div class="th">Traditional Platforms</div>
+            <div class="th th-us">Agentic AI Procurement</div>
+
+            <div class="cell capability" contenteditable="false">Open protocol · no bilateral agreements</div>
+            <div class="cell"><span class="mark no"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></span> Closed ecosystem</div>
+            <div class="cell us"><span class="mark yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span> Any Beckn supplier, day one</div>
+
+            <div class="cell capability" contenteditable="false">LLM</div>
+            <div class="cell"><span class="mark no"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></span> Without LLM</div>
+            <div class="cell us"><span class="mark yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span> LLM available</div>
+
+            <div class="cell capability" contenteditable="false">Governed autonomy · 3-layer guardrails</div>
+            <div class="cell"><span class="mark no"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></span> Manual workflows only</div>
+            <div class="cell us"><span class="mark yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span> Model + rules + wire schema</div>
+
+            <div class="cell capability" contenteditable="false">Supplier memory · time-decayed loyalty</div>
+            <div class="cell"><span class="mark no"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></span> No learning across purchases</div>
+            <div class="cell us"><span class="mark yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span> pgvector + 90-day decay</div>
+
+            <div class="cell capability" contenteditable="false">Vendor-neutral ERP · same software everywhere</div>
+            <div class="cell"><span class="mark no"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></span> Custom rewrite per ERP</div>
+            <div class="cell us"><span class="mark yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span> SAP · Oracle · Microsoft</div>
+        </div>
+    </div>
+    <div class="slide-footer">
+        <div class="brand"><span class="brand-dot"></span><span>Agentic AI Procurement Agent · Infosys</span></div>
+        <span>08 / 15</span>
+    </div>
+</section>
+
+<!-- =================== SLIDE 9 — ARCHITECTURE =================== -->
+<section class="slide slide-dark gradient" data-slide="9" data-dark="true">
+    <div class="slide-content">
+        <div class="eyebrow reveal d0">Architecture</div>
+        <h1 class="reveal d1" contenteditable="false">Enterprise architecture by design.</h1>
+        <p class="lede reveal d2" contenteditable="false"><strong>18 microservices</strong> on cloud-native infrastructure. Production-proven stack, Kubernetes-ready from day one.</p>
+
+        <div class="arch-stack">
+            <div class="arch-layer reveal d3">
+                <div class="layer-name">Frontend</div>
+                <div class="layer-stack">
+                    <span class="arch-chip">Next.js 13</span>
+                    <span class="arch-chip">Radix UI</span>
+                    <span class="arch-chip">Tailwind</span>
+                    <span class="arch-chip">Keycloak OIDC</span>
+                </div>
+                <div class="layer-flow">↓</div>
+            </div>
+            <div class="arch-layer reveal d4">
+                <div class="layer-name">Orchestrator + AI</div>
+                <div class="layer-stack">
+                    <span class="arch-chip accent">LangGraph</span>
+                    <span class="arch-chip accent">Ollama · qwen3</span>
+                    <span class="arch-chip">pgvector 384-dim HNSW</span>
+                    <span class="arch-chip">RankNet · MLflow</span>
+                    <span class="arch-chip">FastAPI · asyncpg</span>
+                </div>
+                <div class="layer-flow">↓</div>
+            </div>
+            <div class="arch-layer reveal d5">
+                <div class="layer-name">ERP + Beckn Integration</div>
+                <div class="layer-stack">
+                    <span class="arch-chip accent">Beckn v2.0.0 · ONIX (ED25519)</span>
+                    <span class="arch-chip">SAP S/4HANA · Oracle ERP Cloud · MS Dynamics</span>
+                    <span class="arch-chip">Outbox + circuit breakers</span>
+                </div>
+                <div class="layer-flow">↓</div>
+            </div>
+            <div class="arch-layer reveal d6">
+                <div class="layer-name">Data + Messaging</div>
+                <div class="layer-stack">
+                    <span class="arch-chip">PostgreSQL 16</span>
+                    <span class="arch-chip">Redis 7 Pub/Sub</span>
+                    <span class="arch-chip">Kafka (KRaft)</span>
+                    <span class="arch-chip">S3-compatible object store</span>
+                </div>
+                <div class="layer-flow">◆</div>
+            </div>
+        </div>
+
+        <div class="arch-caption reveal d6">
+            <span><strong>Security</strong> · TLS 1.3 · Keycloak/OIDC RBAC · AES-256 at rest · KMS-managed keys</span>
+            <span><strong>Observability</strong> · OpenTelemetry · Prometheus · Grafana · Splunk (Phase 4)</span>
+        </div>
+    </div>
+    <div class="slide-footer">
+        <div class="brand"><span class="brand-dot"></span><span>Agentic AI Procurement Agent · Infosys</span></div>
+        <span>09 / 15</span>
+    </div>
+</section>
+
+<!-- =================== SLIDE 10 — USE CASES =================== -->
+<section class="slide slide-light" data-slide="10">
+    <div class="slide-content">
+        <div class="eyebrow reveal d0">Use Cases in Production</div>
+        <h1 class="reveal d1" contenteditable="false">Real procurement. Real results.</h1>
+        <p class="lede reveal d2" contenteditable="false">The agent adapts its execution mode to each purchase's risk profile — from full autonomy on commodities to human review on medical or IT-strategic.</p>
+
+        <div class="use-grid">
+            <div class="use-card reveal d3">
+                <div class="use-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg></div>
+                <div class="use-body">
+                    <div class="use-mode">Autonomous · Commodity</div>
+                    <div class="use-name" contenteditable="false">Standard stationery</div>
+                    <div class="use-desc" contenteditable="false">Request → confirmed order fully automated. Up to 10% negotiation cap applied.</div>
+                    <span class="use-result">5–7 days → ~45 sec</span>
+                </div>
+            </div>
+            <div class="use-card reveal d3">
+                <div class="use-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M2 10h20"/><path d="M7 15h.01"/><path d="M11 15h2"/></svg></div>
+                <div class="use-body">
+                    <div class="use-mode">Advisory · IT Strategic</div>
+                    <div class="use-name" contenteditable="false">Corporate IT equipment</div>
+                    <div class="use-desc" contenteditable="false">Buyer selects from ML ranking; manager approves in under 5 minutes. No automated discount.</div>
+                    <span class="use-result">3–4 weeks → &lt;5 min</span>
+                </div>
+            </div>
+            <div class="use-card reveal d4">
+                <div class="use-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></div>
+                <div class="use-body">
+                    <div class="use-mode">CPO Benchmarking</div>
+                    <div class="use-name" contenteditable="false">Live market scan</div>
+                    <div class="use-desc" contenteditable="false">Contracted price vs best available Beckn market offer, in real time. Renegotiation intelligence on demand.</div>
+                    <span class="use-result">Quarterly → real time</span>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="slide-footer">
+        <div class="brand"><span class="brand-dot"></span><span>Agentic AI Procurement Agent · Infosys</span></div>
+        <span>10 / 15</span>
+    </div>
+</section>
+
+<!-- =================== SLIDE 11 — KPIs =================== -->
+<section class="slide slide-light" data-slide="11">
+    <div class="slide-content">
+        <div class="eyebrow reveal d0">Results &amp; Metrics</div>
+        <h1 class="reveal d1" contenteditable="false">KPIs available from day one.</h1>
+        <p class="lede reveal d2" contenteditable="false">The real-time analytics dashboard measures direct impact on spend, savings, and cycle times — no separate BI project required.</p>
+
+        <div class="scenario-chip reveal d2">
+            <span class="chip-mark">Sample scenario</span>
+            <span contenteditable="false">180-day deployment · mid-market industrial buyer · Office Supplies + IT Peripherals</span>
+        </div>
+
+        <div class="kpi-grid">
+            <div class="kpi-card reveal d3">
+                <div class="kpi-label">Total negotiated savings</div>
+                <div class="kpi-value accent" contenteditable="false">$2.8M</div>
+                <div class="kpi-sub" contenteditable="false">180-day window</div>
+            </div>
+            <div class="kpi-card reveal d3">
+                <div class="kpi-label">Avg cycle time</div>
+                <div class="kpi-value" contenteditable="false">47 hrs → <span style="color: var(--emerald)">0.01 hrs</span></div>
+                <div class="kpi-sub" contenteditable="false">Pre-agent vs autonomous</div>
+            </div>
+            <div class="kpi-card reveal d4">
+                <div class="kpi-label">Acceptance rate</div>
+                <div class="kpi-value pos" contenteditable="false">94%</div>
+                <div class="kpi-sub" contenteditable="false">Quotes → confirmed orders</div>
+            </div>
+            <div class="kpi-card reveal d4">
+                <div class="kpi-label">Active suppliers</div>
+                <div class="kpi-value" contenteditable="false">31</div>
+                <div class="kpi-sub" contenteditable="false">Distinct BPPs · Beckn network</div>
+            </div>
+        </div>
+
+        <div class="chart-wrap reveal d5">
+            <div>
+                <div class="chart-title" contenteditable="false">Request volume · weekly</div>
+                <div class="chart-sub" contenteditable="false">Sample ramp — Office Supplies first, IT Peripherals from week 6. Category-by-category scaling.</div>
+            </div>
+            <svg viewBox="0 0 400 100" preserveAspectRatio="none">
+                <defs>
+                    <linearGradient id="chart-fill" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stop-color="#4F46E5" stop-opacity="0.4"/>
+                        <stop offset="100%" stop-color="#4F46E5" stop-opacity="0"/>
+                    </linearGradient>
+                </defs>
+                <!-- Grid lines -->
+                <line x1="0" y1="25" x2="400" y2="25" stroke="#E5E7EB" stroke-width="0.5"/>
+                <line x1="0" y1="50" x2="400" y2="50" stroke="#E5E7EB" stroke-width="0.5"/>
+                <line x1="0" y1="75" x2="400" y2="75" stroke="#E5E7EB" stroke-width="0.5"/>
+                <!-- Area under line -->
+                <path d="M 0 85 L 40 78 L 80 72 L 120 65 L 160 55 L 200 48 L 240 40 L 280 30 L 320 25 L 360 18 L 400 12 L 400 100 L 0 100 Z" fill="url(#chart-fill)"/>
+                <!-- Line -->
+                <path d="M 0 85 L 40 78 L 80 72 L 120 65 L 160 55 L 200 48 L 240 40 L 280 30 L 320 25 L 360 18 L 400 12" stroke="#4F46E5" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+                <!-- End dot -->
+                <circle cx="400" cy="12" r="4" fill="#4F46E5"/>
+                <circle cx="400" cy="12" r="8" fill="none" stroke="#4F46E5" stroke-width="1" opacity="0.3"/>
+            </svg>
+        </div>
+    </div>
+    <div class="slide-footer">
+        <div class="brand"><span class="brand-dot"></span><span>Agentic AI Procurement Agent · Infosys</span></div>
+        <span>11 / 15</span>
+    </div>
+</section>
+
+<!-- =================== SLIDE 12 — SCALABILITY =================== -->
+<section class="slide slide-light" data-slide="12">
+    <div class="slide-content">
+        <div class="eyebrow reveal d0">Scalability</div>
+        <h1 class="reveal d1" contenteditable="false">Designed to grow with your business.</h1>
+        <p class="lede reveal d2" contenteditable="false">Microservices on Kubernetes enable independent horizontal scaling — add capacity where you need it, without touching the core.</p>
+
+        <div class="scale-viz reveal-scale d3">
+            <div class="scale-node">
+                <div class="replica-count">1×</div>
+                <div class="replica-label">Pilot</div>
+                <div class="replica-icons">
+                    <svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="12" height="16" rx="2"/></svg>
+                </div>
+            </div>
+            <div class="scale-arrow">→</div>
+            <div class="scale-node">
+                <div class="replica-count">3×</div>
+                <div class="replica-label">Department</div>
+                <div class="replica-icons">
+                    <svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="12" height="16" rx="2"/></svg>
+                    <svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="12" height="16" rx="2"/></svg>
+                    <svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="12" height="16" rx="2"/></svg>
+                </div>
+            </div>
+            <div class="scale-arrow">→</div>
+            <div class="scale-node">
+                <div class="replica-count">N×</div>
+                <div class="replica-label">Enterprise</div>
+                <div class="replica-icons">
+                    <svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="12" height="16" rx="2"/></svg>
+                    <svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="12" height="16" rx="2"/></svg>
+                    <svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="12" height="16" rx="2"/></svg>
+                    <svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="12" height="16" rx="2"/></svg>
+                    <svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="12" height="16" rx="2"/></svg>
+                </div>
+            </div>
+        </div>
+
+        <div class="scale-infra reveal d4">
+            <div class="infra-chip"><span class="dot"></span>Kubernetes · Helm · ArgoCD</div>
+            <div class="infra-chip"><span class="dot"></span>Redis (session state)</div>
+            <div class="infra-chip"><span class="dot"></span>Kafka (event streaming)</div>
+        </div>
+
+        <ul class="scale-bullets reveal d5">
+            <li><span><strong>Kubernetes-ready</strong> — parameterized Helm charts + ArgoCD GitOps for zero-downtime deployment</span></li>
+            <li><span><strong>Multi-replica</strong> — orchestrator scales horizontally with session state externalized to Redis</span></li>
+            <li><span><strong>Multi-network Beckn</strong> — concurrent discovery with per-network circuit breakers and geo-proximity dedup</span></li>
+            <li><span><strong>Gradual adoption</strong> — start with one category; scale to the enterprise without re-architecture</span></li>
+        </ul>
+    </div>
+    <div class="slide-footer">
+        <div class="brand"><span class="brand-dot"></span><span>Agentic AI Procurement Agent · Infosys</span></div>
+        <span>12 / 15</span>
+    </div>
+</section>
+
+<!-- =================== SLIDE 13 — ROADMAP =================== -->
+<section class="slide slide-light" data-slide="13">
+    <div class="slide-content">
+        <div class="eyebrow reveal d0">Roadmap</div>
+        <h1 class="reveal d1" contenteditable="false">From MVP to enterprise platform.</h1>
+        <p class="lede reveal d2" contenteditable="false">Four phases with clear deliverables. Phases 1–3 are <strong>delivered and running in production</strong>.</p>
+
+        <div class="roadmap reveal d3">
+            <div class="roadmap-line"></div>
+            <div class="roadmap-steps">
+                <div class="rd-step done">
+                    <div class="rd-marker">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                    </div>
+                    <div class="rd-body">
+                        <div class="rd-phase">Phases 1–3 · Delivered</div>
+                        <div class="rd-title" contenteditable="false">Production system</div>
+                        <ul class="rd-list">
+                            <li>NL → PO pipeline</li>
+                            <li>RankNet ML scoring</li>
+                            <li>LangGraph negotiation</li>
+                            <li>9-event SOX audit trail</li>
+                            <li>Vendor-neutral ERP · Full frontend</li>
+                        </ul>
+                    </div>
+                </div>
+                <div class="rd-step active">
+                    <div class="rd-marker">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+                    </div>
+                    <div class="rd-body">
+                        <div class="rd-phase">Phase 4 · Q3 2026</div>
+                        <div class="rd-title" contenteditable="false">Production hardening</div>
+                        <ul class="rd-list">
+                            <li>Kubernetes on EKS/AKS/GKE</li>
+                            <li>GitHub Actions + Trivy CI/CD</li>
+                            <li>Kong API Gateway · KMS secrets</li>
+                            <li>OpenTelemetry + Grafana</li>
+                            <li>OWASP Top 10 pen test · mTLS</li>
+                        </ul>
+                    </div>
+                </div>
+                <div class="rd-step planned">
+                    <div class="rd-marker">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l3 7h7l-6 4 2 8-6-4-6 4 2-8-6-4h7z"/></svg>
+                    </div>
+                    <div class="rd-body">
+                        <div class="rd-phase">Phase 5 · Planned</div>
+                        <div class="rd-title" contenteditable="false">Multi-network + LP optimizer</div>
+                        <ul class="rd-list">
+                            <li>Multi-network Beckn discovery</li>
+                            <li>Differentiable LP optimizer</li>
+                            <li>Multi-supplier split orders</li>
+                            <li>Qdrant migration (100K+ corpus)</li>
+                        </ul>
+                    </div>
+                </div>
+                <div class="rd-step planned">
+                    <div class="rd-marker">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l3 7h7l-6 4 2 8-6-4-6 4 2-8-6-4h7z"/></svg>
+                    </div>
+                    <div class="rd-body">
+                        <div class="rd-phase">Phase 6 · Planned</div>
+                        <div class="rd-title" contenteditable="false">Multi-tenant SaaS</div>
+                        <ul class="rd-list">
+                            <li>Multi-tenant SaaS platform</li>
+                            <li>API rate-limiting via Kong</li>
+                            <li>Cloud-native LLM options</li>
+                            <li>vLLM · Claude API integration</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="slide-footer">
+        <div class="brand"><span class="brand-dot"></span><span>Agentic AI Procurement Agent · Infosys</span></div>
+        <span>13 / 15</span>
+    </div>
+</section>
+
+<!-- =================== SLIDE 14 — SUMMARY (hero stat) =================== -->
+<section class="slide slide-dark gradient hero-slide" data-slide="14" data-dark="true">
+    <div class="slide-content">
+        <div class="hero-eyebrow reveal d0">One idea. All the value.</div>
+        <div class="hero-num" contenteditable="false">97%</div>
+        <p class="hero-caption reveal d3" contenteditable="false">reduction in procurement cycle time — from days to seconds, without giving up governance.</p>
+
+        <ul class="hero-bullets reveal d4">
+            <li>
+                <span class="h-num">01</span>
+                <span class="h-text"><strong>Cycles:</strong> 3–30 days → seconds</span>
+            </li>
+            <li>
+                <span class="h-num">02</span>
+                <span class="h-text"><strong>Suppliers:</strong> unlimited via open Beckn protocol — no bilateral agreements</span>
+            </li>
+            <li>
+                <span class="h-num">03</span>
+                <span class="h-text"><strong>Compliance:</strong> SOX 404 + GDPR + IT Act 2000 from day one, zero extra projects</span>
+            </li>
+            <li>
+                <span class="h-num">04</span>
+                <span class="h-text"><strong>Differentiator:</strong> local AI that learns, negotiates within policy, and integrates with any ERP</span>
+            </li>
+        </ul>
+    </div>
+    <div class="slide-footer">
+        <div class="brand"><span class="brand-dot"></span><span>Agentic AI Procurement Agent · Infosys</span></div>
+        <span>14 / 15</span>
+    </div>
+</section>
+
+<!-- =================== SLIDE 15 — CTA =================== -->
+<section class="slide slide-dark gradient" data-slide="15" data-dark="true">
+    <div class="slide-content">
+        <div class="cta-grid">
+            <div class="cta-left">
+                <div class="eyebrow reveal d0">Next Step</div>
+                <h1 class="reveal d1" contenteditable="false">Ready to see the agent<br>in action?</h1>
+                <p class="cta-lede reveal d2" contenteditable="false">The technical demo takes <strong>5 minutes</strong>.</p>
+
+                <a href="#" class="cta-button reveal d3" onclick="event.preventDefault();">
+                    Watch Demo
+                    <span class="arrow">→</span>
+                </a>
+
+                <div class="cta-contact reveal d4">
+                    <strong>Contact</strong><br>
+                    Agentic AI Procurement Agent · Infosys
+                </div>
+            </div>
+
+            <div class="cta-cards">
+                <div class="cta-card reveal d3">
+                    <div class="cta-badge">5 min</div>
+                    <div class="cta-body">
+                        <h3 contenteditable="false">Live Demo</h3>
+                        <p contenteditable="false">Using your actual purchasing category as input. See the pipeline end-to-end.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="slide-footer">
+        <div class="brand"><span class="brand-dot"></span><span>Agentic AI Procurement Agent · Infosys</span></div>
+        <span>15 / 15 · Fin</span>
+    </div>
+</section>
+
+
+<script>
+/* ===========================================
+   SLIDE PRESENTATION CONTROLLER
+   Keyboard, touch, scroll, dots, progress bar
+   =========================================== */
+class SlidePresentation {
+    constructor() {
+        this.slides = Array.from(document.querySelectorAll('.slide'));
+        this.currentSlide = 0;
+        this.navDotsContainer = document.getElementById('navDots');
+        this.progressFill = document.getElementById('progressFill');
+
+        this.setupIntersectionObserver();
+        this.setupKeyboardNav();
+        this.setupTouchNav();
+        this.setupNavDots();
+        this.setupProgressBar();
+    }
+
+    setupIntersectionObserver() {
+        // Add .visible when a slide enters viewport → triggers CSS reveal animations
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach((entry) => {
+                if (entry.isIntersecting && entry.intersectionRatio > 0.5) {
+                    entry.target.classList.add('visible');
+                    const idx = this.slides.indexOf(entry.target);
+                    if (idx !== -1) {
+                        this.currentSlide = idx;
+                        this.updateNavDots();
+                        this.updateDotTheme(entry.target);
+                    }
+                }
+            });
+        }, { threshold: [0.5] });
+
+        this.slides.forEach((slide) => observer.observe(slide));
+    }
+
+    setupKeyboardNav() {
+        document.addEventListener('keydown', (e) => {
+            // Skip nav if the user is editing text
+            if (e.target.getAttribute && e.target.getAttribute('contenteditable') === 'true') return;
+
+            if (e.key === 'ArrowDown' || e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ') {
+                e.preventDefault();
+                this.goToSlide(this.currentSlide + 1);
+            } else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft' || e.key === 'PageUp') {
+                e.preventDefault();
+                this.goToSlide(this.currentSlide - 1);
+            } else if (e.key === 'Home') {
+                e.preventDefault();
+                this.goToSlide(0);
+            } else if (e.key === 'End') {
+                e.preventDefault();
+                this.goToSlide(this.slides.length - 1);
+            }
+        });
+    }
+
+    setupTouchNav() {
+        let touchStartY = 0;
+        document.addEventListener('touchstart', (e) => { touchStartY = e.touches[0].clientY; }, { passive: true });
+        document.addEventListener('touchend', (e) => {
+            const delta = touchStartY - e.changedTouches[0].clientY;
+            if (Math.abs(delta) > 55) {
+                this.goToSlide(delta > 0 ? this.currentSlide + 1 : this.currentSlide - 1);
+            }
+        }, { passive: true });
+    }
+
+    setupProgressBar() {
+        window.addEventListener('scroll', () => {
+            const scrollTop = window.scrollY;
+            const total = document.documentElement.scrollHeight - window.innerHeight;
+            const pct = total > 0 ? (scrollTop / total) * 100 : 0;
+            this.progressFill.style.width = pct + '%';
+        }, { passive: true });
+    }
+
+    setupNavDots() {
+        // Always clear first — re-opening the file must not stack duplicate dots
+        this.navDotsContainer.innerHTML = '';
+        this.slides.forEach((slide, i) => {
+            const dot = document.createElement('button');
+            dot.className = 'nav-dot';
+            dot.setAttribute('aria-label', `Go to slide ${i + 1}`);
+            dot.addEventListener('click', () => this.goToSlide(i));
+            this.navDotsContainer.appendChild(dot);
+        });
+        this.updateNavDots();
+        this.updateDotTheme(this.slides[0]);
+    }
+
+    updateNavDots() {
+        this.navDotsContainer.querySelectorAll('.nav-dot').forEach((dot, i) => {
+            dot.classList.toggle('active', i === this.currentSlide);
+        });
+    }
+
+    updateDotTheme(slide) {
+        const isDark = slide && slide.dataset && slide.dataset.dark === 'true';
+        this.navDotsContainer.querySelectorAll('.nav-dot').forEach((d) => {
+            d.classList.toggle('on-dark', isDark);
+        });
+    }
+
+    goToSlide(i) {
+        if (i < 0 || i >= this.slides.length) return;
+        this.slides[i].scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+}
+
+/* ===========================================
+   INLINE EDITOR
+   Toggle via top-left hotzone or [E] key
+   Ctrl+S exports a clean HTML file
+   =========================================== */
+class InlineEditor {
+    constructor() {
+        this.isActive = false;
+        this.editable = Array.from(document.querySelectorAll('[contenteditable="false"]'));
+        this.toggleBtn = document.getElementById('editToggle');
+        this.banner = document.getElementById('editBanner');
+        this.setupHotzone();
+        this.setupKeyboard();
+        this.setupAutosave();
+        this.loadFromStorage();
+    }
+
+    setupHotzone() {
+        const hotzone = document.querySelector('.edit-hotzone');
+        let hideTimeout = null;
+
+        hotzone.addEventListener('mouseenter', () => {
+            clearTimeout(hideTimeout);
+            this.toggleBtn.classList.add('show');
+        });
+        hotzone.addEventListener('mouseleave', () => {
+            hideTimeout = setTimeout(() => {
+                if (!this.isActive) this.toggleBtn.classList.remove('show');
+            }, 400);
+        });
+        this.toggleBtn.addEventListener('mouseenter', () => clearTimeout(hideTimeout));
+        this.toggleBtn.addEventListener('mouseleave', () => {
+            hideTimeout = setTimeout(() => {
+                if (!this.isActive) this.toggleBtn.classList.remove('show');
+            }, 400);
+        });
+        hotzone.addEventListener('click', () => this.toggleEditMode());
+        this.toggleBtn.addEventListener('click', () => this.toggleEditMode());
+    }
+
+    setupKeyboard() {
+        document.addEventListener('keydown', (e) => {
+            // E toggles edit (unless editing a field)
+            if ((e.key === 'e' || e.key === 'E') &&
+                !(e.target.getAttribute && e.target.getAttribute('contenteditable') === 'true')) {
+                e.preventDefault();
+                this.toggleEditMode();
+            }
+            // Ctrl+S / Cmd+S exports the file
+            if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+                e.preventDefault();
+                this.exportFile();
+            }
+        });
+    }
+
+    toggleEditMode() {
+        this.isActive = !this.isActive;
+        document.body.classList.toggle('edit-active', this.isActive);
+        this.toggleBtn.classList.toggle('active', this.isActive);
+        this.banner.classList.toggle('active', this.isActive);
+        this.toggleBtn.textContent = this.isActive ? '✓' : '✏️';
+        this.editable.forEach((el) => {
+            el.setAttribute('contenteditable', this.isActive ? 'true' : 'false');
+        });
+    }
+
+    setupAutosave() {
+        // Debounced localStorage save on any edit
+        let saveTimeout;
+        document.addEventListener('input', (e) => {
+            if (!e.target.getAttribute) return;
+            if (e.target.getAttribute('contenteditable') !== 'true') return;
+            clearTimeout(saveTimeout);
+            saveTimeout = setTimeout(() => this.saveToStorage(), 500);
+        });
+    }
+
+    saveToStorage() {
+        try {
+            const data = this.editable.map((el, i) => ({ i, html: el.innerHTML }));
+            localStorage.setItem('procurement-deck-edits', JSON.stringify(data));
+        } catch (err) { /* quota exceeded — ignore */ }
+    }
+
+    loadFromStorage() {
+        try {
+            const raw = localStorage.getItem('procurement-deck-edits');
+            if (!raw) return;
+            const data = JSON.parse(raw);
+            data.forEach(({ i, html }) => {
+                if (this.editable[i]) this.editable[i].innerHTML = html;
+            });
+        } catch (err) { /* corrupt data — ignore */ }
+    }
+
+    exportFile() {
+        // CRITICAL: strip edit state before capturing outerHTML,
+        // otherwise the exported file opens in permanent edit mode.
+        const editableEls = Array.from(document.querySelectorAll('[contenteditable]'));
+        const originalAttrs = editableEls.map((el) => el.getAttribute('contenteditable'));
+
+        editableEls.forEach((el) => el.setAttribute('contenteditable', 'false'));
+        document.body.classList.remove('edit-active');
+        this.toggleBtn.classList.remove('active', 'show');
+        this.banner.classList.remove('active', 'show');
+        this.toggleBtn.textContent = '✏️';
+
+        const html = '<!DOCTYPE html>\n' + document.documentElement.outerHTML;
+
+        // Restore edit state so user can keep working
+        editableEls.forEach((el, i) => el.setAttribute('contenteditable', originalAttrs[i]));
+        if (this.isActive) {
+            document.body.classList.add('edit-active');
+            this.toggleBtn.classList.add('active');
+            this.banner.classList.add('active');
+            this.toggleBtn.textContent = '✓';
+        }
+
+        const blob = new Blob([html], { type: 'text/html' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'procurement-agent-deck.html';
+        a.click();
+        URL.revokeObjectURL(a.href);
+    }
+}
+
+/* Boot */
+new SlidePresentation();
+new InlineEditor();
+</script>
+
+</body>
+</html>
